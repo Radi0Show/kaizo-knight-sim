@@ -95,10 +95,23 @@ function gtMaxX(gt) {
 
 export const pointingCone = {
   name: 'obj_knight_pointing_cone',
-  // THE ORDER IS THE OBJECT INDEX, and the two "fits" it replaces were both
-  // compensations for having it backwards. OBJECT_ORDER: cone 545,
-  // obj_heart_follower 681, dc 1432, obj_heart 1462 — so the game's order is
-  // cone, follower, controller, soul, and this lane now declares it.
+  // THE CONE STEPS BEFORE THE CONTROLLER BECAUSE IT IS NEWER, and the two
+  // "fits" this replaces were both compensations for having it backwards.
+  //
+  // The mechanism is the step law the project already owns: the runner walks
+  // the step phase NEWEST-FIRST. The controller is created by
+  // scr_bulletspawner on the dispatch frame; the cone is created a frame later
+  // by the controller's own type-98 init (obj_dbulletcontroller Step_0:1992).
+  // So the cone is the younger instance and steps first, every frame, for the
+  // rest of the turn.
+  //
+  // NOT AN OBJECT-INDEX RULE, and an earlier draft of this note said it was.
+  // The indices happen to agree here (cone 545 < dc 1432), but object index
+  // governs the ALARM phase only: sim/entity.js carries a block headed
+  // "OBJECT INDEX AS THE TIEBREAK WAS TRIED HERE AND REVERTED", with the
+  // receipt that it holds all six whole-fight diffs to f11759 and then breaks
+  // soul_x at f11760. Do not read this fix as licence to replace hand-fitted
+  // stepOrder constants with the index table.
   //
   // WHAT WAS HERE BEFORE, and why it looked right: the pair was [dc -2,
   // cone -1], justified by "size = us[38] requires the CONTROLLER's rolls
