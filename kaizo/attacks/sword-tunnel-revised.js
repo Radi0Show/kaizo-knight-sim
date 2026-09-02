@@ -376,6 +376,22 @@ function fireBlade(state, e, opts) {
 }
 
 export const tunnelSlasher2 = {
+  /**
+   * CleanUp_0 AS A TYPE HOOK. It was a hand-placed call on the one destroy
+   * path this object takes itself, which leaves every OTHER path running
+   * without it — and the path that ends most turns is the sweep,
+   * `with (obj_bulletparent) instance_destroy()` (obj_battlecontroller
+   * Step_0:1477-1481, reached here through clearTurn). GameMaker runs CleanUp
+   * on every instance_destroy and sim/entity.js models that, so the hook is
+   * the faithful place for it.
+   *
+   * Found by sweeping every translated type against its GML CleanUp_0 after
+   * the identical fault in obj_roaringknight_quickslash_attack cost the gate
+   * 200 frames (ledger, "A CleanUp that only runs on one destroy path").
+   * This object writes the same `global.turntimer = -1` from the same guard.
+   */
+  cleanUp,
+
   name: 'obj_knight_tunnel_slasher_2_revised',
 
   create(e, state) {
@@ -628,7 +644,8 @@ export const tunnelSlasher2 = {
             scrLerpvar(st, spawn, e, 'y', e.y, e.anchor_y, 24, 2);
           },
         });
-        e.pending.push({ delay: 40, run: () => { cleanUp(e, state); destroy(e); } });
+        // destroy() carries the state so the type's cleanUp hook fires.
+        e.pending.push({ delay: 40, run: (st) => destroy(e, st) });
       } else {
         e.alarm[2] = 1;
       }

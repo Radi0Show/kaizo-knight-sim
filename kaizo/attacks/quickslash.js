@@ -733,6 +733,29 @@ function armKaizoSplitter(sp) {
 // ── obj_roaringknight_quickslash_attack — the controller ────────────────────
 
 export const quickslashAttack = {
+  /**
+   * CleanUp_0 AS A TYPE HOOK, so it runs on every path that destroys this
+   * controller — not just the two the Step takes itself.
+   *
+   * It used to be three hand-placed calls to cleanupController(), and the
+   * path that actually ends most turns is not one of them: the turn sweep
+   * (`with (obj_bulletparent) instance_destroy()`, obj_battlecontroller
+   * Step_0:1477-1481, reached here through clearTurn) killed this object
+   * with its CleanUp unrun. GameMaker runs CleanUp on EVERY
+   * instance_destroy, and sim/entity.js already models that — clearTurn's
+   * own note names the boxsplitter's identical `global.turntimer = -1` as
+   * the precedent. This type simply never declared the hook.
+   *
+   * MEASURED on _tok3 f4828, the end of the atk_Quickslash turn. Both sides
+   * read turntimer 0.9666666667 on f4827; the recording then reads exactly
+   * -1 while the sim read -0.0333333333, and the gap stayed at exactly the
+   * fractional part (0.9666666667) for every frame after, both sides
+   * plateauing together on f4843. The sweep destroyed the controller on the
+   * right frame — the tracer's watch shows it gone from sim f4955 — it just
+   * never ran the CleanUp that assigns the -1.
+   */
+  cleanUp: cleanupController,
+
   name: 'obj_roaringknight_quickslash_attack',
 
   /** Create_0, kaizo lines 1-77 — vanilla base (1-42, knight index 344) plus
@@ -1109,8 +1132,7 @@ export const quickslashAttack = {
         used: 'destroy without handoff',
         why: 'combination-chain segments are the ac-106 work item',
       });
-      cleanupController(e, state); // CleanUp runs on the GML destroy too
-      destroy(e);
+      destroy(e, state); // CleanUp runs on the GML destroy too
     },
   },
 
@@ -1160,14 +1182,12 @@ export const quickslashAttack = {
         if ((e.local_turntimer < -60 && e.turn_type !== 'short end')
           || (e.local_turntimer < -110 && e.turn_type === 'short end')) {
           state.turntimer = 0;
-          cleanupController(e, state); // CleanUp_0 fires on the destroy
-          destroy(e);
+          destroy(e, state); // CleanUp_0 fires on the destroy -> turntimer -1
           return;
         }
       } else if (e.local_turntimer < -160) {
         state.turntimer = 0;
-        cleanupController(e, state);
-        destroy(e);
+        destroy(e, state); // CleanUp_0 fires on the destroy -> turntimer -1
         return;
       }
     } else if (e.recoil !== 0) {
