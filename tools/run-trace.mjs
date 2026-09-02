@@ -1,0 +1,105 @@
+#!/usr/bin/env node
+// Headless trace runner. Writes one CSV row per frame.
+//
+//   node tools/run-trace.mjs --seed 12345 --frames 600 --out traces/stub.csv
+//
+// No browser, no canvas, no real clock. This is the verification path.
+
+import { writeFileSync, mkdirSync } from 'node:fs';
+import { dirname } from 'node:path';
+import { pathToFileURL } from 'node:url';
+
+import { createState, stepFrame, traceHeader } from '../sim/index.js';
+import { makeInputTable } from '../input/state.js';
+import { buildStubScene } from './scenes/stub.js';
+import {
+  buildSoulWallScene,
+  HOLD_RIGHT,
+  HOLD_RIGHT_THEN_FOCUS,
+  DIAGONAL_INTO_CORNER,
+} from './scenes/soul-wall.js';
+import { buildOracleT3Scene, ORACLE_T3_INPUT } from './scenes/oracle-t3.js';
+import { buildOracleT4Scene, ORACLE_T4_INPUT } from './scenes/oracle-t4.js';
+import { buildOracleT5Scene, ORACLE_T5_INPUT } from './scenes/oracle-t5.js';
+import { buildOracleT6Scene, ORACLE_T6_INPUT } from './scenes/oracle-t6.js';
+import { buildOracleT7Scene, ORACLE_T7_INPUT } from './scenes/oracle-t7.js';
+import { buildOracleT8Scene, ORACLE_T8_INPUT } from './scenes/oracle-t8.js';
+
+function parseArgs(argv) {
+  const args = { seed: 12345, frames: 600, out: null, scene: 'stub' };
+  for (let i = 2; i < argv.length; i += 2) {
+    const key = argv[i].replace(/^--/, '');
+    const val = argv[i + 1];
+    if (!(key in args)) {
+      console.error(`unknown option: ${argv[i]}`);
+      process.exit(2);
+    }
+    args[key] = key === 'seed' || key === 'frames' ? Number(val) : val;
+  }
+  return args;
+}
+
+// Fixed input program. A recorder comes later; a hardcoded table is what
+// CLAUDE.md asks for at this stage, and it keeps the trace reproducible.
+const INPUT_PROGRAM = [
+  { from: 0, right: true },
+  { from: 40, right: true, focus: true },
+  { from: 60, left: true },
+  { from: 120, right: true, up: true },
+  { from: 200 },
+  { from: 240, right: true },
+];
+
+const SCENES = {
+  stub: { build: buildStubScene, input: INPUT_PROGRAM, bulletSlots: 4 },
+  'soul-wall': { build: buildSoulWallScene, input: HOLD_RIGHT, bulletSlots: 0 },
+  'soul-focus': { build: buildSoulWallScene, input: HOLD_RIGHT_THEN_FOCUS, bulletSlots: 0 },
+  'soul-corner': { build: buildSoulWallScene, input: DIAGONAL_INTO_CORNER, bulletSlots: 0 },
+  'oracle-t3': { build: buildOracleT3Scene, input: ORACLE_T3_INPUT, bulletSlots: 0 },
+  'oracle-t4': { build: buildOracleT4Scene, input: ORACLE_T4_INPUT, bulletSlots: 0 },
+  'oracle-t5': { build: buildOracleT5Scene, input: ORACLE_T5_INPUT, bulletSlots: 2 },
+  'oracle-t6': { build: buildOracleT6Scene, input: ORACLE_T6_INPUT, bulletSlots: 0 },
+  'oracle-t7': { build: buildOracleT7Scene, input: ORACLE_T7_INPUT, bulletSlots: 0 },
+  'oracle-t8': { build: buildOracleT8Scene, input: ORACLE_T8_INPUT, bulletSlots: 0 },
+};
+
+export function runTraceFull({ seed, frames, scene = 'stub' }) {
+  const chosen = SCENES[scene];
+  if (!chosen) {
+    throw new Error(`unknown scene: ${scene} (have: ${Object.keys(SCENES).join(', ')})`);
+  }
+
+  const state = createState({ seed, traceBulletSlots: chosen.bulletSlots });
+  chosen.build(state);
+
+  const inputAt = makeInputTable(chosen.input);
+  const header = traceHeader(state);
+
+  for (let i = 0; i < frames; i++) {
+    stepFrame(state, inputAt(state.frame));
+  }
+
+  return { csv: `${header}\n${state.trace.join('\n')}\n`, counters: state.counters };
+}
+
+export function runTrace(opts) {
+  return runTraceFull(opts).csv;
+}
+
+function main() {
+  const args = parseArgs(process.argv);
+  const csv = runTrace(args);
+
+  if (args.out) {
+    mkdirSync(dirname(args.out), { recursive: true });
+    writeFileSync(args.out, csv);
+    const rows = csv.trimEnd().split('\n').length - 1;
+    console.error(`wrote ${args.out}  seed=${args.seed}  ${rows} frames`);
+  } else {
+    process.stdout.write(csv);
+  }
+}
+
+// URL-to-URL entry guard (the string form never matched on Windows; see
+// tools/diff-trace.mjs).
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) main();

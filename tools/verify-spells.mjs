@@ -1,0 +1,346 @@
+#!/usr/bin/env node
+// MAGIC and ACT — the two lists that were on the button row doing nothing.
+//
+// THE REASON THEY DID NOTHING is worth pinning first: `BUTTONS[1].name` is a
+// FUNCTION, because that slot is ACT for Kris and MAGIC for everyone else. The
+// menu read it as a plain string, so `chosen === 'ACT'` compared against a
+// Function object, was never true, and the button fell through every branch —
+// no list, no error sound, no turn advance. Nothing about it looked broken.
+//
+// The data, from `scr_gamestart` and `scr_monstersetup` monstertype 104:
+//
+//     spell[1][0] = 7   Kris:   ACT           (so his slot IS the ACT list)
+//     spell[2]    = 4, 11       Rude Buster 125, UltraHeal 225
+//     spell[3]    = 3, 2        Pacify 40, Heal Prayer 80
+//     actname[104][0..1]        Check, HoldBreath
+//
+// Costs are raw TP out of 250, which is where the familiar percentages come
+// from: Rude Buster 125/250 = 50%.
+
+import { createState } from '../sim/index.js';
+import { stepMenu, openMenu, createMenu, listRows, BUTTONS } from '../sim/menu.js';
+import { SPELLS, SPELL_LIST, ACTS, castSpell, holdBreath, soulSpeed, canAfford } from '../sim/spells.js';
+import { ACT_PAGES } from '../sim/dialogue.js';
+import { freshInventory } from '../sim/items.js';
+import { KNIGHT_MAXHP, stepKnightAnim } from '../sim/knight.js';
+import { stepRudeBuster, rudeBusterBusy } from '../sim/rudebuster.js';
+import { dmgColor } from '../sim/dmgnumbers.js';
+
+const failures = [];
+const NONE = { left: false, right: false, up: false, down: false, confirm: false, cancel: false };
+
+// Bare stats for the formula assertions, as verify-knight does — the
+// equipped build is checked there and in verify-equipment.
+const BARE = { gear: [{ weapon: 0, armor: [] }, { weapon: 0, armor: [] }, { weapon: 0, armor: [] }] };
+
+function fresh(charturn = 1) {
+  const st = createState({ seed: 1 });
+  // ADVANCE THE KNIGHT OUT OF HIS OPENING FRAME. `createKnight()` starts at
+  // the Create value `damagereduction = 0.04` and his first Step raises it to
+  // 0.2; every damage figure in this suite is a dr-0.2 number, so without this
+  // the unpressed Rude Buster reads 72 rather than 89. Same fixture step as
+  // verify-knight's `mk()`.
+  stepKnightAnim(st);
+  st.loadout = BARE;
+  st.menu = createMenu();
+  st.inventory = freshInventory();
+  openMenu(st);
+  st.menu.charturn = charturn;
+  return st;
+}
+function tap(st, key) {
+  stepMenu(st, { ...NONE, [key]: true });
+  stepMenu(st, { ...NONE });
+}
+
+// ── The bug itself ───────────────────────────────────────────────────────
+// Button 1's name MUST be per-character. If this ever goes back to a plain
+// string, ACT and MAGIC silently stop working again.
+const n1 = BUTTONS[1].name;
+if (typeof n1 !== 'function') {
+  failures.push('BUTTONS[1].name is not a function — ACT/MAGIC cannot both work');
+} else {
+  if (n1(0) !== 'ACT') failures.push(`Kris's button 1 is "${n1(0)}", expected ACT`);
+  if (n1(1) !== 'MAGIC') failures.push(`Susie's button 1 is "${n1(1)}", expected MAGIC`);
+}
+
+// ── The lists ────────────────────────────────────────────────────────────
+if (SPELL_LIST[0].length !== 1 || SPELL_LIST[0][0] !== 7) {
+  failures.push('Kris does not have exactly spell 7 (ACT)');
+}
+for (const [slot, ids] of [[1, [4, 11]], [2, [3, 2]]]) {
+  if (SPELL_LIST[slot].join() !== ids.join()) {
+    failures.push(`slot ${slot} spells ${SPELL_LIST[slot].join()}, expected ${ids.join()}`);
+  }
+}
+for (const [id, cost] of [[2, 80], [3, 40], [4, 125], [11, 225]]) {
+  if (SPELLS[id].cost !== cost) failures.push(`${SPELLS[id].name} costs ${SPELLS[id].cost}, expected ${cost}`);
+}
+if (ACTS[0][1].name !== 'HoldBreath') failures.push("Kris's ACT 1 is not HoldBreath");
+
+// Pressing button 1 as Kris opens the ACT flow; as Susie, the spell list.
+// KRIS'S ACT IS TWO STAGES (measured at verify21j f2320-2323): the button
+// opens bmenuno 11 — the enemy picker ('actpick') — and its confirm reaches
+// bmenuno 9, the option grid ('actgrid').
+let st = fresh(0);
+st.menu.selected[0] = 1;
+tap(st, 'confirm');
+if (st.menu.submenu !== 'actpick') failures.push(`Kris's button 1 opened ${st.menu.submenu}, expected actpick`);
+tap(st, 'confirm');
+if (st.menu.submenu !== 'actgrid') failures.push(`the act picker's confirm opened ${st.menu.submenu}, expected actgrid`);
+if (listRows(st).length !== 2) failures.push(`Kris has ${listRows(st).length} ACTs, expected 2`);
+
+st = fresh(1);
+st.menu.selected[1] = 1;
+tap(st, 'confirm');
+if (st.menu.submenu !== 'magic') failures.push(`Susie's button 1 opened ${st.menu.submenu}, expected magic`);
+if (listRows(st).map((r) => r.label).join() !== 'Rude Buster,UltraHeal') {
+  failures.push(`Susie's list is ${listRows(st).map((r) => r.label).join()}`);
+}
+
+// ── Affordability: SHOWN AND GREYED, not hidden ──────────────────────────
+st = fresh(1);
+st.tension = 0;
+st.menu.submenu = 'magic';
+const broke = listRows(st);
+if (broke.length !== 2) failures.push('an unaffordable spell was hidden — it should be greyed');
+if (broke.some((r) => r.usable)) failures.push('a spell was usable at 0 TP');
+st.tension = 125;
+if (!canAfford(st, 4)) failures.push('Rude Buster unaffordable at exactly its cost');
+if (canAfford(st, 11)) failures.push('UltraHeal affordable at 125 TP');
+
+// Confirming an unaffordable spell must refuse, not cast.
+st = fresh(1);
+st.tension = 0;
+st.menu.submenu = 'magic';
+st.menu.gridIndex = 0;
+tap(st, 'confirm');
+if (st.menu.charturn !== 1) failures.push('an unaffordable spell advanced the turn');
+if (st.tension < 0) failures.push('an unaffordable spell spent TP');
+
+// ── Rude Buster is a TIMING MINIGAME, not an instant subtraction ─────────
+//
+// Casting starts an animation; the damage lands when the bolt does, and a
+// press just before impact adds up to +30. This suite used to assert the HP
+// dropped on cast, which passed while the whole mechanic was missing.
+//
+// `/** Run the spell to completion, pressing on the frame `pressAt`. */`
+function resolveRude(pressAt) {
+  const s = fresh(1);
+  s.tension = 250;
+  const hp0 = s.knight.hp;
+  castSpell(s, 1, 4, 0);
+  let f = 0;
+  while (rudeBusterBusy(s) && f < 400) {
+    const b = s.rude.bolt;
+    stepRudeBuster(s, !!b && b.explode === 0 && b.boltTimer + 1 === pressAt);
+    f += 1;
+  }
+  return { dealt: hp0 - s.knight.hp, tp: s.tension, frames: f, state: s };
+}
+
+// It must NOT resolve on cast — the animation has to run first.
+st = fresh(1);
+st.tension = 250;
+const hp0 = st.knight.hp;
+const line = castSpell(st, 1, 4, 0);
+if (st.knight.hp !== hp0) failures.push('Rude Buster dealt damage instantly — the bolt never flew');
+if (!rudeBusterBusy(st)) failures.push('casting Rude Buster started nothing');
+if (st.tension !== 125) failures.push(`Rude Buster left ${st.tension} TP, expected 125`);
+if (!line) failures.push('Rude Buster returned no message');
+if (hp0 !== KNIGHT_MAXHP) failures.push('the knight did not start at full HP');
+
+// The bolt lands and deals damage on its own.
+const noPress = resolveRude(-1);
+if (noPress.dealt <= 0) failures.push('the bolt landed for no damage');
+if (rudeBusterBusy(noPress.state)) failures.push('Rude Buster never finished');
+// `damage = round(damage / 2)` against the Knight, applied to spellDamage 177.
+// round(177 / 2) = round(88.5) ties to EVEN: 88, not the hand-computed 89.
+if (noPress.dealt !== 88) failures.push(`unpressed Rude Buster dealt ${noPress.dealt}, expected 88`);
+
+// Find the frame it lands on, then press exactly there for the full +30.
+const landOn = (() => {
+  const s = fresh(1);
+  s.tension = 250;
+  castSpell(s, 1, 4, 0);
+  let f = 0;
+  let final = 0;
+  while (rudeBusterBusy(s) && f < 400) {
+    stepRudeBuster(s, false);
+    if (s.rude.bolt?.explode === 1 && !final) final = s.rude.bolt.boltTimer;
+    f += 1;
+  }
+  return final;
+})();
+if (landOn < 4) failures.push(`the bolt lands on frame ${landOn} — before the press window opens at 4`);
+
+// THE BONUS IS HALVED WITH THE BASE, because the Knight's `/ 2` is applied
+// AFTER it is added. round((177 + 30) / 2) = 104, not 89 + 30.
+const perfect = resolveRude(landOn);
+if (perfect.dealt !== 104) failures.push(`a perfect press dealt ${perfect.dealt}, expected 104`);
+if (perfect.dealt >= 88 + 30) failures.push('the timing bonus was not halved with the base');
+
+// Earlier presses are worth less, monotonically — that gradient IS the game.
+let prev = perfect.dealt;
+for (let gap = 1; gap <= 4 && landOn - gap >= 4; gap++) {
+  const got = resolveRude(landOn - gap).dealt;
+  if (got > prev) failures.push(`pressing ${gap} frames earlier dealt MORE (${got} > ${prev})`);
+  if (got < noPress.dealt) failures.push(`a press dealt less than no press at all (${got})`);
+  prev = got;
+}
+
+// THE POPUP IS PURPLE, and it is purple because the bolt goes through
+// `scr_damage_enemy(star, damage)` rather than touching HP directly:
+// `dm.type = global.char[caster] - 1`, Susie is character 2, so type 1 —
+// `merge_color(c_purple, c_white, 0.6)`. Subtracting HP and stopping landed
+// the damage with no number at all.
+{
+  const s = fresh(1);
+  s.tension = 250;
+  castSpell(s, 1, 4, 0);
+  let f = 0;
+  while (rudeBusterBusy(s) && f < 400) { stepRudeBuster(s, false); f += 1; }
+  const n = s.dmg.list[0];
+  if (!n) failures.push('Rude Buster landed with no damage popup');
+  else {
+    if (n.type !== 1) failures.push(`the popup is type ${n.type}, expected 1 (Susie)`);
+    if (dmgColor(n.type).join() !== '255,153,255') {
+      failures.push(`the popup is rgb(${dmgColor(n.type).join()}), expected Susie's purple`);
+    }
+    if (n.damage !== 88) failures.push(`the popup reads ${n.damage}, expected 88`);
+  }
+}
+
+// ONE PRESS ONLY. `chosen_bolt == 0` locks it, so mashing cannot stack bonuses.
+{
+  const s = fresh(1);
+  s.tension = 250;
+  const before = s.knight.hp;
+  castSpell(s, 1, 4, 0);
+  let f = 0;
+  while (rudeBusterBusy(s) && f < 400) { stepRudeBuster(s, true); f += 1; }
+  const mashed = before - s.knight.hp;
+  if (mashed > perfect.dealt) failures.push(`mashing dealt ${mashed}, more than a perfect press`);
+}
+
+// Heal Prayer heals `magic * 5` = 55 at Ralsei's 11, and reaches the FALLEN.
+st = fresh(2);
+st.tension = 250;
+st.partyHp = [160, -100, 140];
+castSpell(st, 2, 2, 1);
+if (st.partyHp[1] !== -45) failures.push(`Heal Prayer left the fallen ally at ${st.partyHp[1]}, expected -45`);
+
+// Pacify SPENDS the TP and does nothing — the Knight can never be spared.
+st = fresh(2);
+st.tension = 250;
+const before = st.knight.hp;
+castSpell(st, 2, 3, 0);
+if (st.tension !== 210) failures.push(`Pacify left ${st.tension} TP, expected 210`);
+if (st.knight.hp !== before) failures.push('Pacify damaged the Knight');
+
+// ── HoldBreath works ONCE ────────────────────────────────────────────────
+// `holdbreathcount++` then `holdbreathcount = 1` — the counter is clamped, so
+// the second use prints "Nothing happened" and changes nothing. A plain
+// increment would let the buff stack forever.
+st = fresh(0);
+if (soulSpeed(st) !== 4) failures.push(`base soul speed is ${soulSpeed(st)}, expected 4`);
+// holdBreath returns the PAGE KEY; the text lives in ACT_PAGES, which is also
+// what drives the writer. It used to return its own condensed sentence, and
+// that copy had drifted from the dump — the chatbox dropped a whole line
+// ("Their heartbeat quickened.", and "Kris smiled." on the repeat) and ran the
+// rest together on one row, so the act showed two different texts depending on
+// which of the two you were reading. The lines below are the dump's, verbatim,
+// and are asserted because losing one is exactly what happened.
+const first = holdBreath(st);
+if (soulSpeed(st) !== 5) failures.push(`after HoldBreath the soul moves ${soulSpeed(st)}, expected 5`);
+if (first !== 'holdbreath_first') failures.push(`the first HoldBreath keyed ${first}`);
+const second = holdBreath(st);
+if (second !== 'holdbreath_again') failures.push(`the second HoldBreath keyed ${second}`);
+{
+  const a = ACT_PAGES.holdbreath_first?.[0] ?? '';
+  const b = ACT_PAGES.holdbreath_again?.[0] ?? '';
+  for (const bit of ['Kris held their breath.', 'Their heartbeat quickened.', 'The SOUL now moves faster.']) {
+    if (!a.includes(bit)) failures.push(`holdbreath_first is missing "${bit}"`);
+  }
+  for (const bit of ['Kris held their breath...', 'Kris smiled.', 'Nothing happened.']) {
+    if (!b.includes(bit)) failures.push(`holdbreath_again is missing "${bit}"`);
+  }
+  // Three lines each — the `&` breaks are the writer's own separator.
+  if (a.split('&').length !== 3) failures.push(`holdbreath_first has ${a.split('&').length} lines, expected 3`);
+  if (b.split('&').length !== 3) failures.push(`holdbreath_again has ${b.split('&').length} lines, expected 3`);
+}
+if (st.knight.holdbreathcount !== 1) failures.push(`holdbreathcount reached ${st.knight.holdbreathcount}, expected 1`);
+if (soulSpeed(st) !== 5) failures.push('the second HoldBreath changed the speed');
+st.roaringActive = true;
+if (soulSpeed(st) !== 6) failures.push(`during Roaring the soul should move 6, got ${soulSpeed(st)}`);
+
+// Choosing it through the menu advances the turn.
+st = fresh(0);
+st.menu.submenu = 'actgrid';
+st.menu.gridIndex = 1;
+tap(st, 'confirm');
+if (st.menu.charturn !== 1) failures.push('HoldBreath did not advance the turn');
+// THE BUFF LANDS AT RESOLUTION, NOT SELECTION. Selection only queues
+// (`acting = 1`); holdbreathcount++ and the speed change are in the knight's
+// acting block, which the sim runs when the ACT's writer is born, after the
+// menu closes. It USED to land at selection — and an X after choosing could
+// not un-ring it, which is the cancel-leak family reported from play. So the
+// menu confirm must leave the speed at 4, and resolveActPages is what flips
+// it to 5.
+if (soulSpeed(st) !== 4) failures.push('HoldBreath buffed AT SELECTION — cancel could not undo it');
+if (!st.pendingAct || st.pendingAct.act !== 1) failures.push('HoldBreath did not queue the act');
+{
+  const { resolveActPages } = await import('../sim/spells.js');
+  const pages = resolveActPages(st, st.pendingAct.c ?? 0, st.pendingAct.act);
+  if (soulSpeed(st) !== 5) failures.push('resolution did not buff the soul');
+  if (!pages?.[0]?.includes('held their breath')) failures.push('resolution picked the wrong pages');
+}
+
+console.log(`Kris: ${ACTS[0].map((a) => a.name).join(', ')}`);
+console.log(`Susie: ${SPELL_LIST[1].map((i) => `${SPELLS[i].name} ${SPELLS[i].cost}TP`).join(', ')}`);
+console.log(`Ralsei: ${SPELL_LIST[2].map((i) => `${SPELLS[i].name} ${SPELLS[i].cost}TP`).join(', ')}`);
+console.log('HoldBreath: soul 4 -> 5, 6 during Roaring, and works exactly once');
+console.log(`Rude Buster: bolt lands frame ${landOn} · no press ${noPress.dealt} · perfect ${perfect.dealt} (bonus halved with the base)`);
+
+// A CANCELLED SPELL MUST NOT FIRE. scr_prevhero's `charaction = 0` is what
+// stops the resolve phase running the choice — the game's resolver iterates
+// characters by charaction, while this sim's iterates the pending queues, so
+// prevHero has to clear the queue entry alongside the action. Without that,
+// cancelling a Rude Buster refunded the 125 TP and then fired the bolt
+// anyway, and the character could pick a second action on top — reported
+// from play twice within hours ("cast anyways with no tp cost").
+{
+  const { createState: mk } = await import('../sim/state.js');
+  const { stepFrame: step } = await import('../sim/index.js');
+  const { buildPracticeScene: build } = await import('../sim/scenes/practice.js');
+  const s7 = mk({ seed: 3 });
+  build(s7, { seed: 3 });
+  s7.keepAlive = true;
+  let g = 0;
+  while (!s7.menu?.open && g++ < 2000) step(s7, {});
+  s7.tension = 250;
+  const t7 = (k) => { step(s7, { [k]: true }); step(s7, {}); };
+  s7.menu.selected[0] = 4; t7('confirm');            // Kris DEFEND
+  s7.menu.selected[1] = 1; t7('confirm'); t7('confirm'); // Susie: Rude Buster
+  const paid = s7.tension;
+  t7('cancel');
+  if (s7.tension <= paid) failures.push(`cancel did not refund the spell (TP ${s7.tension})`);
+  if (s7.pendingSpell?.[1]) failures.push('cancel left the spell QUEUED — it will fire for free');
+  s7.menu.selected[1] = 4; t7('confirm');
+  s7.menu.selected[2] = 4; t7('confirm');
+  const hp7 = s7.knight.hp;
+  let bolt = false;
+  for (let i = 0; i < 600 && !s7.menu.open; i++) {
+    step(s7, {});
+    if (s7.entities.some((e) => e.alive && /rudebuster/i.test(e.type?.name ?? ''))) bolt = true;
+  }
+  if (bolt) failures.push('the cancelled Rude Buster spawned its bolt');
+  if (s7.knight.hp !== hp7) failures.push(`the knight took ${hp7 - s7.knight.hp} from a cancelled spell`);
+}
+
+if (failures.length) {
+  console.log('');
+  for (const f of failures) console.log(`→ FAILURE  ${f}`);
+  process.exit(1);
+}
+console.log('\nPASS  MAGIC and ACT (no oracle — see header)');

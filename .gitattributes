@@ -1,0 +1,9 @@
+# LF in the repo, LF on checkout, whatever core.autocrlf says on the machine.
+# This machine has core.autocrlf=true and knight-research learned the hard way
+# that a line ending is part of a byte-exact measurement.
+* text=auto eol=lf
+*.png binary
+*.wav binary
+*.ogg binary
+*.mp3 binary
+*.csv -text

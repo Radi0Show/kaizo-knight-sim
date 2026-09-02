@@ -1,0 +1,21 @@
+{
+  "name": "kaizo-knight-sim",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Kaizo Roaring Knight (EnderCat8 v2.3.3) recreated on the knight-sim engine. NOT the real fight. Private.",
+  "type": "module",
+  "scripts": {
+    "verify": "node tools/verify-all.mjs",
+    "verify:kaizo": "node kaizo/tools/verify-kaizo.mjs",
+    "verify:fullfight": "node kaizo/tools/verify-kaizo-fullfight.mjs",
+    "regen:kaizo": "node kaizo/tools/regen-kaizo-fullfight.mjs",
+    "check:render:kaizo": "node kaizo/tools/checks/check-render-smoke-kaizo.mjs",
+    "vendor:engine": "node kaizo/tools/vendor-engine.mjs",
+    "build:web": "node tools/build-web.mjs",
+    "test:strip": "node tools/test-strip-comments.mjs",
+    "trace": "node tools/run-trace.mjs",
+    "diff": "node tools/diff-trace.mjs",
+    "serve": "python -m http.server 8178",
+    "gen-masks": "node tools/gen-masks.mjs"
+  }
+}

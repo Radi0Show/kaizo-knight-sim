@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#000000">
+<!-- KAIZO KNIGHT — a deliberately unfair remix. NOT the real fight.
+     This page is kaizo-owned (kaizo/HANDOFF.md §2): it imports from kaizo/
+     and is the ONLY thing under web/ allowed to. The main page's code paths
+     are untouched by its existence; deleting kaizo/ and this page leaves the
+     main sim exactly as it was.
+
+     SEPARATE REPO SINCE 2026-09-02 (kaizo-knight-sim). This page is the ONLY page
+     here; the vanilla title lives in knight-sim. It registers ITS OWN service
+     worker (web/sw.js, cache prefix kaizoknight-) and its own manifest, so an
+     install of this game and an install of the real one never share a cache
+     even on one origin. -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="KAIZO KNIGHT">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-192.png">
+<title>KAIZO KNIGHT — NOT the real fight</title>
+<style>
+  /* Same letterbox shell as index.html — see its comments for every rule's
+     reason. The one addition is the KAIZO banner. */
+  html, body {
+    margin: 0;
+    height: 100%;
+    background: #000;
+    overflow: hidden;
+    color: #ccc;
+    font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+    touch-action: none;
+    overscroll-behavior: none;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  #game {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: min(100vw, calc(100vh * 4 / 3));
+    height: min(100vh, calc(100vw * 3 / 4));
+    background: #000;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    image-rendering: pixelated;
+  }
+  /* THE KAIZO BANNER. The repo's law is that nothing invented ships
+     unlabelled, and the schedule this page runs is invented by definition —
+     so the label sits OVER the top letterbox bar, always visible, and cannot
+     be scrolled away or clicked through. The in-canvas turn readout carries
+     the KAIZO prefix too; this is the plain-language half. */
+  #kaizo-banner {
+    position: absolute;
+    top: max(6px, env(safe-area-inset-top));
+    left: 0;
+    right: 0;
+    text-align: center;
+    pointer-events: none;
+    user-select: none;
+    z-index: 5;
+  }
+  #kaizo-banner .big {
+    font-size: 22px;
+    font-weight: bold;
+    letter-spacing: 6px;
+    color: #ff4747;
+    text-shadow: 0 0 8px rgba(255, 71, 71, 0.55);
+  }
+  #kaizo-banner .sub {
+    font-size: 11px;
+    color: #b98;
+  }
+  #credit {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    margin: 0;
+    padding: 4px 8px;
+    text-align: center;
+    font-size: 11px;
+    color: #555;
+    pointer-events: none;
+    user-select: none;
+  }
+  #touch { display: none; }
+  @media (pointer: coarse) {
+    #touch {
+      display: block;
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 10;
+    }
+  }
+  #touch .pad, #touch .btn {
+    position: absolute;
+    pointer-events: auto;
+    touch-action: none;
+    border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.25);
+    background: rgba(255, 255, 255, 0.06);
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  #dpad {
+    left: max(18px, env(safe-area-inset-left));
+    bottom: max(18px, env(safe-area-inset-bottom));
+    width: 148px;
+    height: 148px;
+  }
+  #dpad::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background:
+      linear-gradient(rgba(255,255,255,0.14), rgba(255,255,255,0.14)) 50% 0 / 34% 100% no-repeat,
+      linear-gradient(rgba(255,255,255,0.14), rgba(255,255,255,0.14)) 0 50% / 100% 34% no-repeat;
+    border-radius: inherit;
+  }
+  #touch .btn {
+    width: 64px;
+    height: 64px;
+    color: rgba(255, 255, 255, 0.55);
+    font: bold 20px/60px ui-monospace, Menlo, monospace;
+    text-align: center;
+  }
+  #touch .btn.down { background: rgba(255, 255, 255, 0.22); }
+  #btnZ {
+    right: max(20px, env(safe-area-inset-right));
+    bottom: calc(max(18px, env(safe-area-inset-bottom)) + 74px);
+  }
+  #btnX {
+    right: calc(max(20px, env(safe-area-inset-right)) + 74px);
+    bottom: max(18px, env(safe-area-inset-bottom));
+  }
+  #touch #btnR {
+    top: max(14px, env(safe-area-inset-top));
+    right: max(14px, env(safe-area-inset-right));
+    width: 44px;
+    height: 44px;
+    font-size: 15px;
+    line-height: 40px;
+  }
+  @media (pointer: coarse) and (orientation: landscape) {
+    #credit {
+      bottom: auto;
+      top: max(14px, env(safe-area-inset-top));
+      left: max(14px, env(safe-area-inset-left));
+      right: auto;
+      text-align: left;
+    }
+    /* The banner keeps the top centre; R owns top-right, credit top-left. */
+    #dpad {
+      left: max(12px, env(safe-area-inset-left));
+      bottom: auto;
+      top: 55%;
+      transform: translateY(-50%);
+    }
+    #btnZ {
+      right: max(16px, env(safe-area-inset-right));
+      bottom: auto;
+      top: calc(55% - 58px);
+      transform: translateY(-50%);
+    }
+    #btnX {
+      right: calc(max(16px, env(safe-area-inset-right)) + 40px);
+      bottom: auto;
+      top: calc(55% + 30px);
+      transform: translateY(-50%);
+    }
+  }
+</style>
+</head>
+<body>
+  <canvas id="game" width="640" height="480"></canvas>
+  <div id="kaizo-banner">
+    <div class="big">KAIZO KNIGHT</div>
+    <div class="sub">NOT the real fight &mdash; verified attack engines, invented schedule &middot;
+      <a id="back" href="https://radi0show.github.io/knight-sim/web/" style="color:#778;pointer-events:auto">real fight</a></div>
+  </div>
+  <p id="credit">Game is by Toby Fox and the Deltarune Team &middot; KAIZO schedule is fan-invented</p>
+  <div id="touch">
+    <div id="dpad" class="pad"></div>
+    <div id="btnZ" class="btn">Z</div>
+    <div id="btnX" class="btn">X</div>
+    <div id="btnR" class="btn">R</div>
+  </div>
+  <script type="module" src="./kaizo.js"></script>
+</body>
+</html>

@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+#
+# Narrowed guard for knight-sim.
+#
+# The clean-room membrane is gone — we translate GML to JS, and comments citing
+# original object names are wanted for traceability. This hook no longer greps
+# for identifiers. It rejects two things only:
+#
+#   1. whole .gml files (the dump does not belong in this repo)
+#   2. original game data containers
+#
+# Install:  ln -sf ../../tools/pre-commit .git/hooks/pre-commit
+
+set -uo pipefail
+
+fail=0
+staged=$(git diff --cached --name-only --diff-filter=ACM)
+
+gml=$(grep -E '\.gml$' <<< "$staged" || true)
+if [ -n "$gml" ]; then
+  echo "REFUSED — .gml files staged. Translate them; do not commit them." >&2
+  echo >&2
+  sed 's/^/  /' <<< "$gml" >&2
+  echo >&2
+  echo "  Quoting a few original lines in a JS comment is fine and encouraged." >&2
+  fail=1
+fi
+
+data=$(grep -E '(^|/)(data\.win|game\.ios|game\.unx)$|\.(win|unx|audiogroup)$|(^|/)(gml_dump|oracle)/' <<< "$staged" || true)
+if [ -n "$data" ]; then
+  echo "REFUSED — original game data staged:" >&2
+  echo >&2
+  sed 's/^/  /' <<< "$data" >&2
+  fail=1
+fi
+
+# Catch-all for extracted assets sneaking in by size.
+while IFS= read -r file; do
+  [ -n "$file" ] || continue
+  size=$(git cat-file -s "$(git rev-parse ":$file")" 2>/dev/null || echo 0)
+  if [ "$size" -gt 5242880 ]; then
+    echo "REFUSED — oversized file: $file ($((size / 1048576)) MB)" >&2
+    fail=1
+  fi
+done <<< "$staged"
+
+[ "$fail" -ne 0 ] && exit 1
+exit 0
