@@ -95,21 +95,41 @@ function gtMaxX(gt) {
 
 export const pointingCone = {
   name: 'obj_knight_pointing_cone',
-  // THE MIXED STEP ORDER, fitted to two exact measurements the pure orders
-  // cannot both satisfy:
+  // THE ORDER IS THE OBJECT INDEX, and the two "fits" it replaces were both
+  // compensations for having it backwards. OBJECT_ORDER: cone 545,
+  // obj_heart_follower 681, dc 1432, obj_heart 1462 — so the game's order is
+  // cone, follower, controller, soul, and this lane now declares it.
   //
-  //  * frame 145 (the first star): size = us[38] of the anchored stream
-  //    requires the CONTROLLER's rolls before the cone's two drag draws;
-  //  * frame 160 (the squeeze release): the soul leaves the pinned clamp at
-  //    365 = (new box clamp 369, applied first) - 4, requiring the cone's
-  //    drag-and-clamp before the HEART's movement — while the heart is the
-  //    OLDER instance.
+  // WHAT WAS HERE BEFORE, and why it looked right: the pair was [dc -2,
+  // cone -1], justified by "size = us[38] requires the CONTROLLER's rolls
+  // before the cone's two drag draws". That measurement was real but it was
+  // taken WITH the two launch-frame pad draws in place, and those pads are
+  // exactly the two u32 that the inverted order costs at every star spawn:
+  // the game draws the cone's drag pair BEFORE the star's three
+  // (dir/size/special), this lane drew the star's three first, and two dead
+  // draws at the launch bought the difference back. The two errors cancelled
+  // at every star, which is why the pads were load-bearing (deleting them
+  // alone took the byte gate from f4238 to f364) and why the us[38] fit came
+  // out self-consistent.
   //
-  // [dc, cone, heart] is the one order satisfying both. The same knob the
-  // sword vortex already needs (its sword steps before its older manager);
-  // GameMaker's real cross-object scheduling remains unexplained, these
-  // measurements are not.
-  stepOrder: -1,
+  // MEASURED, three ways, 2026-09-02: (1) the probe recording places the
+  // game's whole launch at 4 u32 (basedir 2 on the dispatch frame, the cone's
+  // `yoff = irandom(60)` 2 on the launch frame) and nothing else for 29
+  // frames — there is no third pair to attribute; (2) the first star's
+  // recorded speed inverts to the stream index directly, since
+  // `size = random_range(0.5, 1)` and `d.speed = lerp(10, 5, size)` —
+  // _tok3's atk_Starstorm2 star at oracle f4090 reads 6.7284631729, which is
+  // u[13] of anchor n=15 to eight figures, and Starstorm1's f45 star reads
+  // 6.7041101456 = u[13] of anchor n=0; (3) that 13 decomposes ONLY as
+  // basedir 2 + yoff 2 + FOUR cone drag pairs + dir choose 1 — four pairs,
+  // i.e. the spawn frame's own pair included, which is the game drawing it
+  // first. The second fit, the cone-angle look-ahead in the controller's
+  // spawn branch, was the same inversion seen from the other side and is
+  // gone too.
+  //
+  // The frame-160 squeeze release still holds: it needs the cone before the
+  // HEART, and the heart is last under the index order too (1462).
+  stepOrder: -2,
 
   create(e, state) {
     // `obj_knight_enemy.visible = false` — the cone's Create HIDES THE KNIGHT,

@@ -69,9 +69,10 @@ import { heartFollower } from '../../sim/attacks/pointing-starchild.js';
 
 export const starsController = {
   name: 'obj_dbulletcontroller',
-  // See pointingCone's stepOrder note. The controller precedes the cone,
-  // which precedes the heart: [-2, -1, 0].
-  stepOrder: -2,
+  // See pointingCone's stepOrder note for the measurement. The CONE precedes
+  // the controller, which precedes the heart: [-2, -1, 0] by object index
+  // (545, 1432, 1462).
+  stepOrder: -1,
 
   create(e, state) {
     e.btimer = 0;
@@ -170,23 +171,14 @@ export const starsController = {
       );
       if (!cone) return;
 
-      // THE ANGLE THE CONE WILL HAVE THIS FRAME, not the one it has. Two
-      // exact measurements pin an ordering the per-instance model cannot
-      // produce: the first star's special is us[39] of the anchored stream
-      // TO THE LAST DIGIT only if dir used angle 56.25 — the value the cone
-      // reaches during the SAME frame — while size sits at us[38], which
-      // requires the controller's rolls to precede the cone's two drag
-      // draws. So the game's dc reads a current-frame angle while drawing
-      // first. Reproduced by advancing a COPY of the cone's own
-      // deterministic ramp (movetowards 0.025, ease_out 6) — no state is
-      // touched, no draws consumed; the cone still runs its real update
-      // afterwards. Marked as an ordering reconciliation: the underlying
-      // event scheduling is not fully understood, the two measurements are.
-      let coneAngle = cone.angle;
-      if ((cone.angle ?? 0) < (cone.target_angle ?? 60) && (cone.con ?? 0) >= 2) {
-        const nextLerp = scrMovetowards(cone.angle_lerp ?? 0, 1, 0.025);
-        coneAngle = lerp(0, cone.target_angle ?? 60, scrEaseOut(nextLerp, 6));
-      }
+      // THE CONE'S ANGLE AS IT STANDS — no look-ahead. This used to advance a
+      // private copy of the cone's ramp, because "the first star's special is
+      // us[39] ... only if dir used angle 56.25, the value the cone reaches
+      // during the SAME frame". That was the inverted step order seen from the
+      // other side: the cone genuinely HAS updated by now, because it steps
+      // first (object index 545 against this object's 1432). See the stepOrder
+      // note on pointingCone.
+      const coneAngle = cone.angle;
 
       // DIFFICULTY 2 RE-ROLLS THE BURST AXIS PER STAR, before the star is
       // created (the choose sits directly above `scr_childbullet` in the
@@ -381,20 +373,10 @@ export function launchKaizoStars(state, difficulty, pos = CONE_POS) {
   if (difficulty === 0 && state.gmlRng) {
     dc.side = gmlChoose(state.gmlRng, [-1, 1]);
   }
-  // THE TWO PAD DRAWS STAY, and the audit's complaint about them is recorded
-  // here rather than acted on. fight.js case 1 calls them "two unattributed
-  // pads"; the whole-fight draw audit says this lane opens BOTH Starstorm
-  // turns exactly +2 because of them (probe turn 1 anchor n=0 f12 and turn 11
-  // anchor n=15 f4045, game 8 against sim 10 on the launch frame).
-  //
-  // REMOVING THEM IS WORSE, measured 2026-09-02: the probe fight stops
-  // launching after turn 2 (the drawlog's spawnn goes 1 -> 3 and then never
-  // moves, against 50 launches with them in). So they are not merely two
-  // spare draws -- something downstream of this stream position gates the
-  // turn loop, and the two draws are holding a DIFFERENT fault in place.
-  // Whatever the right answer is, it is not deleting these two lines.
-  if (state.gmlRng) {
-    for (let pad = 0; pad < 2; pad++) gmlRandom(state.gmlRng, 1);
-  }
+  // NO PAD DRAWS. The mod's type-98 init makes none: its only draw is the
+  // `choose(-1, 1)` above, and the probe recording confirms the whole launch
+  // costs 4 u32 (basedir 2, the cone's yoff 2). The two that used to sit here
+  // were bought-back draws for an inverted step order, and both are gone
+  // together — see the stepOrder note on pointingCone for the receipts.
   return dc;
 }
