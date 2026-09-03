@@ -385,30 +385,61 @@ export const carouselSword = {
  *  (the measured with() iteration order — sim/attacks/pointing-cone.js).
  *  variable_instance_exists(id, "flag") keeps foreign regularbullets out. */
 /**
- * THE ORDER `with (obj_regularbullet)` VISITS THEM, AND IT IS OLDEST-FIRST.
+ * `with (obj_regularbullet)` VISITS NEWEST-FIRST. Measured three ways, and
+ * this replaces a note that said the opposite.
  *
- * This matters because Other_21's per-frame driver draws ONE u32 per orbiting
- * sword per frame — `direction = random_range(176, 184)` (line 160) — so the
- * visit order decides which sword gets which value. It is pure angle jitter
- * (speed is 0) but it is in the shared stream and it is in the bullets sheet.
+ * WHY IT MATTERS: Other_21's per-frame driver draws ONE u32 per orbiting
+ * sword (`direction = random_range(176, 184)`, line 159) and assigns it to
+ * `image_angle`, so the visit order decides which sword gets which value and
+ * every value lands in the bullets sheet.
  *
- * This sorted NEWEST-first, citing the `with()` note on clearTurn. That note
- * is about the turn-end sweep and does not generalise: MEASURED here on _tok3
- * f5820, where exactly two swords are up. The recording gives the OLDER sword
- * (further round the orbit, x 519.948) 180.063 and the younger (x 525.042)
- * 178.302; oldest-first reproduces both exactly, newest-first hands each the
- * other's value. Before this the sheet parted at f5818 on precisely that swap.
+ * THE INSTRUMENT THAT SETTLED IT, which is reusable and was not obvious: THE
+ * SEQ LOG'S ROW ORDER IS A `with` ITERATION-ORDER READOUT. The recorder logs
+ * new instances with
+ *     for (_w ...) with (global.oracle_watch[_w])
+ *         if (!ds_map_exists(global.oracle_seen, id)) { ...write one row... }
+ * (oracle_kaizo_fight.csx:933-955), so within one frame and one watched
+ * object the CSV row order IS the order `with` visited the instances.
+ * Reading it at three independent sites:
  *
- * KNOWN RESIDUE, and it is NOT this ordering: from f5821, where a third sword
- * is born, the sim's first draw of the frame already differs (sim 181.178
- * against the recording's 180.308), so the stream itself is offset on a spawn
- * frame rather than the assignment being wrong. That is a draw-count question
- * for the spawn block above, not an order question — chase it there.
+ *   obj_knight_pointing_star  — strictly newest-first, 4 occurrences, over
+ *                               stars born on 9-20 different frames
+ *   obj_regularbullet         — 7 same-frame-born instances in exact reverse
+ *                               creation order, 30 occurrences, 0 deviations
+ *   obj_afterimage            — reverse creation, cross-checked by resolving
+ *                               each ghost's hspeed/vspeed to its stream index
+ *
+ * So sim/scenes/fight.js clearTurn's "a with() iterates NEWEST FIRST" is the
+ * general rule, and this function was the outlier.
+ *
+ * THE KNOWN GAP, STATED PLAINLY BECAUSE IT COSTS THE GATE THREE FRAMES.
+ * Across the whole carousel (~253 frames, populations 2 through 18, and a
+ * SECOND independent run of the same attack at oracle f11967 on anchor n=46)
+ * the order is newest-first everywhere EXCEPT oracle f5818/f5819/f5820, which
+ * are unambiguously oldest-first. That is the only dissent in either run, and
+ * it reproduces byte-for-byte in both, so it is deterministic and structural.
+ *
+ * NO PER-INSTANCE SORT CAN PRODUCE BOTH. The state pair {ang 90, ang 110}
+ * occurs at f5818 and again at f5821 and is visited in OPPOSITE order, so
+ * sort(f(state)) is impossible for any f. `ang` is age in closed form
+ * (90 + (f - birth + 1) * 360/18/3, never wrapped) and `depth`
+ * (= knight.depth - 4*cos ang) is non-monotone but flips at f5829/f5843,
+ * where the data is rigidly newest-first. Both are eliminated by measurement.
+ *
+ * THIS LANE SORTED OLDEST-FIRST UNTIL NOW, fitted to those three frames, and
+ * the gate rewarded it: oldest-first reads bullets f5821, newest-first reads
+ * f5818. That is backwards as engineering — oldest-first is wrong on ~250 of
+ * the 253 frames and wins only because its three correct frames come first.
+ * With the three frames overridden by hand the carousel is byte-exact to
+ * f5868, so explaining them is worth about fifty frames; a rule that merely
+ * SWITCHES on sword count is refused, because the recording refutes it (the
+ * attack's tail runs two and three drawing swords newest-first) and because
+ * an unexplained switch is a fit, which is what this note is undoing.
  */
 function carouselSwords(state) {
   return state.entities
     .filter((s) => s.alive && s.type === carouselSword && s.flag !== undefined)
-    .sort((a, b) => a.seq - b.seq);
+    .sort((a, b) => b.seq - a.seq);
 }
 
 /** place_meeting(x, y, obj_heart) inside the sweep — the sword's current
@@ -616,7 +647,7 @@ function carouselStep(e, state) {
 
   // ── the per-frame sword driver — Other_21 lines 151-289,
   // `with (obj_regularbullet) if (variable_instance_exists(id, "flag"))`,
-  // OLDEST-first (measured; see carouselSwords).
+  // NEWEST-first (measured three ways; see carouselSwords).
   if (e.attack_con > 0) {
     for (const s of carouselSwords(state)) {
       if (s.flag === 'A') {
