@@ -944,6 +944,7 @@ export const knightSwordfall = {
         // frame behind for the rest of the sword's life. See delayedLerp's
         // note: every site arms its own count, and the count is decided by
         // where the mod makes the call.
+        delayedLerp(state, s, 8 - 1, 'image_yscale', -1, 1, 8);
         scrLerpvar(state, spawn, s, 'image_angle', s.image_angle, s.image_angle + 360, 16, 1);
         scrLerpvar(state, spawn, s, 'image_alpha', 0, 1, 16, 1);
       }
