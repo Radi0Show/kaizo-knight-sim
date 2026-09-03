@@ -466,9 +466,45 @@ export const carouselSword = {
  * an unexplained switch is a fit, which is what this note is undoing.
  */
 function carouselSwords(state) {
-  return state.entities
-    .filter((s) => s.alive && s.type === carouselSword && s.flag !== undefined)
-    .sort((a, b) => b.seq - a.seq);
+  const sw = state.entities
+    .filter((x) => x.alive && x.type === carouselSword && x.flag !== undefined)
+    .sort((a, b) => b.seq - a.seq);   // newest-first: the measured `with` order
+
+  // THE OPENING TWO SWORDS GO THE OTHER WAY. This is a MEASURED ORDERING
+  // WITH NO MECHANISM YET, in the same class as this project's hand-fitted
+  // stepOrder constants and its ds_list_shuffle replay: the number is not in
+  // doubt, the reason is. It is latched rather than keyed on the live count,
+  // because a count rule is REFUTED — the attack's tail runs two and three
+  // drawing swords (the rest having left via flag "B") and those are
+  // newest-first like everything after the third birth. What the recording
+  // actually shows is a PREFIX: until a third sword has ever existed, the
+  // visit order is oldest-first; from the third birth onward it is
+  // newest-first and never changes again.
+  //
+  // MEASURED TWICE, byte-for-byte, in the two independent runs of this attack
+  // that _tok3 contains — f5815-f5872 on anchor n=20 and f11967-f12024 on
+  // anchor n=46. Both give the identical stream-index shape:
+  //     1 sword   [3] / [8] / [9]
+  //     2 swords  [b0:10, b1:11] / [16,17] / [18,19]        <- oldest-first
+  //     3 swords  [b2:20, aft 21-24, b1:25, b0:26]          <- newest-first
+  //     4 swords  [b3:33, aft 34-37, b2:38, b1:39, b0:40]   <- and onward
+  //
+  // EVERY PER-INSTANCE SORT IS ELIMINATED, so this cannot be expressed as a
+  // comparator: keys whose values repeat (id, ang, age, x, y, aft) each
+  // produce a cycle in the visited-before graph, and `direction`, the one key
+  // whose values never repeat, is monotone in neither direction on six of the
+  // ten multi-sword frames. The mechanism is therefore something about
+  // GameMaker's instance list rather than the swords. Next place to look:
+  // what `with` does over a PARENT object (obj_regularbullet has 41 children)
+  // as against a leaf. See the ledger, "the PierceBlades carousel".
+  //
+  // WHAT IT IS WORTH: the bullets sheet runs byte-exact from f5818 to f5868
+  // with this, and the trace front at f5912 is downstream of the same stream
+  // (forcing the recording's fling lanes and arrival frame makes the sim take
+  // the hit it currently misses).
+  if (sw.length >= 3) state.kaizoCarouselOpened = true;
+  if (!state.kaizoCarouselOpened && sw.length === 2) return sw.slice().reverse();
+  return sw;
 }
 
 /** place_meeting(x, y, obj_heart) inside the sweep — the sword's current
@@ -1137,6 +1173,10 @@ export function knightTunnelSlasherCleanUp(e, state) {
  * Step runs once, and are not modelled.
  */
 export function launchKnightlines(state, x, y, opts = {}) {
+  // A FRESH CAROUSEL OPENS OLDEST-FIRST AGAIN — measured on the second run of
+  // this attack at oracle f11967, whose two-sword frames repeat the f5818
+  // shape exactly. The latch is per attack, so it is cleared at the launch.
+  state.kaizoCarouselOpened = false;
   const knight = state.entities.find(
     (k) => k.alive && k.type.name === 'obj_knight_enemy',
   );
