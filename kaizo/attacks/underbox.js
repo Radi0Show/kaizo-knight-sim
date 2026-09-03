@@ -632,10 +632,10 @@ export const weirdBottomManager = {
      * The next turn's moveheart handoff (or restoreHeartMask) does it.
      */
     2(e, state) {
-      // The Destroy event used to be INLINED here. It is a cleanUp on the type
-      // now (see managerDestroy), because Alarm_2 is not the only thing that
-      // destroys this manager -- see the note there. `destroy(e, state)`
-      // carries the state so the hook fires; `destroy(e)` would not.
+      // The Destroy event used to be INLINED here. It is the type's
+      // destroyEvent now, because Alarm_2 is not the only thing that destroys
+      // this manager -- see the note there. `destroy(e, state)` carries the
+      // state so the hook fires; `destroy(e)` would not.
       destroy(e, state);
     },
   },
@@ -689,8 +689,15 @@ export const weirdBottomManager = {
    * length for the identical line, including that translating it as "live
    * bullets < 2" once deadlocked the rotating slash at 999999 forever. Written
    * as the constant it is, deliberately.
+   *
+   * THE HOOK IS `destroyEvent`, NOT `cleanUp`, and the engine draws the
+   * distinction on purpose: it runs Destroy_0 then CleanUp_0, and only a
+   * room/game end skips Destroy (sim/entity.js, which measured the difference
+   * on the Crescent turn's end). This event is obj_knight_weird_bottom_manager's
+   * DESTROY_0. Its CleanUp_0 is `ds_list_destroy(circle_list)` and nothing
+   * else -- a no-op here, since circle_list is a plain array.
    */
-  cleanUp(e, state) {
+  destroyEvent(e, state) {
     if (e.turn_type === 'start' || e.turn_type === 'short start'
         || e.turn_type === 'short mid') return;
     const knight = knightEntity(state);

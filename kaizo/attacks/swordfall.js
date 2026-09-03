@@ -481,8 +481,12 @@ export const knightSwordfall = {
    * the same six lines. The engine invokes type.cleanUp from
    * destroy(e, state); a bare destroy(e) does NOT fire it, so both alarms now
    * pass the state and no longer call it by hand.
+   *
+   * THE HOOK IS `destroyEvent`, NOT `cleanUp`: the engine runs Destroy_0 then
+   * CleanUp_0 and only a room/game end skips Destroy, and this is
+   * obj_knight_swordfall's DESTROY_0. It has no CleanUp_0 at all.
    */
-  cleanUp: swordfallDestroy,
+  destroyEvent: swordfallDestroy,
 
   create(e, state) {
     scrBulletInit(e);
@@ -813,14 +817,14 @@ export const knightSwordfall = {
      */
     3(e, state) {
       chainNext(state, e, 'swordfall_alarm3');
-      destroy(e, state); // the state fires the type's cleanUp = the Destroy event
+      destroy(e, state); // the state fires the type's destroyEvent = Destroy_0
     },
 
     /** The manager is done; hand the knight's hover phase back. IDENTICAL. */
     4(e, state) {
       if (state.knight) state.knight.siner2 = e._siner;
       e.done = true;
-      destroy(e, state); // the state fires the type's cleanUp = the Destroy event
+      destroy(e, state); // the state fires the type's destroyEvent = Destroy_0
     },
 
     /** He slides out and shrinks away, then drops his sword. IDENTICAL. */
