@@ -464,72 +464,85 @@ export const rotatingSlash = {
     }
   },
 
-  alarm: {
-    /** Alarm_3: `instance_destroy()` — which fires the CleanUp below. */
-    3(e, state) {
-      // CleanUp: the turn-CLOSING instance hands the clock its -1 —
-      //
-      //     if (turn_type != "start" && turn_type != "short start"
-      //         && turn_type != "short mid" && scr_bulletparent_count() < 2) {
-      //         with (obj_knight_enemy) image_alpha = 1;
-      //         global.turntimer = -1;
-      //     }
-      //
-      // The controller runs this whole turn at turntimer 999999, so WITHOUT
-      // this line the turn cannot end at all: the strict clock rule (sweep at
-      // turntimer <= 0, no manager-death shortcut) hung the fight-order suite
-      // on turn 5 forever. The chained "start"/"short" instances from the
-      // combination attack leave the clock alone — their successor closes it.
-      const closing =
-        e.turn_type !== 'start' &&
-        e.turn_type !== 'short start' &&
-        e.turn_type !== 'short mid';
-      // `scr_bulletparent_count() < 2` — CORRECTED 2026-08-28 (kept in this
-      // copy). The script counts instances whose object_index is EXACTLY
-      // obj_bulletparent, and in the knight fight nothing ever creates a bare
-      // obj_bulletparent — so the test is ALWAYS TRUE here, exactly as
-      // underbox.js documents for its own copy of the same line. The old
-      // "alive bullets < 2" translation deadlocked the kaizo rotating+vortex
-      // pairing (the vortex's six swords held the count at 6 forever).
-      if (closing) {
-        const knight = state.entities.find(
-          (x) => x.alive && x.type.name === 'obj_knight_enemy',
-        );
-        if (knight) knight.image_alpha = 1;
-        // KAIZO CleanUp_0:16-46 — on the B-Side's attack 111 (sword vortex +
-        // rotating slash) the closing instance does NOT end the turn: every
-        // live obj_sword_vortex is cloned into a frozen obj_regularbullet
-        // running kaizo_vortexend_step (which ends the turn itself at its
-        // timer 60), the originals are disabled, and global.turntimer is
-        // pinned to 999. kaizo_vortexend_step and the clone protocol belong
-        // to the VORTEX work item; this seam routes through its hook. When
-        // the hook is absent the sim falls back to the vanilla -1 AND
-        // ledgers the approximation, launcher-style.
-        if (kaizoSideb(state) && gmlEq(state.currentAc ?? -999, 111)) {
-          const handoff = state.kaizo?.hooks?.vortexendHandoff;
-          if (handoff) {
-            // The hook owns: cloning obj_sword_vortex -> obj_regularbullet
-            // (sprite/angle/direction/scales/blend/damage copied, speed NOT,
-            // destroyonhit 0, wall_destroy 0, scr_script_repeat(
-            // kaizo_vortexend_step, 999, 1)), disabling the originals, and
-            // `global.turntimer = 999` (CleanUp_0:18-43).
-            handoff(state, e);
-          } else {
-            if (state.kaizo) {
-              (state.kaizo.approx ??= []).push({
-                type: 104, asked: 'sideb ac-111 kaizo_vortexend_step handoff',
-                used: 'vanilla turn end (-1)',
-                why: 'vortexendHandoff hook not provided (VORTEX item)',
-              });
-            }
-            state.turntimer = -1;
-          }
-        } else {
-          state.turntimer = -1;
-        }
+  /**
+   * obj_knight_rotating_slash's CLEANUP EVENT, on the TYPE where it belongs.
+   *
+   * IT USED TO BE INLINED IN ALARM_3, and that is a real bug rather than a
+   * style point: Alarm_3 is not the only route to this controller's death.
+   * obj_battlecontroller's turn-end sweep destroys every obj_bulletparent, and
+   * GameMaker runs CleanUp on THAT destroy just the same -- so a turn this
+   * controller does not close itself would silently skip the whole event. The
+   * identical mistake in underbox.js's manager was worth a frame of the gate
+   * on ac 102 (trace f6492 -> f6631), and this is the same shape.
+   *
+   * The engine invokes type.cleanUp from destroy(e, state); a bare destroy(e)
+   * does NOT fire it, so both alarms below pass the state.
+   *
+   * The GML, kaizo CleanUp_0 (surface frees at :6-9 are render-only and
+   * skipped, as the header records; ds_list_destroy is a no-op here):
+   *
+   *     if (turn_type != "start" && turn_type != "short start"
+   *         && turn_type != "short mid" && scr_bulletparent_count() < 2) { ... }
+   */
+  cleanUp(e, state) {
+    // The turn-CLOSING instance hands the clock its -1. The controller runs
+    // this whole turn at turntimer 999999, so WITHOUT this line the turn
+    // cannot end at all: the strict clock rule (sweep at turntimer <= 0, no
+    // manager-death shortcut) hung the fight-order suite on turn 5 forever.
+    // The chained "start"/"short" instances from the combination attack leave
+    // the clock alone -- their successor closes it.
+    const closing =
+      e.turn_type !== 'start' &&
+      e.turn_type !== 'short start' &&
+      e.turn_type !== 'short mid';
+    // `scr_bulletparent_count() < 2` — CORRECTED 2026-08-28 (kept in this
+    // copy). The script counts instances whose object_index is EXACTLY
+    // obj_bulletparent, and in the knight fight nothing ever creates a bare
+    // obj_bulletparent — so the test is ALWAYS TRUE here, exactly as
+    // underbox.js documents for its own copy of the same line. The old
+    // "alive bullets < 2" translation deadlocked the kaizo rotating+vortex
+    // pairing (the vortex's six swords held the count at 6 forever).
+    if (!closing) return;
+    const knight = state.entities.find(
+      (x) => x.alive && x.type.name === 'obj_knight_enemy',
+    );
+    if (knight) knight.image_alpha = 1;
+    // KAIZO CleanUp_0:16-46 — on the B-Side's attack 111 (sword vortex +
+    // rotating slash) the closing instance does NOT end the turn: every live
+    // obj_sword_vortex is cloned into a frozen obj_regularbullet running
+    // kaizo_vortexend_step (which ends the turn itself at its timer 60), the
+    // originals are disabled, and global.turntimer is pinned to 999.
+    // kaizo_vortexend_step and the clone protocol belong to the VORTEX work
+    // item; this seam routes through its hook. When the hook is absent the sim
+    // falls back to the vanilla -1 AND ledgers the approximation.
+    if (kaizoSideb(state) && gmlEq(state.currentAc ?? -999, 111)) {
+      const handoff = state.kaizo?.hooks?.vortexendHandoff;
+      if (handoff) {
+        // The hook owns: cloning obj_sword_vortex -> obj_regularbullet
+        // (sprite/angle/direction/scales/blend/damage copied, speed NOT,
+        // destroyonhit 0, wall_destroy 0, scr_script_repeat(
+        // kaizo_vortexend_step, 999, 1)), disabling the originals, and
+        // `global.turntimer = 999` (CleanUp_0:18-43).
+        handoff(state, e);
+        return;
       }
+      if (state.kaizo) {
+        (state.kaizo.approx ??= []).push({
+          type: 104, asked: 'sideb ac-111 kaizo_vortexend_step handoff',
+          used: 'vanilla turn end (-1)',
+          why: 'vortexendHandoff hook not provided (VORTEX item)',
+        });
+      }
+    }
+    state.turntimer = -1;
+  },
+
+  alarm: {
+    /** Alarm_3: `instance_destroy()`, and nothing else — the CleanUp above
+     *  is what the destroy fires. */
+    3(e, state) {
       // CleanUp_0:6-9 frees me_surface — render-only, skipped (header).
-      destroy(e);
+      destroy(e, state);
     },
 
     /**
@@ -565,7 +578,12 @@ export const rotatingSlash = {
       // `instance_destroy();` is the last line of Alarm_2 — the segment that
       // hands on does not linger. Without it the outgoing rotating slash was
       // still on screen while the next segment played.
-      destroy(e);
+      // WITH THE STATE, so the CleanUp fires here too: the mod's
+      // instance_destroy runs it from every route, and the event's own
+      // turn_type guard is what decides that a chained segment ("start" /
+      // "short start" / "short mid") leaves the clock alone. Passing the guard
+      // rather than the call site is the whole point of putting it on the type.
+      destroy(e, state);
     },
 
     /**

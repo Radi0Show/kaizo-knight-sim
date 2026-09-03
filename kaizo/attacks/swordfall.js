@@ -464,6 +464,26 @@ const KNIGHT_IDLE_SPRITE_H = 115;
 export const knightSwordfall = {
   name: 'obj_knight_swordfall',
 
+  /**
+   * obj_knight_swordfall's DESTROY EVENT, on the TYPE where it belongs.
+   *
+   * IT USED TO BE CALLED FROM TWO ALARM SITES, which is a real bug and not a
+   * style point: those alarms are not the only route to this controller's
+   * death. obj_battlecontroller's turn-end sweep destroys every
+   * obj_bulletparent, and GameMaker runs the Destroy event on THAT destroy
+   * just the same -- so a turn this controller does not close itself would
+   * silently skip the whole event. The identical mistake in underbox.js's
+   * manager cost a frame of the gate on ac 102 (trace f6492 -> f6631); this
+   * is the same shape, found by sweeping every mod Destroy / CleanUp that
+   * writes global.turntimer against the types that declare one.
+   *
+   * The body is unchanged -- swordfallDestroy is the engine's transcription of
+   * the same six lines. The engine invokes type.cleanUp from
+   * destroy(e, state); a bare destroy(e) does NOT fire it, so both alarms now
+   * pass the state and no longer call it by hand.
+   */
+  cleanUp: swordfallDestroy,
+
   create(e, state) {
     scrBulletInit(e);
     // scr_darksize()
@@ -793,16 +813,14 @@ export const knightSwordfall = {
      */
     3(e, state) {
       chainNext(state, e, 'swordfall_alarm3');
-      swordfallDestroy(e, state);
-      destroy(e);
+      destroy(e, state); // the state fires the type's cleanUp = the Destroy event
     },
 
     /** The manager is done; hand the knight's hover phase back. IDENTICAL. */
     4(e, state) {
       if (state.knight) state.knight.siner2 = e._siner;
       e.done = true;
-      swordfallDestroy(e, state);
-      destroy(e);
+      destroy(e, state); // the state fires the type's cleanUp = the Destroy event
     },
 
     /** He slides out and shrinks away, then drops his sword. IDENTICAL. */
