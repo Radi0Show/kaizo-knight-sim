@@ -126,6 +126,33 @@ function boxDepth(state) {
 export const splitslash = {
   name: 'obj_roaringknight_splitslash',
 
+  // BEFORE THE BOX IT RE-FIRES. The slash writes `con`/`timer` onto the
+  // EXISTING obj_knight_split_growtangle to start the next cut, so the box
+  // must not have taken its own step yet that frame — and it had. The box
+  // declares stepOrder -0.5 (before the SOUL, its own measured receipt) and
+  // this object declared nothing, i.e. 0, so the box ran first.
+  //
+  // Both order rules agree that the slash comes first: it is the YOUNGER
+  // instance (born mid-turn, the box lives the whole attack) and the step
+  // phase walks newest-first, and the object indices happen to say the same
+  // (splitslash 650, box 909, obj_heart 1462). -0.6 keeps the box ahead of
+  // the soul, so the box's own receipt is untouched.
+  //
+  // MEASURED on _tok3 f5035, the atk_Splitter2 cut. The soul is parked at
+  // 250 by this slash's own freeze, then pushed by
+  // `obj_heart.x += (distance - old_distance) * heart_x * 1.25`
+  // (obj_knight_split_growtangle Step_0:266-275) and rounded by that
+  // object's End Step. The recording lands on 284 and the sim landed on 269,
+  // after which BOTH decay identically — a constant 15px offset, so only the
+  // push was wrong. Working back: 284 needs old_distance 27.592171142467
+  // (27.5922 * 1.25 = 34.49, and round(250 + 34.49) = 284) and the sim held
+  // 14.943104233045055 (round(250 + 18.68) = 269). 27.5922 is exactly what
+  // the sim's own box held one frame earlier, before it took a con=3 closing
+  // step that overwrote it — the step the game had not taken yet, because in
+  // the game this slash had already switched the box to con 1, and con 1
+  // writes no distance at all.
+  stepOrder: -0.6,
+
   create(e, state) {
     scrBulletInit(e);
     e.active = false;
@@ -353,7 +380,6 @@ export const splitslash = {
       e.slash = true;
 
       let splitter = organism(state);
-      const splitterExisted = Boolean(splitter);
       if (!splitter) {
         const gt = box(state);
         splitter = spawn(state, splitGrowtangle, { x: gt ? gt.x : e.x, y: gt ? gt.y : e.y });
@@ -380,20 +406,16 @@ export const splitslash = {
       splitter.diagonal = e.diagonal;
       splitter.con = 1;
       splitter.timer = 0;
-      // THE BOX STEPS AGAIN, NOW. MEASURED, _tok3 f1212: this second slash
-      // writes con/timer on the EXISTING box and the recording's box has
-      // timer 1 -- obj_knight_split_growtangle_effect born -- in the same
-      // frame, teeth at f1215 (split_wait 4 by then). The runner steps newest
-      // first, so the box's step follows the slash's write; this lane still
-      // steps oldest first (kaizo-fight.js, `state.stepNewestFirst`), so the
-      // box took its idle con -1 step before the write. Its step from the
-      // written state is run here -- the one the game would have run -- and
-      // this is a no-op the day the lane runs the measured order. A box
-      // CREATED by this slash is untouched: a step-created instance steps
-      // next frame under either order (the first split matched as is).
-      if (splitterExisted && state.stepNewestFirst !== true) {
-        splitGrowtangle.step(splitter, state);
-      }
+      // THE BOX'S OWN STEP FOLLOWS THIS WRITE, because this object now sorts
+      // ahead of it (stepOrder -0.6 against -0.5; see the note on the type).
+      // There used to be a hand-run `splitGrowtangle.step(splitter, state)`
+      // here, with a note ending "this is a no-op the day the lane runs the
+      // measured order". It was not a no-op: it re-ran a step the box had
+      // ALREADY taken that frame, and when the box was mid-close (con 3)
+      // rather than idle (con -1) the first of those two steps had already
+      // overwritten `distance` — which is the whole of the f5035 fault. The
+      // order and the emulation come out together; keeping either alone is
+      // wrong in one direction or the other.
 
       e.sprite_index = 'spr_rk_quickslash';
       e.image_speed = 1;
