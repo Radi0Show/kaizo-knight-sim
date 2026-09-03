@@ -384,10 +384,31 @@ export const carouselSword = {
 /** The carousel swords, in `with (obj_regularbullet)` order: newest first
  *  (the measured with() iteration order — sim/attacks/pointing-cone.js).
  *  variable_instance_exists(id, "flag") keeps foreign regularbullets out. */
+/**
+ * THE ORDER `with (obj_regularbullet)` VISITS THEM, AND IT IS OLDEST-FIRST.
+ *
+ * This matters because Other_21's per-frame driver draws ONE u32 per orbiting
+ * sword per frame — `direction = random_range(176, 184)` (line 160) — so the
+ * visit order decides which sword gets which value. It is pure angle jitter
+ * (speed is 0) but it is in the shared stream and it is in the bullets sheet.
+ *
+ * This sorted NEWEST-first, citing the `with()` note on clearTurn. That note
+ * is about the turn-end sweep and does not generalise: MEASURED here on _tok3
+ * f5820, where exactly two swords are up. The recording gives the OLDER sword
+ * (further round the orbit, x 519.948) 180.063 and the younger (x 525.042)
+ * 178.302; oldest-first reproduces both exactly, newest-first hands each the
+ * other's value. Before this the sheet parted at f5818 on precisely that swap.
+ *
+ * KNOWN RESIDUE, and it is NOT this ordering: from f5821, where a third sword
+ * is born, the sim's first draw of the frame already differs (sim 181.178
+ * against the recording's 180.308), so the stream itself is offset on a spawn
+ * frame rather than the assignment being wrong. That is a draw-count question
+ * for the spawn block above, not an order question — chase it there.
+ */
 function carouselSwords(state) {
   return state.entities
     .filter((s) => s.alive && s.type === carouselSword && s.flag !== undefined)
-    .sort((a, b) => b.seq - a.seq);
+    .sort((a, b) => a.seq - b.seq);
 }
 
 /** place_meeting(x, y, obj_heart) inside the sweep — the sword's current
@@ -595,7 +616,7 @@ function carouselStep(e, state) {
 
   // ── the per-frame sword driver — Other_21 lines 151-289,
   // `with (obj_regularbullet) if (variable_instance_exists(id, "flag"))`,
-  // newest-first (see carouselSwords).
+  // OLDEST-first (measured; see carouselSwords).
   if (e.attack_con > 0) {
     for (const s of carouselSwords(state)) {
       if (s.flag === 'A') {
@@ -1060,7 +1081,39 @@ export function launchKnightlines(state, x, y, opts = {}) {
     (k) => k.alive && k.type.name === 'obj_knight_enemy',
   );
   const gt = boxOf(state);
-  if (gt) gt.image_xscale = 2.5; // kaizo dbulletcontroller line 2141
+  // `obj_growtangle.image_xscale = 2.5` (kaizo dbulletcontroller line 2141),
+  // AND IT IS DEAD ON ARRIVAL IN THE GAME — which is the only reason it can be
+  // skipped while the box is still growing.
+  //
+  // The write is made by obj_dbulletcontroller (object index 1432) and
+  // obj_growtangle is 1516, so the box steps AFTER it on the same frame and
+  // its growth block re-derives `image_xscale = maxxscale * sizer` from the
+  // timer, throwing the 2.5 away before any Draw or trace row can see it.
+  // Nothing between those two indices reads the box scale.
+  //
+  // THIS LANE CANNOT REPRODUCE THAT IN PLACE, because its launch runs one
+  // phase later than the game's: the director launches from `endStep`
+  // (kaizo-practice.js), which is after every entity's `step`, so the box has
+  // already grown for the frame and there is nothing left to stomp the write.
+  // Applying it unconditionally therefore leaves a value on screen that the
+  // game never shows.
+  //
+  // MEASURED on _tok3 f5810, the atk_PierceBlades open. The recording's gt_xs
+  // walks the grow-in ramp straight through: 1.0951111317 at f5809,
+  // 1.1946666241 at f5810, 1.2942222357 at f5811. The sim read 2.5 on f5810
+  // alone and rejoined the ramp on f5811 — a one-frame spike, and the whole
+  // of the ARENA front there. gt_ys was never touched, which is what named
+  // the write: 2.5 is this arena's yscale (`set(1.5, 2.5)` for ac 110 in
+  // kaizo-mod-launcher.js), landing in the x field.
+  //
+  // So the write is kept ONLY when the box is not mid-growth, where the game
+  // would not stomp it either (the growth block is gated on
+  // `timer < maxtimer && growcon === 1`, sim/battlebox.js). This is a phase
+  // compensation and is labelled as one; the standing alternative, if a third
+  // site ever needs it, is to have obj_growtangle re-assert its own growth
+  // invariant at the end of the frame instead — that belongs in the engine and
+  // has to earn the vanilla 60 first.
+  if (gt && !(gt.growcon === 1 && gt.timer < gt.maxtimer)) gt.image_xscale = 2.5;
   if (knight) knight.image_alpha = 0;
 
   const e = spawn(state, knightTunnelSlasher, {
