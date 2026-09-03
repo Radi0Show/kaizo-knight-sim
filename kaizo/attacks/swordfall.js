@@ -934,7 +934,16 @@ export const knightSwordfall = {
         s.direction = s.image_angle;
         s.speed = -4;
         scrLerpvar(state, spawn, s, 'image_yscale', 0, -1, 8);
-        delayedLerp(state, s, 8, 'image_yscale', -1, 1, 8);
+        // `n - 1`, like dropSword and for the same reason: this pair is
+        // spawned from the manager's STEP, on the same frame the mod spawns
+        // it, so the return tween has to land on the ramp's last frame rather
+        // than after it. MEASURED at _tok3 f6295 -- the recording's yscale
+        // runs ...-0.75, -0.875, -0.75, -0.5 and never reaches -1, because the
+        // return's first write (-0.75) overwrites the ramp's final -1 on the
+        // same frame; the sim's plain `8` let the -1 stand and then ran a
+        // frame behind for the rest of the sword's life. See delayedLerp's
+        // note: every site arms its own count, and the count is decided by
+        // where the mod makes the call.
         scrLerpvar(state, spawn, s, 'image_angle', s.image_angle, s.image_angle + 360, 16, 1);
         scrLerpvar(state, spawn, s, 'image_alpha', 0, 1, 16, 1);
       }
@@ -945,7 +954,7 @@ export const knightSwordfall = {
         s.direction = s.image_angle;
         s.speed = -4;
         scrLerpvar(state, spawn, s, 'image_yscale', 0, -1, 8);
-        delayedLerp(state, s, 8, 'image_yscale', -1, 1, 8);
+        delayedLerp(state, s, 8 - 1, 'image_yscale', -1, 1, 8); // the mirror, same count
         scrLerpvar(state, spawn, s, 'image_angle', s.image_angle, s.image_angle + 360, 16, 1);
         scrLerpvar(state, spawn, s, 'image_alpha', 0, 1, 16, 1);
       }
