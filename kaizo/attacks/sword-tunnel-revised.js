@@ -73,13 +73,14 @@ import {
   gmlIrandom, gmlIrandomRange, gmlRandom, gmlRandomRange, gmlChoose,
 } from '../../sim/rng.js';
 import {
-  scrBulletInit, regularbulletCreate, regularbulletStep, collidebulletOther15,
+  scrBulletInit, regularbulletCreate, regularbulletStep,
 } from '../../sim/bullets/regularbullet.js';
 import { scrLerpvar } from '../../sim/lerpvar.js';
 import { scrAfterimage, scrAfterimageGrow } from '../../sim/fx.js';
 import { spriteMaskHit } from '../../sim/masks.js';
 import { cue, cueLoop, cueStop } from '../../sim/audio.js';
 import { chainNext } from '../../sim/attacks/combination.js';
+import { scrDamageSingle, scrDamageAll } from '../../sim/damage.js';
 
 // NOTE — this module deliberately does NOT call `registerComboAttack(3, ...)`,
 // the way every other kaizo segment module refuses to (rotating-slash.js,
@@ -331,7 +332,51 @@ export const diamondSwordBullet = {
       }
       e.speed *= 0.5;
     }
-    collidebulletOther15(e, state);
+    // NO event_inherited(). THE BLADE SURVIVES HITTING YOU.
+    //
+    // obj_knight_diamondswordbullet_ext's Other_15 is a TOTAL OVERRIDE -- all
+    // 23 lines of it are quoted by this block and the one above, and it calls
+    // no event_inherited() and no instance_destroy anywhere. GameMaker child
+    // events REPLACE the parent's unless the inherit is explicit, so what the
+    // override drops is the parent's kill:
+    //
+    //     if (destroyonhit == 1) { instance_destroy(); }
+    //         -- gml_Object_obj_collidebullet_Other_15.gml:11-14
+    //
+    // scr_bullet_init leaves destroyonhit = 1 and nothing on this path clears
+    // it; the mod does not need to, because the branch that reads it is
+    // unreachable for this object. This line used to be
+    // `collidebulletOther15(e, state)`, which is an event_inherited() the GML
+    // does not have -- it ran that branch and killed the blade on contact. It
+    // was also the only statement in this module carrying no GML citation, and
+    // the comment three lines above it ("the wall reacts to hitting you")
+    // describes exactly the behaviour it cancelled.
+    //
+    // MEASURED, _tok3 f6630 -> f6631: inv -45 -> +12, a real hit landing, with
+    // the recording's live count holding at 18 -- the mod hit the player and
+    // KEPT the blade. The sim dropped 18 -> 17. Byte gate, bullet sheet, f6631.
+    //
+    // WHY IT SURVIVED THIS LONG. The flinch and the damage both need contact,
+    // and this module also runs inside atk_Frenzy1's third combination segment
+    // (22 blades) with ZERO hits in that window: f6631 is the first frame in
+    // the whole fight where a live white blade of this object touches the soul
+    // outside i-frames. The module's own suite cannot see it either --
+    // check-oracle-tunnel.mjs runs with damageEnabled false, and the parent
+    // returns on that flag ABOVE the destroy, so the bug is structurally
+    // unreachable there. A whole-fight gate is what found it.
+    //
+    // The tail below is Other_15:15-22, transcribed, in the shape the parent
+    // gives it (the damageEnabled and invTimer gates are the sim's model of
+    // scr_damage's own internals and are kept verbatim) -- minus the destroy:
+    //
+    //     if (target != 3) { scr_damage(); }
+    //     if (target == 3) { scr_damage_all(); }
+    if (!state.damageEnabled) return;
+    if (state.invTimer < 0) {
+      const opts = { flurrySoftened: state.flurrySoftened === true };
+      if (e.target === 3) scrDamageAll(state, e.damage ?? 1, opts);
+      else scrDamageSingle(state, e.damage ?? 1, e.target ?? 0, opts);
+    }
   },
 };
 
