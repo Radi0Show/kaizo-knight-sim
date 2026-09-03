@@ -419,19 +419,42 @@ export const carouselSword = {
  * are unambiguously oldest-first. That is the only dissent in either run, and
  * it reproduces byte-for-byte in both, so it is deterministic and structural.
  *
- * NO PER-INSTANCE SORT CAN PRODUCE BOTH. The state pair {ang 90, ang 110}
- * occurs at f5818 and again at f5821 and is visited in OPPOSITE order, so
- * sort(f(state)) is impossible for any f. `ang` is age in closed form
- * (90 + (f - birth + 1) * 360/18/3, never wrapped) and `depth`
- * (= knight.depth - 4*cos ang) is non-monotone but flips at f5829/f5843,
- * where the data is rigidly newest-first. Both are eliminated by measurement.
+ * ALMOST NO PER-INSTANCE SORT CAN PRODUCE BOTH — and the exception is the
+ * live lead. An adversarial pass ran the real decision procedure (build the
+ * visited-before graph on each candidate key over f5815-f5836 and look for a
+ * cycle, which is exactly "does any monotone rule exist"):
+ *
+ *     id / immutable ......... IMPOSSIBLE (cycle inst0 -> inst1 -> inst0)
+ *     ang .................... IMPOSSIBLE (90 -> 110 -> 90)
+ *     age .................... IMPOSSIBLE (0 -> 3 -> 0)
+ *     x, y, aft, (ang,aft) ... IMPOSSIBLE
+ *     all non-id non-direction state ... IMPOSSIBLE
+ *     direction .............. FEASIBLE
+ *     (ang, direction) ....... FEASIBLE
+ *
+ * `direction` survives because a NEWBORN's pre-visit direction is
+ * GameMaker's default 0 (obj_regularbullet writes direction in none of its
+ * own events) while an older sword carries last frame's 176..184 draw. So
+ * the f5818 pair is (180.8066, 0) and the f5821 triple is
+ * (178.3022, 180.0634, 0) — NOT the identical states an earlier draft of
+ * this note claimed, which is why "impossible for any f" was too strong.
+ *
+ * A plain ascending/descending sort on `direction` still does not fit
+ * (f5818 reads descending, f5819 reads ascending), so the lead is open, not
+ * solved. `ang` is age in closed form (90 + (f - birth + 1) * 360/18/3,
+ * never wrapped) and `depth` (= knight.depth - 4*cos ang) is non-monotone
+ * but flips at f5829/f5843 where the data is rigidly newest-first; both are
+ * eliminated by measurement as well as by the cycle test.
  *
  * THIS LANE SORTED OLDEST-FIRST UNTIL NOW, fitted to those three frames, and
  * the gate rewarded it: oldest-first reads bullets f5821, newest-first reads
  * f5818. That is backwards as engineering — oldest-first is wrong on ~250 of
  * the 253 frames and wins only because its three correct frames come first.
  * With the three frames overridden by hand the carousel is byte-exact to
- * f5868, so explaining them is worth about fifty frames; a rule that merely
+ * f5868, so explaining them is worth about fifty frames on the bullets
+ * sheet — AND the trace front at f5912 as well, which is downstream of the
+ * same stream: forcing the recording's fling lanes and arrival frame makes
+ * the sim take the f5912 hit it currently misses. A rule that merely
  * SWITCHES on sword count is refused, because the recording refutes it (the
  * attack's tail runs two and three drawing swords newest-first) and because
  * an unexplained switch is a fit, which is what this note is undoing.
