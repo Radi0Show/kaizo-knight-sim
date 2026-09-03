@@ -97,3 +97,33 @@ TO PORT: apply the same change to knight-sim/sim/rng.js, run its 60, commit
 there, then re-vendor here and delete this entry. The full receipt is in the
 ledger, section "random_range normalises its argument order".
 
+PENDING PORT-BACK (2026-09-03): sim/masks.js now dispatches a ROTATED-RECT B to an
+oriented-box test instead of walking a synthesised pixel grid.
+
+GameMaker's "Rectangle with Rotation" mask kind stores NO bitmap: the shape IS
+the bbox rectangle, rotated about the origin and scaled, and contact against it
+is a continuous shape overlap. The mod's sprite table says spr_knight_diamondbullet_m
+and spr_knight_diamondswordbullet are exactly that -- `RotatedRect`, `masks = 0`,
+empty mask hash -- and the extraction synthesised a one-pixel-tall precise row
+from each bbox anyway. Sampling that row leaves sub-pixel holes; the recording's
+own blade position fell in one. The two masks now carry `rotRect: true` and
+masksOverlap routes them to maskHitsRotatedRect (A's set pixels as 1x1 CELLS
+against B's oriented box, via the existing aabbHitsOBB).
+
+This repo already applied the same reading to the fight's OTHER RotatedRect
+sprite on the collision_rectangle route (QUICKSLASH_SHAPE ->
+scrPreciseHitRotatedRect -> aabbHitsOBB, "an ORIENTED BOX test, not a pixel
+test"); the engine-PAIR route had never been given it.
+
+Made here under the CLAUDE.md law-6 escape hatch and proven both ways:
+  * kaizo byte gate trace f6731 -> f7924 (bullets f6716, unchanged);
+  * the vendored engine's 60 suites green, AND tools/regen-fullfight.mjs
+    reproduces the vanilla whole-fight trace BYTE-IDENTICAL -- the branch never
+    fires on the vanilla lane, so that lane cannot move, structurally.
+  * A CORNER-point containment was tried first and is WRONG: it lost 124
+    contacts the shipped model had, nearly all grazes, because the graze mask is
+    a large solid rect whose cells straddle the blade without a corner landing
+    inside. The rectangle family is a pixel-INTERSECTION model and this has to
+    match it.
+
+Port to knight-sim, prove against its 60, re-vendor.

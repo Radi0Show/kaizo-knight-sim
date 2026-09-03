@@ -306,14 +306,34 @@ export const CRESCENT_MASK = build(raw.crescenthitbox);
  * built here from the bbox rather than from the art (the same treatment
  * SMALLBULLET_MASK gets, and the correct one: a rect mask IS its bbox).
  *
- * A one-pixel-tall mask is exactly at the contact model's threshold, and it
- * only registers because these are drawn at `image_angle` 90 or 270 —
- * CLAUDE.md's contact study, rule 2: an axis-aligned sub-pixel bar misses,
- * the same bar rotated crosses integer sample rows and connects. Turned
- * upright, that hairline is the blade.
+ * AND THAT HAIRLINE MUST NEVER BE SAMPLED AS PIXELS. This block already said
+ * these two are rotated-rect sprites and that the rows are built from the bbox
+ * rather than from the art, and then handed them to the PIXEL sampler anyway —
+ * "a rect mask IS its bbox" is true, and walking that bbox as if it were a
+ * grid is the mistake. The sprite table is explicit: both rows read
+ * `RotatedRect` with `masks = 0` and an EMPTY mask hash
+ * (knight-research/kaizo-mod/sprites/sprites_kaizo.csv), so the game files
+ * store no collision bitmap for either and the runner cannot be doing a
+ * per-pixel test. `_l`, which IS `Precise` with three bitmaps, is untouched.
+ *
+ * THE OLD REASON HERE WAS WRONG, and worth correcting rather than deleting:
+ * it said the hairline "only registers because these are drawn at image_angle
+ * 90 or 270 — CLAUDE.md's contact study, rule 2". Rule 2 is about DIAGONAL
+ * angles, and the study's own table lists angle 90 as a MISS. What registers
+ * them is that they are not a pixel grid at all.
+ *
+ * WHAT IT COST. Sampling a one-row grid leaves SUB-PIXEL HOLES: at angle 90
+ * the row's world extent is exactly one pixel wide, and whether any sample
+ * lands inside it is decided by how two exactly-.5 bbox edges round. Sweeping
+ * the blade's x in quarter-pixel steps against the soul at (311, 222) the hits
+ * come 310.5, 310.75, 311, [311.25 and 311.5 MISS], 311.75, 312, [312.25
+ * MISSES] — and the recording's own blade position, 311.5, sits in a hole.
+ * That was the kaizo byte gate at f6658.
+ *
+ * `rotRect` sends them to maskHitsRotatedRect below instead.
  */
-export const DIAMONDSWORD_MASK = build(raw.diamondsword);
-export const DIAMONDBULLET_M_MASK = build(raw.diamondbullet_m);
+export const DIAMONDSWORD_MASK = { ...build(raw.diamondsword), rotRect: true };
+export const DIAMONDBULLET_M_MASK = { ...build(raw.diamondbullet_m), rotRect: true };
 
 /**
  * sprite name -> its precise mask, for the DEFAULT contact test.
@@ -588,6 +608,72 @@ function rintHalfEven(x) {
  * the precise path because it has no pixel data in the game files to be
  * precise WITH.
  */
+/**
+ * A's PIXELS against B's ORIENTED BOX — for a B whose sprite has no collision
+ * bitmap at all.
+ *
+ * WHY IT EXISTS. GameMaker's "Rectangle with Rotation" mask kind stores no
+ * bitmap: the collision shape IS the bbox rectangle, rotated about the origin
+ * and scaled, and the contact against it is a continuous shape overlap. There
+ * is no grid to rasterise, so no sampling rule is the right question. This
+ * repo already says exactly that for the fight's other RotatedRect sprite (the
+ * quickslash cut, QUICKSLASH_SHAPE -> scrPreciseHitRotatedRect -> aabbHitsOBB:
+ * "an ORIENTED BOX test, not a pixel test. Getting that wrong would mean
+ * walking a pixel grid that the runner never consults") — it was only ever
+ * applied on the collision_rectangle route, and the engine-pair route was left
+ * walking the synthesised grid.
+ *
+ * ONLY TWO LIVE MASKS CHANGE KIND: DIAMONDSWORD_MASK and DIAMONDBULLET_M_MASK,
+ * the two whose sprite rows read `RotatedRect, masks = 0`. Everything else
+ * registered in SPRITE_MASKS is Precise, except spr_smallbullet
+ * (AxisAlignedRect, and not thin, so it has no holes to lose).
+ *
+ * IT WALKS A'S PIXELS rather than A's bounding box, so a PRECISE A — the mod's
+ * shrunken 2px soul mask, the heart-shaped default — keeps its real shape. An
+ * AABB-vs-OBB shortcut would be right for the rect-A callers and wrong for
+ * those.
+ *
+ * CONVENTIONS ARE masksOverlapPrecise's, so only the containment differs: A's
+ * pixel CORNERS as the sample points, cardinal-exact trig, and the same
+ * position rule — RAW for a rotated B, ROUNDED for an unrotated one (its
+ * verify21j f9093 receipt). In practice these blades are always drawn at 90 or
+ * 270, so the unrotated arm is unexercised and is chosen to match the
+ * neighbouring routine rather than on evidence of its own.
+ */
+function maskHitsRotatedRect(maskA, ax, ay, maskB, bx, by, bsx, bsy, bangle) {
+  const rotated = ((bangle % 360) + 360) % 360 !== 0;
+  const px = rotated ? bx : Math.round(bx);
+  const py = rotated ? by : Math.round(by);
+  const [cos, sin] = collisionTrig(bangle);
+  const [bl, bt, br, bb] = maskB.bbox;
+  const [al, at, ar, ab] = maskA.bbox;
+  // B's oriented box in world space: the bbox RECTANGLE (not its pixels),
+  // scaled about the origin and rotated, corners in rectangle order so
+  // aabbHitsOBB can read its two edge axes off corners 0-1 and 0-3.
+  const lx0 = (bl - maskB.originX) * bsx;
+  const lx1 = (br + 1 - maskB.originX) * bsx;
+  const ly0 = (bt - maskB.originY) * bsy;
+  const ly1 = (bb + 1 - maskB.originY) * bsy;
+  const corner = (u, v) => ({ x: px + u * cos + v * sin, y: py - u * sin + v * cos });
+  const corners = [corner(lx0, ly0), corner(lx1, ly0), corner(lx1, ly1), corner(lx0, ly1)];
+  // EACH SET PIXEL OF A IS A 1x1 CELL, not a corner point. That is the
+  // rectangle family's own convention (masksOverlapRectA is a
+  // pixel-INTERSECTION model), and it is load-bearing here: sampling corners
+  // instead LOST 124 contacts the shipped model had, almost all of them
+  // grazes, because the graze mask is a large solid rect whose cells straddle
+  // the blade without any corner landing inside it.
+  for (let j = at; j <= ab; j++) {
+    const row = maskA.px[j];
+    for (let i = al; i <= ar; i++) {
+      if (!row[i]) continue;
+      const cx = ax + i;
+      const cy = ay + j;
+      if (aabbHitsOBB(cx, cy, cx + 1, cy + 1, corners)) return true;
+    }
+  }
+  return false;
+}
+
 export function masksOverlap(maskA, ax, ay, maskB, bx, by, bsx, bsy, bangle = 0) {
   // A ZERO SCALE HAS NO AREA — and both routines invert through it.
   //
@@ -601,6 +687,12 @@ export function masksOverlap(maskA, ax, ay, maskB, bx, by, bsx, bsy, bangle = 0)
   // Returning false is also the right ANSWER, not just a safe one: GameMaker
   // collides nothing at zero scale.
   if (!bsx || !bsy) return false;
+  // A ROTATED-RECT B IS NOT A PIXEL GRID. Dispatched before the A-kind split
+  // because it is a property of B and overrides both routines — see
+  // maskHitsRotatedRect.
+  if (maskB.rotRect) {
+    return maskHitsRotatedRect(maskA, ax, ay, maskB, bx, by, bsx, bsy, bangle);
+  }
   if (maskA.axisRect) {
     // THE B-SIDE'S ROTATION SPLITS THE RECT-A FAMILY — forced by two
     // receipts on opposite sides of any single rule:
