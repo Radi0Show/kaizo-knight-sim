@@ -321,6 +321,60 @@ const isTagged = (a) => Array.isArray(a.image_blend)
   && a.image_blend[0] === 2 && a.image_blend[1] === 0 && a.image_blend[2] === 0;
 
 /**
+ * THE DAMAGE WRITER TICKS TWICE ON THE FRAME IT IS BORN, AND ONCE FOREVER
+ * AFTER — because this attack's Draw event paints it by hand.
+ *
+ * The slasher renders the whole battle box to its own surface, so everything
+ * that has to appear ON TOP of the swords is drawn by the slasher rather than
+ * by itself. The pattern, four times over (Draw_0:59-86):
+ *
+ *     with (obj_dmgwriter) { visible = false; event_perform(ev_draw, ev_draw_normal); }
+ *
+ * `visible = false` is the load-bearing half. It stops the object's OWN Draw
+ * from running at its own depth FROM THE NEXT FRAME ON — but on the frame the
+ * writer is created it is still visible, and the recording says its own Draw
+ * runs BEFORE the slasher's. So the birth frame performs obj_dmgwriter's Draw
+ * TWICE: once for itself, once forced. Every later frame performs it once, the
+ * forced one. (Nothing sets visible back to true, which is also why the
+ * numbers vanish when this attack ends. Not our problem here.)
+ *
+ * WHAT IT COSTS THE STREAM. obj_dmgwriter's Draw is `delaytimer += 1` and then
+ * `if (delaytimer == delay) vspeed = -5 - random(2)`, with delay 2. One tick a
+ * frame puts that roll at birth+1; two ticks on the birth frame put it at
+ * birth+0 -- one draw earlier, and every draw in the attack after it shifts by
+ * one.
+ *
+ * MEASURED, and it took a wrong turn worth recording. The recording's own
+ * layout (invert every recorded orbit direction back to a stream index -- the
+ * orbit is one random_range(176,184) per sword per frame, so the index sets
+ * read the game's draw layout straight off) shows the hit frame f5912 spending
+ * THREE draws in its draw slot and f5913 spending two, where the sim spent two
+ * then three. The obvious reading was "the roll is at birth+0, so this path's
+ * delay is 1" -- and moving the roll a frame earlier GLOBALLY collapsed the
+ * gate from 5913 to 1698, which is the proof that birth+1 is right everywhere
+ * else and that the extra tick, not the delay, is what is local to this
+ * attack. The GML had the answer; the arithmetic only said where to look.
+ *
+ * The tick is applied to writers with delaytimer 0 -- the ones born this
+ * frame, since stepFrame runs the ordinary pass AFTER every endStep, so a
+ * writer that has already been ticked once cannot still read 0.
+ */
+function damageWriterDoubleDraw(state) {
+  for (const n of state.dmg?.list ?? []) {
+    if (n.delaytimer !== 0) continue;   // already drawn once: visible is false now
+    n.delaytimer += 1;
+    if (n.delaytimer === n.delay) {
+      // Unreachable at delay 2 and 8, the only two this fight builds, but the
+      // GML rolls here and so does this: a delay-1 writer would throw on its
+      // own draw and the stream has to know.
+      n.vspeed = -5 - gmlRandom(state.gmlRng, 2);
+      n.vstart = n.vspeed;
+      n.hspeed = 10;
+    }
+  }
+}
+
+/**
  * obj_lerpvar with stepOrder -1 — the SAME tween, stepped before the
  * slasher. GameMaker steps newest-first, so a tween created during the
  * carousel writes its frame's value BEFORE the slasher's step reads it; this
@@ -754,6 +808,7 @@ function carouselStep(e, state) {
         s.y = knightY + lengthdirY(100, s.ang);
         s.x -= gmlRound(knightY - s.y) / 8; // round() is half-to-even
         s.depth = e.depth - lengthdirX(4, s.ang);
+        if (process.env.KL_ORB) console.error(`[orb] f=${state.frame} seq=${s.seq} x=${s.x.toFixed(4)} y=${s.y.toFixed(4)} dir=${s.direction} depth=${s.depth.toFixed(3)}`);
         // lines 166-167: brightness-by-depth. The carousel sword dims as it
         // swings behind the Knight and brightens as it comes round the
         // front, on the same `ang` the depth sort uses. No RNG.
@@ -1075,6 +1130,7 @@ export const knightTunnelSlasher = {
   },
 
   endStep(e, state) {
+    // (see damageWriterDoubleDraw, below, for the second half of this event)
     // Draw_0's stream draws (kaizo Draw_0 lines 14-19): while attack_type ==
     // 1 && attack_con > 1, the Draw event rolls `random_range(-at_gshake,
     // at_gshake)` TWICE per frame from the SHARED stream — even at
@@ -1085,6 +1141,7 @@ export const knightTunnelSlasher = {
     if (e.attack_type === 1 && e.attack_con > 1) {
       e.shake_x = gmlRandomRange(state.gmlRng, -e.at_gshake, e.at_gshake);
       e.shake_y = gmlRandomRange(state.gmlRng, -e.at_gshake, e.at_gshake);
+      damageWriterDoubleDraw(state);
     }
   },
 
