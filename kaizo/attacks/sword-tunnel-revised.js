@@ -77,7 +77,7 @@ import {
 } from '../../sim/bullets/regularbullet.js';
 import { scrLerpvar } from '../../sim/lerpvar.js';
 import { scrAfterimage, scrAfterimageGrow } from '../../sim/fx.js';
-import { spriteMaskHit } from '../../sim/masks.js';
+import { spriteMaskHit, SPRITE_MASKS, HEART_MASK } from '../../sim/masks.js';
 import { cue, cueLoop, cueStop } from '../../sim/audio.js';
 import { chainNext } from '../../sim/attacks/combination.js';
 import { scrDamageSingle, scrDamageAll } from '../../sim/damage.js';
@@ -161,6 +161,121 @@ function setVspeed(e, v) { setComponents(e, hspeedOf(e), v); }
 function scaleHspeed(e, k) { setComponents(e, hspeedOf(e) * k, vspeedOf(e)); }
 /** GML `vspeed *= k`. */
 function scaleVspeed(e, k) { setComponents(e, hspeedOf(e), vspeedOf(e) * k); }
+
+/**
+ * THESE TWO BLADES DO NOT COLLIDE AS PIXELS. THEY ARE ROTATED RECTANGLES.
+ *
+ * The mod's sprite table says so outright
+ * (knight-research/kaizo-mod/sprites/sprites_kaizo.csv, the collision-kind
+ * column):
+ *
+ *     spr_knight_diamondbullet_m       66x32  bbox [4,15,61,15]  RotatedRect  masks=0
+ *     spr_knight_diamondswordbullet    33x32  bbox [4,15,28,15]  RotatedRect  masks=0
+ *     spr_knight_diamondbullet_l       99x32  bbox [5,14,93,16]  Precise      masks=3
+ *
+ * `masks=0` and an empty mask hash: there is NO PIXEL DATA for the first two in
+ * the game files at all. The extraction that built sim/data/masks.json
+ * synthesised a PRECISE mask from the bbox instead, which for a bbox one pixel
+ * tall is a single row of ink — 58 solid pixels in a 66x32 sheet for the _m,
+ * one row at y = 15.
+ *
+ * AND A ONE-ROW PRECISE MASK HAS SUB-PIXEL HOLES. masksOverlap walks A's set
+ * pixels and inverse-samples B; with only one solid row an inverse sample can
+ * fall between it and nothing else catches it. Sweeping the blade's x in 0.25
+ * steps against the soul at (311, 222), blade y 204.08, the hits run
+ *
+ *     310.5, 310.75, 311, [311.25 and 311.5 MISS], 311.75, 312, [312.25 MISSES], ...
+ *
+ * — about three of every four quarter-steps — and the recording's own blade
+ * position, 311.5, falls in a hole. A RECTANGLE test is continuous and has
+ * none. That is the whole bug: not the collision model, which is calibrated
+ * ten ways over 704 combinations and stays exactly as it is for every precise
+ * mask, but the KIND of the two masks it is being handed.
+ *
+ * MEASURED AGAINST THE RECORDING, not fitted to the frame that found it. Every
+ * blade-vs-soul pair the engine judged in the whole run up to the gate front
+ * was dumped and scored: 3 frames where the recording takes a hit and a model
+ * MUST fire, and 129 where the soul is vulnerable and no hit lands, so a model
+ * must NOT. Results:
+ *
+ *     precise (today)                   misses f6658            invents 0
+ *     symmetric A-vs-B and B-vs-A       misses f6658            invents 0
+ *     the bbox filled as a rectangle    misses f6658            invents 0
+ *     the FULL sprite as a rectangle    misses nothing          INVENTS 6
+ *     ROTATED RECT for these two        misses nothing          invents 0
+ *
+ * The bbox-filled row fails for the reason that makes the diagnosis certain:
+ * filling a bbox that is itself one pixel tall changes nothing. The full-sprite
+ * rectangle is what a careless "make it a rect" would do and it invents six
+ * hits the recording does not have. Only the mod's own declared geometry fits.
+ *
+ * (A 1px dilation of the precise mask also fits, and is rejected: dilation is
+ * not a thing GameMaker does. It fits because it is an approximation of the
+ * rectangle, which is.)
+ *
+ * WHY THIS LIVES HERE AND NOT IN sim/masks.js. The engine invites exactly this:
+ * "A type may override the test (rotated-rect probes, swept lines, the
+ * splitslash's scr_precise_hit)" (sim/index.js, the collision dispatch). The
+ * sprite kind is not in the engine's mask table, sim/ is vendored and not
+ * hand-edited here, and only these two sprites in the whole fight are affected
+ * — so the override belongs on the type that owns them. If the kind ever
+ * reaches the extraction, this collapses into the engine and should.
+ *
+ * CONVENTIONS COPIED FROM masksOverlapPrecise so only the containment differs:
+ * A's pixel CORNERS as the sample points, the same screen-space rotation
+ * (u,v) -> (u cos + v sin, -u sin + v cos) with the same cardinal-exact trig,
+ * and the same position rule — RAW for a rotated B, ROUNDED for an unrotated
+ * one (its verify21j f9093 receipt).
+ */
+/** sim/masks.js's `collisionTrig`, COPIED because it is private there and
+ *  sim/ is vendored and never hand-edited from this repo. Cardinal angles are
+ *  exact rather than trig-approximate, which is what keeps a 90-degree blade
+ *  from being decided by an epsilon — its own f9433 receipt. If this ever
+ *  becomes an export, delete this and import it. */
+function cardinalTrig(bangle) {
+  const a = ((bangle % 360) + 360) % 360;
+  if (a % 90 === 0) return [[1, 0], [0, 1], [-1, 0], [0, -1]][a / 90];
+  const r = (bangle * Math.PI) / 180;
+  return [Math.cos(r), Math.sin(r)];
+}
+
+const ROTRECT_SPRITES = new Set([
+  'spr_knight_diamondbullet_m',
+  'spr_knight_diamondswordbullet',
+]);
+
+function rotatedRectHitsHeart(e, heart) {
+  const B = SPRITE_MASKS[e.sprite_index];
+  if (!B) return null;
+  const bsx = e.image_xscale ?? 1;
+  const bsy = e.image_yscale ?? 1;
+  // A ZERO SCALE HAS NO AREA, and the inverse divides by it — the same guard
+  // masksOverlap opens with, and for the same reason: these blades lerp their
+  // xscale up from 0 and spend their first frames here.
+  if (!bsx || !bsy) return false;
+  const A = heart.mask ?? HEART_MASK;
+  const angle = e.image_angle ?? 0;
+  const rotated = ((angle % 360) + 360) % 360 !== 0;
+  const bx = rotated ? e.x : Math.round(e.x);
+  const by = rotated ? e.y : Math.round(e.y);
+  const [cos, sin] = cardinalTrig(angle);
+  const [bl, bt, br, bb] = B.bbox;
+  const [al, at, ar, ab] = A.bbox;
+  for (let j = at; j <= ab; j++) {
+    for (let i = al; i <= ar; i++) {
+      if (!A.px[j][i]) continue;
+      const wx = (heart.x + i) - bx;
+      const wy = (heart.y + j) - by;
+      // The inverse of (u,v) -> (u cos + v sin, -u sin + v cos).
+      const u = wx * cos - wy * sin;
+      const v = wx * sin + wy * cos;
+      const lu = u / bsx + B.originX;
+      const lv = v / bsy + B.originY;
+      if (lu >= bl && lu < br + 1 && lv >= bt && lv < bb + 1) return true;
+    }
+  }
+  return false;
+}
 
 export const diamondSwordBullet = {
   name: 'obj_knight_diamondswordbullet_ext',
@@ -316,6 +431,9 @@ export const diamondSwordBullet = {
     // motion. Reading the flag here rather than skipping the spawn is what
     // keeps them on screen to lie to you.
     if (e.active !== 1 && e.active !== true) return false;
+    // The mod gives these two sprites NO pixel data and a RotatedRect kind —
+    // see rotatedRectHitsHeart. _l is Precise and takes the ordinary path.
+    if (ROTRECT_SPRITES.has(e.sprite_index)) return rotatedRectHitsHeart(e, heart);
     return spriteMaskHit(e, heart);
   },
 
