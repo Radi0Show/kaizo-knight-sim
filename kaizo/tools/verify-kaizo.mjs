@@ -487,6 +487,15 @@ if (KV.C) {
     'check-stars', 'check-sword-vortex', 'check-tracking-swords',
     'check-underbox', 'check-swordfall', 'check-knightlines',
     'check-sword-tunnel', 'check-quickslash', 'check-roaring-final',
+    // WIRED 2026-09-03, the day the bug it guards was found. The REVISED
+    // tunnel had no module-level check at all -- only check-oracle-tunnel,
+    // which is recording-driven and sets damageEnabled = false for oracle
+    // parity. obj_collidebullet's Other_15 returns on that flag ABOVE its
+    // `if (destroyonhit) instance_destroy()`, so a blade wrongly dying on
+    // contact was STRUCTURALLY INVISIBLE to it, and stayed invisible for
+    // 6,631 frames of the byte gate. check-tunnel-blade runs the same
+    // collision with damage ON. Deterministic, no recording, milliseconds.
+    'check-tunnel-blade',
     // WIRED 2026-08-29, in the commit that routed dc.type 105. Before it the
     // launcher's case 105 called sim/attacks/combination.js and this check
     // covered a module nothing on the shipped path reached; now case 105
