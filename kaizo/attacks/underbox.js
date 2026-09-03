@@ -87,16 +87,43 @@
 //                                       launcher's own reanchorRng idiom)
 //   fractional ids (102.1)           -> gmlEq(), never ===
 //
-// OPEN — alarm-int rounding on the settle leg. Kaizo's odd delay (29/27)
-// makes `(alarm[1] / 2) - 2` fractional on EVERY ac-102 firing (12.5 / 13.5 /
-// 14.5 / 15.5), and that value is stored into obj_script_delayed's alarm[0],
-// an int-backed builtin. This translation converts with gmlRound (the
-// project's MEASURED GML rounding, half-to-even) — but alarm-store rounding
-// specifically has never been probed, and every value here is an exact tie.
-// The obj_lerpvar DURATIONS keep the fractional value (plain instance var;
-// sim/lerpvar.js's `time >= maxtime` matches the GML byte for byte).
-// Oracle probe to settle it: log the frame the spin settle-leg's lerpvar is
-// created for each jitter value in the instrumented mod.
+// SETTLED — AN ALARM STORE TRUNCATES. This note used to be the file's one OPEN
+// question, and it named its own experiment: kaizo's odd delay (29/27) makes
+// `(alarm[1] / 2) - 2` fractional on EVERY ac-102 firing (12.5 / 13.5 / 14.5 /
+// 15.5), that value goes into obj_script_delayed's alarm[0], an int-backed
+// builtin, and every one of them is an exact tie — so the rounding rule is
+// fully exposed here and nowhere else in the fight.
+//
+// It did not need a new game probe in the end: the RECORDING already answers
+// it. The ring's accumulated `angle` is a running total of `spin`, and `spin`
+// is exactly what this delayed lerp settles, so a one-frame difference in when
+// the settle leg starts shows up as a rotated ring — and the ring's orbs are
+// where the volley's nine bullets are born, at a position the bullet sheet
+// records to ten digits. Frenzy2B's first volley, oracle f6290:
+//
+//     half-to-even (12/14/14/16)   orb x 247.0809783935547   WRONG
+//     half-up      (13/14/15/16)   orb x 247.0809783935547   WRONG
+//     ceil         (13/14/15/16)   orb x 247.0809783935547   WRONG
+//     TRUNCATE     (12/13/14/15)   orb x 265.4803466796875   the recording
+//
+// and the recording says 265.4803466797, with y 415.7250061035 agreeing on the
+// same line. Truncation is the only one of the four that rounds DOWN on every
+// tie, so this is not a one-value coincidence: it is four ties in a row, each
+// one distinguishing.
+//
+// SO: `alarm[i] = <real>` TRUNCATES TOWARD ZERO — it does not use GML's round().
+// That is a property of the alarm array (int-backed in the runner), not of
+// GML's rounding, which stays half-to-even everywhere else and is left alone.
+// Only positive values are measured here; the toward-zero half of "truncate"
+// is the C convention, not something this recording shows.
+//
+// The obj_lerpvar DURATIONS keep the fractional value either way (plain
+// instance var; sim/lerpvar.js's `time >= maxtime` matches the GML byte for
+// byte) — it is only the alarm store that flattens.
+//
+// WORTH CARRYING: any other translated `alarm[i] = <expression>` that can land
+// fractional wants Math.trunc, not gmlRound. This is the only site in the
+// fight that exposes it, so it is the only one measured.
 //
 // CHAINED TEARDOWN — WHAT THIS FILE OWNS OF atk_Frenzy3's GAP, AND WHAT IT
 // DOES NOT. ac 106 is the COMBINATION (Other_23:553-563, dc.type 105, order
@@ -166,7 +193,7 @@
 // anything in this module.
 
 import { spawn, destroy } from '../../sim/entity.js';
-import { lengthdirX, lengthdirY, gmlEq, gmlRound } from '../../sim/gml.js';
+import { lengthdirX, lengthdirY, gmlEq } from '../../sim/gml.js';
 import { gmlIrandom, gmlChoose, gmlCreate } from '../../sim/rng.js';
 import {
   regularbulletCreate, regularbulletStep, collidebulletOther15, scrBulletInit,
@@ -565,13 +592,15 @@ export const weirdBottomManager = {
       // `half` is x.5 — a case vanilla's even 18 never produced. The lerp
       // DURATIONS keep the fraction (obj_lerpvar's maxtime is a plain var;
       // `time >= maxtime` handles 12.5 the same in GML and sim/lerpvar.js).
-      // The DELAY is stored into obj_script_delayed's alarm[0], an
-      // int-backed builtin — converted with gmlRound (GML's measured
-      // half-to-even; 12.5 -> 12, 13.5 -> 14, 14.5 -> 14, 15.5 -> 16).
-      // Alarm-store rounding is UNPROBED — see the header's OPEN note.
-      // gmlRound of an integer is itself, so the vanilla path is untouched.
+      // The DELAY is stored into obj_script_delayed's alarm[0], an int-backed
+      // builtin, and an ALARM STORE TRUNCATES: 12.5 -> 12, 13.5 -> 13,
+      // 14.5 -> 14, 15.5 -> 15. Measured against the recording — see the
+      // header, "SETTLED — AN ALARM STORE TRUNCATES". Not gmlRound: GML's
+      // round() is half-to-even and stays that way everywhere else; this is a
+      // property of the alarm array, not of rounding. Math.trunc of an integer
+      // is itself, so the vanilla path is untouched.
       scrLerpvar(state, spawn, e, 'spin', e.spin, newspin, half, 2, 'inout');
-      delayed(e, gmlRound(half), (st, m) => scrLerpvar(
+      delayed(e, Math.trunc(half), (st, m) => scrLerpvar(
         st, spawn, m, 'spin', newspin, Math.sign(newspin), half, 2, 'inout',
       ));
     },
