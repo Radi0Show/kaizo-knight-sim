@@ -127,3 +127,33 @@ Made here under the CLAUDE.md law-6 escape hatch and proven both ways:
     match it.
 
 Port to knight-sim, prove against its 60, re-vendor.
+
+PENDING PORT-BACK (2026-09-03b): sim/index.js runMotion narrows the atan2 result before
+converting it to degrees, in the gravity recomposition.
+
+The whole gravity block is single-precision-modelled (PI32, SNAP_EPS, frounds
+on every product and sum) and then ended on a fully f64 tail. MEASURED on the
+first frame the kaizo blade drift appears -- oracle f6604, a revised-tunnel
+blade at speed 1.400272011756897, direction 201.81463623046875, gravity 0.4 at
+180, giving hs -1.6999996900558472 and vs 0.5203483700752258:
+
+    recording                       197.0186767578
+    f64 atan2, f64 pi (shipped)     197.0186920166   one f32 ulp high
+    f64 atan2, PI32 divide          197.0186920166   also wrong
+    fround(atan2) then f64 pi       197.0186767578   EXACT
+
+So the narrowing is on the ANGLE, not on the constant -- dividing by a
+single-precision pi does not reproduce it and was tried first.
+
+Proven both ways: kaizo byte gate bullets f6716 -> f6757; the engine's 60
+suites green AND tools/regen-fullfight.mjs reproduces the vanilla whole-fight
+trace BYTE-IDENTICAL, so the vanilla lane cannot move.
+
+STILL OPEN AT THE SAME SITE: the SPEED is one f32 ulp low on that transition
+(sqrt gives 1.7778530121, the recording has 1.7778531313) and no arrangement of
+sqrt/hypot/f32-sum reproduces it. Holding hs, the vs that would is SIX ulps
+away, so it is not the sqrt -- it points upstream at the runner's
+single-precision sin/cos, whose results this model rounds from f64 rather than
+computing in f32. That is the next measurement, not a guess to make.
+
+Port to knight-sim, prove against its 60, re-vendor.
