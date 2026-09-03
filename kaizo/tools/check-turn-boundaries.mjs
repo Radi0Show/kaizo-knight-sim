@@ -11,19 +11,30 @@
  *
  * WHAT IT MEASURES. A turn boundary is a frame where `turntimer` falls from a
  * large positive value to a negative one -- the frame obj_battlecontroller's
- * sweep fires. At each one it compares the value both sides land on and the two
- * frames after. Boundaries BEFORE the gate's front are a real check; boundaries
- * AFTER it are downstream of a known divergence and are reported for their
- * SHAPE, not as failures:
+ * sweep fires. Boundaries are found INDEPENDENTLY on each side and paired by
+ * INDEX, and at each pair the tool compares the value both sides LAND ON and
+ * the two frames after.
  *
+ * PAIRING BY INDEX RATHER THAN BY FRAME IS THE WHOLE POINT, and the first
+ * version of this tool got it wrong in a way worth recording. Comparing at the
+ * oracle's frame number reads the sim MID-TURN once anything upstream has
+ * drifted, and duly reported three turns whose sim clock still read 999,xxx as
+ * "the turn never ended" -- which was simply false. They ended twenty to fifty
+ * frames later. Measured on the tree that produced that reading, the sim runs
+ * the same 33 attacks in the same ORDER to the end of the recording and only
+ * the launch frames move (two frames at f8576, growing after). Pairing the nth
+ * boundary with the nth asks the question that survives drift -- does the clock
+ * land on the same value? -- and separates a wrong CLOCK from a wrong SCHEDULE.
+ * The corrected reading of that same tree was 16 of 17 boundaries landing
+ * identically, not 10.
+ *
+ * READING THE OUTPUT:
  *   * a sim value one or two BELOW the oracle's is the missing-Destroy family
  *     -- the mod re-writes the clock from an object's Destroy during the sweep
- *     and the sim's type has no cleanUp to run (see underbox.js managerDestroy,
- *     which is what this tool was written to generalise);
- *   * a sim value still in the 999,xxx range means the turn NEVER ENDED in the
- *     sim: something pinned the clock and nothing released it. That is a
- *     different and worse bug than being one frame out, and it is invisible to
- *     the gate.
+ *     and the sim's type has no cleanUp to run. underbox.js's managerDestroy is
+ *     the worked example, and generalising it is why this tool exists.
+ *   * a COUNT MISMATCH (the sim ends more or fewer turns than the recording) is
+ *     a schedule fault rather than a clock fault, and is called out separately.
  *
  * The oracle lands on -1 at some boundaries and -2 at others, and both are
  * legitimate: -2 is one Destroy write followed by the decrement, -1 is a second
@@ -32,8 +43,8 @@
  *
  *   node kaizo/tools/check-turn-boundaries.mjs [--oracle PATH] [--sim PATH] [--after N]
  *
- * --after N reports only boundaries at or after frame N (e.g. the current front)
- * so the downstream noise can be separated from the real check.
+ * --after N reports only boundaries at or after that ORACLE frame, e.g. the
+ * gate's current front, to separate what is already reached from what is not.
  */
 import { readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -68,31 +79,56 @@ const tt = (d, f) => {
   return r ? parseFloat(r[d.col.turntimer]) : NaN;
 };
 
-let ok = 0;
-const bad = [];
-let uncompared = 0;
-for (const f of [...O.rows.keys()].sort((a, b) => a - b)) {
-  const prev = tt(O, f - 1);
-  const cur = tt(O, f);
-  if (!(prev > 1 && cur < 0)) continue;
-  if (f < AFTER) continue;
-  if (!S.rows.has(f)) { uncompared += 1; continue; }
-  const o = [0, 1, 2].map((k) => tt(O, f + k));
-  const s = [0, 1, 2].map((k) => tt(S, f + k));
-  if (o.every((v, k) => Math.abs(v - s[k]) < 1e-9)) ok += 1;
-  else bad.push({ f, o, s });
+// BOUNDARIES ARE PAIRED BY INDEX, NOT BY FRAME, and that distinction is the
+// whole value of the tool past the front. Once anything diverges the sim's
+// turns drift in TIME -- measured on the current tree, the sim runs the same 33
+// attacks in the same order to the end of the recording and only the launch
+// frames move, by two frames at f8576 and growing. Comparing at the ORACLE's
+// frame number therefore reads the sim mid-turn and reports a clock still
+// pinned at 999,xxx as "the turn never ended", which is simply false: it ended
+// forty frames later. Pairing the nth boundary with the nth boundary asks the
+// question that survives drift -- does the clock LAND on the same value? -- and
+// separates a wrong clock model from a wrong schedule.
+function boundaries(d) {
+  const out = [];
+  for (const f of [...d.rows.keys()].sort((a, b) => a - b)) {
+    const prev = tt(d, f - 1);
+    const cur = tt(d, f);
+    if (prev > 1 && cur < 0) out.push(f);
+  }
+  return out;
 }
 
-console.log(`turn boundaries compared: ${ok + bad.length}   matching: ${ok}   differing: ${bad.length}`
-  + (uncompared ? `   (${uncompared} had no sim row)` : ''));
+const ob = boundaries(O);
+const sb = boundaries(S);
+console.log(`turn boundaries: oracle ${ob.length}, sim ${sb.length}`);
+if (ob.length !== sb.length) {
+  console.log('  COUNT MISMATCH -- the sim ends a different NUMBER of turns, which is a');
+  console.log('  schedule fault, not a clock fault. Pairing below is by index anyway.');
+}
+
+let ok = 0;
+const bad = [];
+const n = Math.min(ob.length, sb.length);
+for (let k = 0; k < n; k++) {
+  if (ob[k] < AFTER) continue;
+  const o = [0, 1, 2].map((j) => tt(O, ob[k] + j));
+  const s = [0, 1, 2].map((j) => tt(S, sb[k] + j));
+  if (o.every((v, j) => Math.abs(v - s[j]) < 1e-9)) ok += 1;
+  else bad.push({ k, of: ob[k], sf: sb[k], o, s });
+}
+
+console.log(`compared: ${ok + bad.length}   matching: ${ok}   differing: ${bad.length}`);
 for (const b of bad) {
-  // Name the shape, so a downstream artefact is not mistaken for a new bug.
-  const stuck = b.s[0] > 1000;
-  const low = !stuck && b.s[0] < b.o[0];
-  const shape = stuck ? 'THE TURN NEVER ENDED in the sim -- a pin with no release'
-    : low ? `sim is ${(b.o[0] - b.s[0]).toFixed(0)} low -- the missing-Destroy family`
-      : 'other';
-  console.log(`  f${b.f}  oracle [${b.o.join(', ')}]  sim [${b.s.join(', ')}]`);
+  const low = b.s[0] < b.o[0];
+  const shape = low
+    ? `the sim lands ${(b.o[0] - b.s[0]).toFixed(0)} LOW -- the missing-Destroy family: the`
+      + ' mod re-writes the clock from an object Destroy during the sweep and the'
+      + ' sim type has no cleanUp to run'
+    : 'the sim lands HIGH -- a write the mod does not make, or one made twice';
+  console.log(`  boundary #${b.k}  oracle f${b.of} [${b.o.join(', ')}]`
+    + `   sim f${b.sf} [${b.s.join(', ')}]`
+    + (b.of === b.sf ? '' : `   (drifted ${b.sf - b.of >= 0 ? '+' : ''}${b.sf - b.of} frames)`));
   console.log(`         ${shape}`);
 }
-if (!bad.length) console.log('  every boundary agrees, including the ones past the gate front.');
+if (!bad.length) console.log('  every boundary lands on the same value, including past the gate front.');

@@ -42,8 +42,18 @@ npm run verify             # the vendored ENGINE's 60 suites -- an integrity che
 ```
 
 The metric is the byte gate's **first divergence frame** against the tracked
-recording `_tok3` (`~/knight-research/kaizo-mod/fullfight/`). On 2026-09-02
-it stood at **bullets f4238, trace f4252**. Everything else is derived.
+recording `_tok3` (`~/knight-research/kaizo-mod/fullfight/`). On 2026-09-03
+it stands at **bullets f6631, trace f6631** — both fronts on the same frame,
+inside atk_Tunnel2. Everything else is derived.
+
+Two instruments answer questions this number cannot, and both are worth
+reaching for before theorising:
+- `kaizo/tools/read-draw-layout.mjs` inverts recorded per-frame randoms back
+  into stream indices, so the recording reads out the GAME's own draw order and
+  per-frame draw counts.
+- `kaizo/tools/check-turn-boundaries.mjs` compares every turn boundary in the
+  recording, including the ones past the front, which the first-divergence
+  metric structurally cannot see.
 
 Judge every npm run by **exit code**, never by grepping output.
 
