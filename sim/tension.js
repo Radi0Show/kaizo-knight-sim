@@ -79,7 +79,45 @@ export function stepGraze(state, grazes, only = null) {
   // image_xscale), so the flash and the hitbox can never disagree.
   state.grazeSize = grazeSize;
 
-  for (const e of state.entities) {
+  // WHEN A PAIRING TABLE IS REPLAYED, ITS ROW ORDER IS THE GAME'S EVENT ORDER,
+  // and the awards are not independent, so the order decides the total. Both
+  // branches below gate on `turntimer - 1 >= 10` and a BURST deducts a whole
+  // timepoint, so a burst paid first can push the clock under the gate and
+  // silence a TRICKLE on the same frame.
+  //
+  // MEASURED, _tok3 f7924 (the trace gate's front). Two contacts land with the
+  // clock at 11.6 -- a trickle from starchild 131790 and an entry burst from
+  // 131786 -- and the recorder logs them in that order. Paying the trickle
+  // first clears its gate at 10.6 and the burst follows, for the recording's
+  // -1.0333. Paying the burst first leaves the trickle's gate at 9.6, refuses
+  // it, and the two clocks never meet again.
+  //
+  // Entity order alone does not express it: sorting the pass newest-first (the
+  // rule the COLLISION pass uses) fixes this frame and collapses the trace gate
+  // from f7924 to f2714. The feed is the ordering, so the feed is what is
+  // followed; bullets with no row keep their entity order behind them and do
+  // nothing either way.
+  let pass = state.entities;
+  if (state.grazeReplay) {
+    const ordered = state.grazeReplay.get(state.frame) ?? [];
+    const rank = new Map();
+    const claimed = new Set();
+    ordered.forEach((r, idx) => {
+      for (const e of state.entities) {
+        if (claimed.has(e) || !e.alive || !e.isBullet || e.type.name === 'obj_heart') continue;
+        if (r.type !== (e.type.gmlName ?? e.type.name)) continue;
+        if (Math.abs(r.x - e.x) > 0.05 || Math.abs(r.y - e.y) > 0.05) continue;
+        rank.set(e, idx);
+        claimed.add(e);
+        break;
+      }
+    });
+    if (rank.size) {
+      pass = [...state.entities].sort((a, b) => (rank.has(a) ? rank.get(a) : Infinity)
+        - (rank.has(b) ? rank.get(b) : Infinity));
+    }
+  }
+  for (const e of pass) {
     if (!e.alive || !e.isBullet || e.type.name === 'obj_heart') continue;
     if (only && !only(e)) continue;
 

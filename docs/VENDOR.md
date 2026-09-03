@@ -157,3 +157,30 @@ single-precision sin/cos, whose results this model rounds from f64 rather than
 computing in f32. That is the next measurement, not a guess to make.
 
 Port to knight-sim, prove against its 60, re-vendor.
+
+PENDING PORT-BACK (2026-09-03c): sim/tension.js stepGraze processes a REPLAYED pairing
+table in the feed's row order, not in entity order.
+
+The awards are not independent: both branches gate on `turntimer - 1 >= 10`
+and a BURST deducts a whole timepoint, so a burst paid first can push the
+clock under the gate and silence a TRICKLE on the same frame.
+
+MEASURED, _tok3 f7924. Two contacts land with the clock at 11.6 -- a trickle
+from starchild 131790 and an entry burst from 131786 -- and the recorder logs
+them in that order. Trickle first clears its gate at 10.6 and the burst
+follows, for the recording's -1.0333. Burst first leaves the trickle's gate at
+9.6 and refuses it, for -1.0, and the clocks never meet again.
+
+ENTITY ORDER DOES NOT EXPRESS IT. Sorting the pass newest-first -- the rule
+the COLLISION pass uses, and the obvious guess -- fixes this frame and
+collapses the trace gate from f7924 to f2714. The feed is the ordering, so the
+feed is what is followed.
+
+SCOPE: the replay path only. Free play has no table and keeps the geometric
+test, so nothing a player runs changes -- which is why this carries no version
+bump.
+
+Proven both ways: kaizo byte gate trace f7924 -> f8088; the engine's 60 suites
+green AND regen-fullfight reproduces the vanilla trace BYTE-IDENTICAL.
+
+Port to knight-sim, prove against its 60, re-vendor.
