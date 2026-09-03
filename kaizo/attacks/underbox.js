@@ -632,14 +632,70 @@ export const weirdBottomManager = {
      * The next turn's moveheart handoff (or restoreHeartMask) does it.
      */
     2(e, state) {
-      if (e.turn_type !== 'start' && e.turn_type !== 'short start'
-          && e.turn_type !== 'short mid') {
-        const knight = knightEntity(state);
-        if (knight) knight.image_alpha = 1;
-        state.turntimer = -1;
-      }
-      destroy(e);
+      // The Destroy event used to be INLINED here. It is a cleanUp on the type
+      // now (see managerDestroy), because Alarm_2 is not the only thing that
+      // destroys this manager -- see the note there. `destroy(e, state)`
+      // carries the state so the hook fires; `destroy(e)` would not.
+      destroy(e, state);
     },
+  },
+
+  /**
+   * obj_knight_weird_bottom_manager's DESTROY EVENT, on the TYPE where it
+   * belongs -- and this is the whole of the f6492 fix.
+   *
+   *     if (turn_type != "start" && turn_type != "short start"
+   *         && turn_type != "short mid" && scr_bulletparent_count() < 2) {
+   *         with (obj_knight_enemy) image_alpha = 1;
+   *         global.turntimer = -1;
+   *     }
+   *
+   * WHY IT MATTERS THAT IT IS ON THE TYPE. Alarm_2 is not the only route to
+   * this manager's death: on a PAIRED turn something else can end the turn
+   * first, and then obj_battlecontroller's sweep
+   * (`with (obj_bulletparent) instance_destroy()`) kills the manager where it
+   * stands -- and GameMaker runs its Destroy just the same. With the event
+   * inlined in the alarm, the sweep route wrote nothing.
+   *
+   * MEASURED, ac 102 (atk_Frenzy2B), oracle f6492. ac 102 is the underbox
+   * PAIRED WITH SWORDFALL, and instrumenting the sim shows it is SWORDFALL's
+   * alarm that ends this turn, not this manager's: obj_knight_swordfall is
+   * destroyed in the alarm phase and its own Destroy (sim/attacks/swordfall.js
+   * swordfallDestroy, the same six lines) writes global.turntimer = -1. The
+   * frame then runs:
+   *
+   *     alarm    swordfall Destroy            turntimer = -1
+   *     step     battlecontroller decrement   -2, and -2 <= 0 so SWEEP
+   *     sweep    THIS manager destroyed       turntimer = -1   <- recorded
+   *     f6493    decrement                    -2, and on normally
+   *
+   * so the recorded -1 is the manager's Destroy landing AFTER the decrement.
+   * The sim had the manager alive at the sweep (instrumented: manager, five
+   * obj_knight_weird_circle and the fans) and swept it correctly -- it just
+   * had no Destroy to run, so the clock kept the -2 and every frame after was
+   * one low forever.
+   *
+   * AND THE PHASE WORKS OUT WITHOUT MOVING ANYTHING. clearTurn is called from
+   * the director's endStep, which runs AFTER turnClock's End-Step decrement
+   * (kaizo/scenes/kaizo-practice.js says so where the decrement lives), and
+   * clearTurn destroys with `destroy(e, state)` precisely so cleanUps fire.
+   * Its own comment already names the precedent: the boxsplitter's CleanUp
+   * writing -1 is why _tok3 f1472 reads -1. This manager is the second.
+   *
+   * THE COUNT TEST IS A CONSTANT, not a count. `scr_bulletparent_count()`
+   * counts instances whose object_index is EXACTLY obj_bulletparent, and
+   * nothing in the knight fight ever creates a bare one -- so it is always 0
+   * and the guard always passes. sim/attacks/swordfall.js documents this at
+   * length for the identical line, including that translating it as "live
+   * bullets < 2" once deadlocked the rotating slash at 999999 forever. Written
+   * as the constant it is, deliberately.
+   */
+  cleanUp(e, state) {
+    if (e.turn_type === 'start' || e.turn_type === 'short start'
+        || e.turn_type === 'short mid') return;
+    const knight = knightEntity(state);
+    if (knight) knight.image_alpha = 1;
+    state.turntimer = -1;
   },
 
   step(e, state) {
