@@ -439,9 +439,15 @@ export const carouselSword = {
  * (178.3022, 180.0634, 0) — NOT the identical states an earlier draft of
  * this note claimed, which is why "impossible for any f" was too strong.
  *
- * A plain ascending/descending sort on `direction` still does not fit
- * (f5818 reads descending, f5819 reads ascending), so the lead is open, not
- * solved. `ang` is age in closed form (90 + (f - birth + 1) * 360/18/3,
+ * AND `direction` IS ELIMINATED TOO, tested directly: over the ten
+ * multi-sword frames it is monotone ascending on 3, descending on 1, and
+ * NEITHER on six. The cycle test called it feasible only because it is a
+ * fresh random real every frame — 31 distinct values in 35 observations — and
+ * that test can only constrain a key whose values REPEAT. So "FEASIBLE" meant
+ * "not yet contradicted", not "a monotone rule exists".
+ *
+ * The upshot: no per-instance sort fits, and the mechanism is not a sort.
+ * `ang` is age in closed form (90 + (f - birth + 1) * 360/18/3,
  * never wrapped) and `depth` (= knight.depth - 4*cos ang) is non-monotone
  * but flips at f5829/f5843 where the data is rigidly newest-first; both are
  * eliminated by measurement as well as by the cycle test.
