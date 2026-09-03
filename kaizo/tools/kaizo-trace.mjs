@@ -1611,12 +1611,17 @@ function main() {
         + ` seed ${feed.seed}, and the feed and the seed are one artifact.`);
     }
     seed = feed.seed;
-    if (frames === null) frames = feed.frames;
-    if (frames > feed.frames) {
-      console.error(`kaizo-trace: WARNING --frames ${frames} exceeds the feed's`
-        + ` ${feed.frames}; frames ${feed.frames}..${frames - 1} run on IDLE`
-        + ' input, which no recording of this feed can match.');
-    }
+    // THE DEFAULT MUST COVER THE RECORDING, AND THE FEED'S OWN LENGTH DOES NOT.
+    // syncedTokenInput reads the feed at `f - sync`, so a run of exactly
+    // feed.frames frames stops `sync` frames SHORT of the recording's end: with
+    // _tok3's sync of 127 the sim's last row was oracle f12872 against the
+    // recording's f13000, and the gate reported "128 recorded frame(s) have no
+    // sim counterpart" for the whole life of this lane -- 128 frames it had
+    // never once looked at. The real default is feed.frames + sync, which
+    // consumes feed indices 0..feed.frames-1 exactly and lands on oracle
+    // f12999. (Only the recording's very last frame stays out of reach: no feed
+    // entry exists for it.) Applied below, once the sync is known.
+    const framesExplicit = frames !== null;
     input = tokenInput(feed);
     feedName = `${inputsPath ? 'inputs' : 'token'} ${path}`
       + ` (${feed.frames} frames, seed ${seed})`;
@@ -1638,7 +1643,11 @@ function main() {
         // PASS ONE, discarded: run the lead-in alone to find where THIS sim
         // build first launches. Deterministic, so pass two reproduces it.
         const probe = traceKaizo({
-          version, seed, frames, slots, keepAlive, pinMonsterhp, spawnsMode,
+          // PASS ONE SIZES ITSELF. `frames` is still null here when the caller
+          // did not pass --frames, because the real default needs the sync this
+          // pass is computing. The probe only has to reach the first launch, so
+          // the feed's own length is more than enough.
+          version, seed, frames: frames ?? feed.frames, slots, keepAlive, pinMonsterhp, spawnsMode,
           input: menuGatedInput(),
           // PASS ONE DELIBERATELY GETS NO SCHEDULES. It exists only to find
           // where this sim's first launch lands on the synthetic lead-in, and
@@ -1668,9 +1677,24 @@ function main() {
       input = syncedTokenInput(feed, sync, leadIn);
       syncFrames = sync;
       feedName += `, synced at ${sync}`;
+      if (!framesExplicit) {
+        frames = feed.frames + sync;
+        console.error(`  frames: ${frames} = the feed's ${feed.frames} + the sync ${sync},`
+          + " so the run reaches the recording's last input-driven frame");
+      }
+      // THE WARNING HAS TO COUNT THE OFFSET TOO. It used to fire on
+      // `frames > feed.frames`, which is true of every correctly-sized synced
+      // run, so the one message that should mean "you are running past your
+      // inputs" cried wolf on the default.
+      if (frames - sync > feed.frames) {
+        console.error(`kaizo-trace: WARNING --frames ${frames} runs past the feed:`
+          + ` with sync ${sync} it needs ${frames - sync} input frames and the feed`
+          + ` has ${feed.frames}; frames ${feed.frames + sync}..${frames - 1} run on`
+          + ' IDLE input, which no recording of this feed can match.');
+      }
     }
   } else {
-    if (frames === null) frames = 1800;
+    if (frames === null) frames = 1800;   // no feed: nothing to size against
     if (inputSpec === 'menu') {
       input = menuGatedInput();
     } else if (inputSpec === 'idle') {
