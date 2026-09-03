@@ -20,6 +20,7 @@
 
 import { createState, stepFrame, spawn } from '../../../sim/index.js';
 import { soul } from '../../../sim/soul.js';
+import { gmlLte } from '../../../sim/gml.js';
 import { battlebox } from '../../../sim/battlebox.js';
 import { gmlCreate, gmlIrandomRange } from '../../../sim/rng.js';
 import { scrDamage } from '../../../sim/damage.js';
@@ -99,7 +100,27 @@ console.log('A. PierceBlades side A — carousel, swept hitscan, deferred 210');
   assert(gt.x === gtxAtLaunch, 'kaizo type-101 branch does NOT slide the box (vanilla -70 removed)');
   assert(slasher.damage === 103, 'scr_bullet_inherit damage 103 sticks in mode 1 (no 206 re-pin)');
 
-  const soulCx = state.soul.x + 9.5; // soul sprite is 20x20, origin (0,0)
+  // STAND THE SOUL IN THE PATH OF A SWEEP THIS SCENE ACTUALLY MAKES, rather
+  // than on a fixed y that one seed once happened to rake. The assertions
+  // below are about what a rake does to a soul in its way; WHICH row that is
+  // is not their subject. When kaizoIrandomRange started ROUNDING its bounds
+  // (one more pixel of lane at the bottom of the box -- see its doc block)
+  // every lane in this scene moved and y=170 stopped being one of them, so
+  // six checks went red without a single thing they assert having changed.
+  // A check a measurement can break by moving something it does not test is
+  // testing the wrong thing.
+  //
+  // The soul is parked once, on the first sword to LAND on its lane, at the
+  // MIDPOINT of that sword's rake -- which is the part that took a second
+  // try: a sword's targY is where the rake ENDS, not the height it flies at.
+  // It enters the lane from its fling height and slides down the slashdir
+  // line, so parking the soul at targY leaves it a whisker above the blade
+  // for the whole crossing. The midpoint of (landing -> lane end) is both in
+  // the path and far from either end, which is what the >60px clearance
+  // assertions want. Nothing in the rake reads the soul's position to draw
+  // with, so the stream is untouched.
+  let soulCx = state.soul.x + 9.5; // soul sprite is 20x20, origin (0,0)
+  let soulParked = false;
   let latchFrame = -1;
   let latchPre = null;
   let latchPost = null;
@@ -116,6 +137,17 @@ console.log('A. PierceBlades side A — carousel, swept hitscan, deferred 210');
     const partyBefore = [...state.partyHp];
     const pre = new Map(swords(state).map((s) => [s.seq, { x: s.x, y: s.y, flag: s.flag }]));
     stepFrame(state, {});
+
+    if (!soulParked) {
+      const landed = swords(state).find((s) => s.flag === 'C' && s.targY !== undefined);
+      if (landed) {
+        const ex = wallLine(gt); // where the rake ends: gt_minx + 16
+        state.soul.x = (landed.x + ex) / 2 - 9.5;
+        state.soul.y = (landed.y + landed.targY) / 2 - 9.5;
+        soulCx = state.soul.x + 9.5;
+        soulParked = true;
+      }
+    }
 
     if (slasher.attack_con >= 1 && slasher.attack_con < 4) {
       carouselFrames += 1;
@@ -528,10 +560,20 @@ console.log('H. The blue re-theme — carousel tints');
         if (b[0] < 100) orbitDark = true;
       }
       // flag C, blend_con complete: exactly get_swordcolor().
-      if (s.flag === 'C' && s.blend_con >= 1 && eqRgb(b, getSwordcolor(state))) {
+      // `gmlLte(1, x)` is `x >= 1` with GML's epsilon — THE SAME COMPARISON
+      // THE ATTACK ITSELF NOW MAKES. This observer used to read `>= 1`
+      // bit-exactly and so it stopped seeing the completed telegraph the
+      // moment the attack was corrected to stop waiting for a literal 1
+      // (thirteen adds of 1/13 land on 0.9999999999999998; see the rake).
+      // Nothing about the colour changed: merge_color rounds to bytes, so at
+      // that blend_con the sword is already exactly get_swordcolor(). A check
+      // that watches for a state has to recognise the state the same way the
+      // code does, or it reports the fix as the regression.
+      const done = gmlLte(1, s.blend_con);
+      if (s.flag === 'C' && done && eqRgb(b, getSwordcolor(state))) {
         sawTelegraphBlue = true;
       }
-      if (s.flag === 'C' && s.blend_con > 0 && s.blend_con < 1
+      if (s.flag === 'C' && s.blend_con > 0 && !done
         && b[2] === 255 && b[0] > 0 && b[0] < 255) {
         sawMidRamp = true;
       }

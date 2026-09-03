@@ -134,7 +134,7 @@
 import { spawn, destroy } from '../../sim/entity.js';
 import {
   scrApproach, pointDirection, pointDistance, lengthdirX, lengthdirY,
-  gmlEq, gmlRound, clamp, mergeColor, WHITE, BLACK,
+  gmlEq, gmlLte, gmlRound, clamp, mergeColor, WHITE, BLACK,
 } from '../../sim/gml.js';
 // THE MOD'S PALETTE — kaizo/attacks/kaizo-colors.js, the one source of truth.
 // This module used to keep its own switch returning RAW PACKED REALS, which
@@ -220,21 +220,48 @@ function gtMaxy(state) {
  * off-limits to kaizo (HANDOFF.md §2.3, the isolation contract), so the
  * behaviour is reimplemented here instead of patched there.
  *
- * THE MODEL — **UNVERIFIED APPROXIMATION, pending the V-C oracle recording.**
- * The measured, oracle-validated part of `irandom_range` is: TWO u32 draws,
- * composed to 63 bits (low word full, high word masked to 31), then
- * `lo + i63 % (hi - lo + 1)` — validated only against INTEGER arguments
- * (traces/rng-probe.csv section E is `irandom_range(-3, 3)`; the probe never
- * fed it a real). What a real argument does is therefore a choice, and this
- * takes the one the function's name argues for: **floor both bounds, then
- * apply the verified integer model**, so an `i`random still returns an
- * integer. Note this coincides exactly with the other plausible reading —
- * keeping lo real, truncating the range to int64 and flooring the result —
- * for any positive bounds, which is all this attack produces.
+ * THE MODEL — MEASURED. This doc block used to end by naming the one fork it
+ * could not decide: "ROUNDING the bounds instead of flooring would make the
+ * upper bound 254 rather than 253 here, i.e. one pixel more lane at the bottom
+ * of the box. That is the whole size of the uncertainty." The oracle has now
+ * settled it, and it is ROUNDING.
  *
- * The candidate that would differ: ROUNDING the bounds instead of flooring
- * would make the upper bound 254 rather than 253 here, i.e. one pixel more
- * lane at the bottom of the box. That is the whole size of the uncertainty.
+ * WHY ROUNDING IS THE PRINCIPLED ANSWER AND FLOORING WAS THE ACCIDENT. These
+ * bounds are not really fractional. obj_growtangle quantises the scale to
+ * `round(s * 37.5) / 37.5`, so the half-height `75 * image_yscale / 2` is
+ * `37.5 * (k / 37.5)` = k, an INTEGER — and the only thing standing between
+ * the arithmetic and that integer is the f32 store of k/37.5. The ac-110 arena
+ * is 94 tall: gt_miny + 10 comes out 86.00000023841858 and gt_maxy - 10 comes
+ * out 253.99999976158142. The bounds the mod is asking for are plainly 86 and
+ * 254. Flooring was right on the low bound by luck (the noise happened to be
+ * positive) and threw a whole pixel of lane away on the high one, where the
+ * noise happened to be negative. Rounding recovers both.
+ *
+ * THE MEASUREMENT. First PierceBlades of _tok3, oracle f5868. The stream
+ * position is pinned on both sides of the draw — the `targetX` irandoms before
+ * it are exact to ten digits and the `choose` after it agrees — so the draw's
+ * two words are known and only the mapping is in question:
+ *
+ *     i63 = 5994111799790247915
+ *     86 + i63 % 168  = 161   (floor: hi -> 253)   sim's lane, WRONG
+ *     86 + i63 % 169  =  88   (round: hi -> 254)   the recording's lane
+ *
+ * and the recording is unambiguous about which: the sword snaps to
+ * (169.9999847, 87.9998016) at f5897, so slashY is 88 as a directly recorded
+ * position, not an inference. Rounding then predicts the next three flings'
+ * lanes as well — 117, 172, 146 against recorded 116.9999, 171.9998, 146.0003 —
+ * four consecutive hits at 1-in-169 each, while flooring matches NONE of the
+ * eighteen. (The run drifts from the fifth fling because the sim's swords were
+ * still on wrong lanes when that log was taken; the point of the four is that
+ * they are consecutive and pre-drift.)
+ *
+ * WHAT IS STILL OPEN, narrowly: this arena's low bound is a hair ABOVE its
+ * integer, so floor(lo) and round(lo) agree and the measurement constrains only
+ * the high bound. `floor(lo) / ceil(hi)` is observationally identical here.
+ * Separating them needs a bound whose fractional part is genuinely mid-range,
+ * and the quantiser above says this call site can never produce one. Rounding
+ * is chosen because it is the rule that makes both bounds come out as the
+ * integers the arena actually has.
  *
  * THE LOAD-BEARING PROPERTY IS THE DRAW COUNT, and it is exact: two u32
  * draws, taken in the same order and composed the same way as sim/rng.js's
@@ -255,8 +282,10 @@ function gtMaxy(state) {
  * surface — the launcher does not need it.
  */
 export function kaizoIrandomRange(r, lo, hi) {
-  const a = Math.floor(lo);
-  const b = Math.floor(hi);
+  // ROUND, not floor — see the block above. The bounds are integers carrying
+  // f32 noise; the nearest integer IS the bound.
+  const a = Math.round(lo);
+  const b = Math.round(hi);
   // The composition sim/rng.js validated: low word full, high word masked to
   // 31 bits. Two draws, always, exactly as gmlI63 takes them.
   const wLo = gmlU32(r);
@@ -300,7 +329,7 @@ const isTagged = (a) => Array.isArray(a.image_blend)
  * (ease-out t=14/15 on a multi-thousand-degree span is degrees off). Same
  * compensation family as sword-vortex's stepOrder -1.
  */
-const lerpvarEarly = { ...lerpvar, stepOrder: -1 };
+const lerpvarEarly = { ...lerpvar, stepOrder: 1 };
 
 function scrLerpvarEarly(state, target, varname, pointa, pointb, maxtime, easetype, easeinout) {
   const t = spawn(state, lerpvarEarly, { x: 0, y: 0 });
@@ -757,10 +786,29 @@ function carouselStep(e, state) {
       } else if (s.flag === 'C') {
         // TELEGRAPH, then THE SWEEP (lines 186-278).
         s.image_yscale = 0.3;
-        if (s.blend_con >= 1) {
+        // GML'S EPSILON, NOT A BIT-EXACT >=. `gmlLte(1, x)` is `x >= 1` with
+        // the tolerance the runner's real comparisons carry (sim/gml.js).
+        // This line used to read `s.blend_con >= 1` under a comment claiming
+        // scr_approach "reach[es] exactly 1 ... only because [it] clamps on
+        // crossing". It does not: thirteen adds of 1/13 land on
+        // 0.9999999999999998 and the clamp never fires, because the remainder
+        // before the last add (0.0769230769230771) is a hair LARGER than the
+        // step (0.07692307692307693). So the sim spent a fourteenth frame
+        // getting to a literal 1 and raked one frame after the game did.
+        // MEASURED: _tok3's first PierceBlades sweeps at oracle f5897 with
+        // thirteen adds behind it; the sim raked at f5898. Both sides enter
+        // flag C on the same frame (f5884, b15_ys 1.25 -> 0.3 in both sheets),
+        // so the frame is spent inside the telegraph, not before it.
+        // The B-Side is the same story with 1/15 (0.9999999999999999 after
+        // fifteen), so both telegraphs shorten by one and stay exactly two
+        // frames apart, which is the relationship the check actually asserts.
+        // THE EPSILON IS NOT FITTED HERE: the gap being closed is 2.2e-16 and
+        // the nearest approach step is 0.0769 away, so every tolerance between
+        // those two reproduces this frame. 1e-5 is the manual's default and
+        // the constant this project already carries.
+        if (gmlLte(1, s.blend_con)) {
           // The telegraph blend completed (13 scr_approach steps A-Side,
-          // 15 B-Side — reaching exactly 1 only because scr_approach
-          // clamps on crossing): rake the lane THIS frame.
+          // 15 B-Side): rake the lane THIS frame.
           s.depth = e.depth - 5;
           if (e.attack_con === 3) {
             e.timer = 0; // the end wait restarts while slashes still land
