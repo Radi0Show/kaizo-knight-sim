@@ -97,8 +97,32 @@ export function stepGraze(state, grazes, only = null) {
   // from f7924 to f2714. The feed is the ordering, so the feed is what is
   // followed; bullets with no row keep their entity order behind them and do
   // nothing either way.
+  // A FEED THAT RUNS OUT MUST HAND BACK TO THE GEOMETRIC TEST, and until now it
+  // did not: `if (state.grazeReplay)` is a property of the RUN, not of the
+  // frame, so once a table was supplied every later frame took the replay
+  // branch — and a frame the table does not cover finds no row, pairs nothing,
+  // and silently awards no graze at all.
+  //
+  // MEASURED, _tok3. kaizo_oracle_grazes_tok3.csv was recorded as _tok4 and its
+  // run hit the wall-clock budget at f10868, which its own PROVENANCE file
+  // describes as "beyond f10800 the graze feed is EMPTY and the sim falls back
+  // to its own graze pass there" — a fallback the code did not have. Scored
+  // against the recording's turntimer deltas over f10869-11094 (the window
+  // where both sides' bullet positions still agree to 2.2e-4 px), the sim
+  // awarded ZERO of the recording's 18 graze events. Not mistuned: absent.
+  // That was the byte gate's trace front at f10889.
+  //
+  // `grazeReplayLast` is the last frame the table covers. Past it this falls
+  // through to `grazes()` exactly as a run with no table would. A frame INSIDE
+  // coverage that genuinely had no grazes still pairs nothing, which is the
+  // point — the two cases are not the same and the frame number is what
+  // separates them. A loader that does not set the bound keeps the old
+  // all-frames behaviour.
+  const replaying = state.grazeReplay
+    && (state.grazeReplayLast == null || state.frame <= state.grazeReplayLast);
+
   let pass = state.entities;
-  if (state.grazeReplay) {
+  if (replaying) {
     const ordered = state.grazeReplay.get(state.frame) ?? [];
     const rank = new Map();
     const claimed = new Set();
@@ -133,7 +157,7 @@ export function stepGraze(state, grazes, only = null) {
     let paired;
     let rowInv = null;
     let rowActive = null;
-    if (state.grazeReplay) {
+    if (replaying) {
       const rows = state.grazeReplay.get(state.frame);
       // The feed names the GAME'S object. A sim type whose name is its own
       // (the underbox fans are `obj_knight_weird_fan` here and bare

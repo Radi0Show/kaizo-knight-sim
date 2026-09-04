@@ -226,3 +226,40 @@ oracle row. Engine 60 suites green AND regen-fullfight reproduces the vanilla
 trace BYTE-IDENTICAL.
 
 Port to knight-sim, prove against its 60, re-vendor.
+
+PENDING PORT-BACK (2026-09-04): sim/tension.js stepGraze HANDS BACK to the
+geometric test on any frame the replayed graze table does not cover.
+
+`if (state.grazeReplay)` is a property of the RUN, not of the frame. Once a
+table was supplied every later frame took the replay branch, so a frame the
+table does not cover found no row, paired nothing, and silently awarded no
+graze at all -- neither burst nor trickle. There was no fallback, only silence.
+
+MEASURED, _tok3. kaizo_oracle_grazes_tok3.csv was recorded as _tok4 and its run
+hit the wall-clock budget at f10868. Its own PROVENANCE file already describes
+the intended behaviour -- "beyond f10800 the graze feed is EMPTY and the sim
+falls back to its own graze pass there" -- and that fallback did not exist.
+
+THE INSTRUMENT IS THE POINT, and it is reusable. The recording reports every
+graze through the turntimer column even where the feed stops: an ordinary frame
+costs exactly 1.0, a TRICKLE an extra 1/30, a BURST an extra whole timepoint.
+So the per-frame delta is a readout of the game's own graze events. Scored over
+f10869-11094 -- bounded above by the first frame the two sides' geometry stops
+agreeing, which is honest because the worst matched-pair bullet drift there is
+2.2e-4 px -- the sim awarded ZERO of the recording's 18 events. Not mistuned:
+absent. With the fallback it awards all 18, and 3 it should not.
+
+SCOPE. `grazeReplayLast` is set only by a tracer that loads a feed
+(kaizo/tools/kaizo-trace.mjs). A loader that does not set it keeps the old
+all-frames behaviour, so tools/fullfight-trace.mjs and the vanilla lane are
+untouched by construction -- and free play has no table at all, which is why
+this carries no version bump: nothing a player runs can reach the branch.
+
+A frame INSIDE coverage that genuinely had no grazes still pairs nothing. The
+two cases are not the same and the frame number is what separates them.
+
+Proven both ways: kaizo byte gate trace f10889 -> f10897; the engine's 60
+suites green AND regen-fullfight reproduces the vanilla trace BYTE-IDENTICAL.
+
+Port to knight-sim, prove against its 60, re-vendor.
+

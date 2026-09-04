@@ -873,6 +873,11 @@ export function traceKaizo({
       byFrame.get(f).push({ ...r, used: false });
     }
     state.grazeReplay = byFrame;
+    // WHERE THE TABLE STOPS. Past this the engine uses its own geometric graze
+    // pass instead of pairing against rows that do not exist — see the note in
+    // sim/tension.js stepGraze. _tok3's feed was recorded as _tok4 and its run
+    // was cut off by the wall-clock budget, so it covers f10868 and no further.
+    state.grazeReplayLast = Math.max(...byFrame.keys());
   }
   if (shuffleOrder) {
     // THE SLASH ORDER, REPLAYED. The burn still happens in the module; this
