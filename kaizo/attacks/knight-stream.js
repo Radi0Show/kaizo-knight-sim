@@ -493,6 +493,55 @@ export const bulletKnightStream = {
   endStep: knightStreamline.endStep,
 };
 
+/**
+ * KAIZO Step_0:77-90 — THE TURN-END HANDSHAKE (new; vanilla never touches the
+ * clock): while beams are live the turn cannot end — the clock is pinned at
+ * 16 — and once they are gone, at exactly 12 the pose resets and the body
+ * flies back to the Knight over 11 frames.
+ *
+ * IT IS Step_0 IN THE MOD, AND IT IS THIS ENGINE'S CLOCK MODEL THAT MOVES IT.
+ * obj_battlecontroller is object index 1393 and obj_knight_stream is 1688, so
+ * the game decrements `global.turntimer` and THEN lets this block read and pin
+ * it, within the same frame. This engine has no battlecontroller in the step
+ * phase: `turn_clock` carries the one translated line `turntimer -= 1` in its
+ * ENDSTEP (sim/scenes/practice.js), which is how it stays behind every attack
+ * that reads the clock during a step. A writer the game runs AFTER the
+ * controller therefore has to be in endStep too — otherwise it writes 16 and
+ * the decrement takes it straight back to 15.
+ *
+ * MEASURED, _tok3 f8810-8837: the recording holds turntimer at a flat 16 for
+ * the whole time the beams live. From the step phase the sim pinned 16 and
+ * then lost it every frame, reading a flat 15 — the byte gate's f8811 front.
+ * turn_clock is stepOrder -100 and this type is 0.75, so this endStep lands
+ * after that decrement and the pin survives the frame, as the game's does.
+ *
+ * BOTH BRANCHES MOVE, not just the pin: the `== 12` fly-back tests the same
+ * clock and in the game reads the same post-decrement value. Splitting them
+ * would put the two halves of one GML `if` a frame apart.
+ */
+function turnEndHandshake(e, state) {
+  if (state.turntimer <= 16) {
+    if (state.entities.some((b) => b.alive && b.type.name === 'obj_bullet_knight_stream')) {
+      state.turntimer = 16;
+    } else if (gmlEq(state.turntimer, 12)) {
+      // == on the ACCUMULATED clock (graze timepoints subtract fractions)
+      // -> gmlEq, per the project rule.
+      e.image_index = 0;
+      e.imgtarget = -1;
+      const knight = state.entities.find(
+        (k) => k.alive && k.type.name === 'obj_knight_enemy',
+      );
+      // obj_knight_enemy.x — a static read; the fight always has one. A scene
+      // without a knight skips the fly-back rather than crashing (same guard
+      // the sim's other modules use).
+      if (knight) {
+        scrLerpvar(state, spawn, e, 'x', e.x, knight.x, 11, 2, 'out');
+        scrLerpvar(state, spawn, e, 'y', e.y, knight.y, 11, 2, 'out');
+      }
+    }
+  }
+}
+
 export const knightStream = {
   name: 'obj_knight_stream',
 
@@ -626,30 +675,9 @@ export const knightStream = {
       e.timer = 0;
     }
 
-    // KAIZO Step_0:77-90 — THE TURN-END HANDSHAKE (new; vanilla never
-    // touches the clock): while beams are live the turn cannot end — the
-    // clock is pinned at 16 — and once they are gone, at exactly 12 the
-    // pose resets and the body flies back to the Knight over 11 frames.
-    if (state.turntimer <= 16) {
-      if (state.entities.some((b) => b.alive && b.type.name === 'obj_bullet_knight_stream')) {
-        state.turntimer = 16;
-      } else if (gmlEq(state.turntimer, 12)) {
-        // == on the ACCUMULATED clock (graze timepoints subtract fractions)
-        // -> gmlEq, per the project rule.
-        e.image_index = 0;
-        e.imgtarget = -1;
-        const knight = state.entities.find(
-          (k) => k.alive && k.type.name === 'obj_knight_enemy',
-        );
-        // obj_knight_enemy.x — a static read; the fight always has one. A
-        // scene without a knight skips the fly-back rather than crashing
-        // (same guard the sim's other modules use).
-        if (knight) {
-          scrLerpvar(state, spawn, e, 'x', e.x, knight.x, 11, 2, 'out');
-          scrLerpvar(state, spawn, e, 'y', e.y, knight.y, 11, 2, 'out');
-        }
-      }
-    }
+    // KAIZO Step_0:77-90 — the turn-end handshake ran HERE until it had to
+    // move behind the clock's decrement. It is the first block of this type's
+    // endStep now; see turnEndHandshake below.
   },
 
   /**
@@ -729,6 +757,8 @@ export const knightStream = {
    * get_swordcolor consumes no RNG, so the stream is untouched.
    */
   endStep(e, state) {
+    turnEndHandshake(e, state);
+
     const _ds = mergeColor(getSwordcolor(state), BLACK, 0.5); // Draw_0:26
     for (const b of state.entities) {
       if (!b.alive || b.type.name !== 'obj_bullet_knight_stream') continue;
