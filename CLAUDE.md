@@ -42,9 +42,11 @@ npm run verify             # the vendored ENGINE's 60 suites -- an integrity che
 ```
 
 The metric is the byte gate's **first divergence frame** against the tracked
-recording `_tok3` (`~/knight-research/kaizo-mod/fullfight/`). On 2026-09-03
-it stands at **bullets f6631, trace f6631** — both fronts on the same frame,
-inside atk_Tunnel2. Everything else is derived.
+recording `_tok3` (`~/knight-research/kaizo-mod/fullfight/`). On 2026-09-04
+it stands at **bullets f6757, trace f8811**. The bullets front is one f32 ulp
+in the gravity recomposition with no code behind it — structurally unfittable
+from this recording, and BLOCKED on a motion-probe recording. The trace front
+is live. Everything else is derived.
 
 Two instruments answer questions this number cannot, and both are worth
 reaching for before theorising:

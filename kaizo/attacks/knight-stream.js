@@ -496,6 +496,8 @@ export const bulletKnightStream = {
 export const knightStream = {
   name: 'obj_knight_stream',
 
+  stepOrder: 0.75,
+
   create(e, state) {
     scrBulletInit(e);
     // THE OBJECT DEFINITION, not an event: obj_knight_stream carries

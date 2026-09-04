@@ -403,7 +403,24 @@ const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
   while (byName(st, 'obj_bullet_knight_stream').length > 0) {
     st.turntimer -= 1;
     stepFrame(st, {});
-    check(st.turntimer === 16, `clock pinned at 16 while beams live (got ${st.turntimer})`);
+    // THE FRAME THE LAST BEAM DIES IS NOT A PINNED FRAME, and asserting that
+    // is stronger than the blanket `=== 16` this used to carry.
+    // obj_bullet_knight_stream is object index 140 and obj_knight_stream is
+    // 1688, so the beams run their Step -- and destroy themselves in it --
+    // BEFORE the manager's `if (i_ex(obj_bullet_knight_stream))` handshake
+    // ever looks. On the release frame the manager therefore sees NONE and
+    // leaves the clock alone. The old assertion only passed because the sim
+    // stepped the manager first (creation order, manager older), which is the
+    // fault the whole-fight gate caught at f8776: with the manager early its
+    // `slash_angle += 25 + irandom(25)` also drew AHEAD of the beams'
+    // scr_damage, and the next volley came out at 10/170 where the recording
+    // has 20/160.
+    const beamsAfter = byName(st, 'obj_bullet_knight_stream').length;
+    if (beamsAfter > 0) {
+      check(st.turntimer === 16, `clock pinned at 16 while beams live (got ${st.turntimer})`);
+    } else {
+      check(st.turntimer === 15, `clock released on the frame the last beam dies (got ${st.turntimer})`);
+    }
     pinnedFrames += 1;
     if (pinnedFrames > 60) break;
   }
