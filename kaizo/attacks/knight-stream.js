@@ -374,8 +374,36 @@ export const bulletKnightStream = {
           // place_meeting(x, y, obj_heart) with the heart on the 2px mask
           // (Step_0:30-34, 47) — the swap-and-restore collapses to passing
           // the mask straight into the calibrated sampler.
+          // THE SOUL'S PRE-STEP POSITION, not its current one.
+          // obj_bullet_knight_stream is OBJECT INDEX 140 and obj_heart is
+          // 1462, so the game runs this place_meeting BEFORE the heart's
+          // `x += px` (obj_heart Step_0:241-242) and it always tests where the
+          // soul was at the START of the frame. This lane steps OLDEST FIRST
+          // (kaizo-fight.js: `stepNewestFirst` is deliberately not set), and
+          // the soul is the oldest object in the fight, so by the time a beam
+          // born mid-turn steps, `state.soul` has already moved. Same per-read
+          // compensation as the tunnel sword's probe and the splitter's split
+          // flag -- kaizo-fight.js's own note: "the one measured handoff is
+          // emulated at its site".
+          //
+          // MEASURED, _tok3. The hitbox is frozen at x 320, y 196,
+          // image_xscale 64, image_yscale 2.2999999523, image_angle 205/335 --
+          // byte-identical in both bullets sheets -- and this probe is FALSE at
+          // soul x 222, TRUE at x 226. The soul is 222 on f8721 and 226 on
+          // f8722, so reading the live position fired a frame early: inv 2 at
+          // f8722 where the recording has -23 and takes the tick on f8723.
+          //
+          // TWO-SIDED, not a single-frame fit. Replayed over all five
+          // armed-beam windows against the recording's own soul path and inv
+          // column, the pre-step read reproduces every tick (8723, 8739, 8777,
+          // 8780, 8783, 8786) and the live read gets two wrong in OPPOSITE
+          // directions: a spurious hit at f8722 and a MISSED hit at f8780,
+          // where the soul moves on y instead of x. A tighter mask would fix
+          // the first and worsen the second; only the read convention explains
+          // both.
           const heart = state.soul;
-          if (heart && heart.alive && beamPlaceMeetingHeart(hb, heart)) {
+          const heartPos = state.soulPrev ?? heart;
+          if (heart && heart.alive && beamPlaceMeetingHeart(hb, heartPos)) {
             // The obj_shake dance (Step_0:49-59): remember whether a shake
             // existed, scr_damage() (which spawns one), and destroy the new
             // one if none pre-existed — beam ticks do not screen-shake. The
