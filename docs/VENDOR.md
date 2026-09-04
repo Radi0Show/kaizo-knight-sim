@@ -184,3 +184,45 @@ Proven both ways: kaizo byte gate trace f7924 -> f8088; the engine's 60 suites
 green AND regen-fullfight reproduces the vanilla trace BYTE-IDENTICAL.
 
 Port to knight-sim, prove against its 60, re-vendor.
+
+PENDING PORT-BACK (2026-09-03d): sim/masks.js masksOverlapRectA walks A on its OWN ink
+lattice at its raw position, not on the integer world grid.
+
+THE ROUTINE CONTRADICTED ITSELF. Its loop bound was
+`Math.min(Math.floor(aRight), ...)` and its A-side sampler two lines later was
+`Math.floor(px - (ax - aox))`; those disagree by one column whenever A sits at
+a FRACTIONAL position -- the bound stops before a column the sampler would have
+accepted. A rect A between cells silently lost its last ink column. Both
+sibling routines in the same file already do it the other way
+(masksOverlapPrecise walks `ax + cx - aox`, maskHitsRotatedRect walks `ax + i`),
+so this is the file agreeing with itself rather than a new rule.
+
+MEASURED, _tok3 f8088 (atk_Splitter3). A tooth at (133.07237, 231.71428),
+image_angle 180, against the soul at x 107.74784088134766 -- mid-frame, pushed
+by the growtangle and not yet snapped to 108 by its End Step clamp. The
+recording takes the hit on f8088; the sim took it one frame LATE at f8089
+(oracle f8088 inv 12 / bullets 28, sim f8088 inv -61 / 29 then f8089 inv 12).
+Offline on those exact eight numbers: rectA false, precise TRUE.
+
+WHY IT SURVIVED THIS LONG, and why the blast radius is checkable rather than
+hopeful: when ax and ay are INTEGERS the new loop enumerates exactly the world
+cells the old bound did, so every integer-A case is bit-identical. Every
+dataset that calibrated this routine is integer-A -- graze-probe.csv 12,416
+rows, growmeet.csv 8,136, toothmeet.csv 4,705, twenty-five thousand rows with
+zero exceptions -- so the rule was UNOBSERVABLE until a soul stopped between
+cells. toothmeet-cfg row 0 is literally this tooth at angle 180, probed only at
+integer soul positions.
+
+THREE ALTERNATIVES TESTED AND REFUTED, recorded so nobody re-tries them:
+  * route angle 180 to masksOverlapPrecise -- breaks vanilla 6/6 (verify21j
+    f9433, verify37 f4823 are the counter-receipts);
+  * route all cardinals to precise -- kaizo breaks EARLIER, at f5112;
+  * patch only rectA max bounds -- new kaizo regression at f5190, earlier than
+    the bug being fixed.
+
+Proven both ways: kaizo byte gate trace f8088 -> f8489, and the first frame
+that changes anywhere in the 13,000-frame run is f8088 itself, changing to the
+oracle row. Engine 60 suites green AND regen-fullfight reproduces the vanilla
+trace BYTE-IDENTICAL.
+
+Port to knight-sim, prove against its 60, re-vendor.

@@ -800,19 +800,51 @@ function masksOverlapRectA(maskA, ax, ay, maskB, bx, by, bsx, bsy, bangle = 0) {
       if (wy > maxy) maxy = wy;
     }
   }
-  const left = Math.max(Math.ceil(aLeft), rintHalfEven(bx + minx));
-  const right = Math.min(Math.floor(aRight), rintHalfEven(bx + maxx) - 1);
-  const top = Math.max(Math.ceil(aTop), rintHalfEven(by + miny));
-  const bottom = Math.min(Math.floor(aBottom), rintHalfEven(by + maxy) - 1);
+  // THE B BAND, exactly as before: B's rotated extent, rint at both edges.
+  const left = rintHalfEven(bx + minx);
+  const right = rintHalfEven(bx + maxx) - 1;
+  const top = rintHalfEven(by + miny);
+  const bottom = rintHalfEven(by + maxy) - 1;
   if (left > right || top > bottom) return false;
+  if (aRight < left || aLeft > right || aBottom < top || aTop > bottom) return false;
 
-  for (let py = top; py <= bottom; py++) {
-    for (let px = left; px <= right; px++) {
-      const acx = Math.floor(px - (ax - aox));
-      if (acx < 0 || acx >= maskA.w) continue;
-      const acy = Math.floor(py - (ay - aoy));
-      if (acy < 0 || acy >= maskA.h) continue;
-      if (!maskA.px[acy][acx]) continue;
+  // A IS WALKED ON ITS OWN INK LATTICE, AT ITS RAW POSITION — `ax + cx - aox`,
+  // which is what both sibling routines in this file already do
+  // (masksOverlapPrecise, and maskHitsRotatedRect). This loop used to walk the
+  // INTEGER world grid and map each cell back into A with
+  // `Math.floor(px - (ax - aox))`, and those two disagree by one column
+  // whenever A's position is FRACTIONAL: the bound said
+  // `Math.min(Math.floor(aRight), ...)` while the sampler two lines later
+  // would happily accept the next column. A rect A at a fractional x lost its
+  // last ink column, and with it the contact.
+  //
+  // MEASURED, kaizo _tok3 f8088 (atk_Splitter3). A tooth at
+  // (133.07237243652344, 231.7142791748047), image_angle 180, scales 1,
+  // against the soul at x 107.74784088134766 wearing HEART_RECT — the soul is
+  // mid-frame there, pushed by obj_knight_split_growtangle and not yet snapped
+  // to 108 by its End Step clamp. The recording takes the hit and destroys the
+  // tooth on that frame; this routine returned false and the sim took it one
+  // frame LATE, at f8089. Walking A's own lattice, the last ink column lands
+  // on the tooth's tip column 24 instead of one past it, and the frame agrees.
+  //
+  // NOTHING ELSE MOVES, and that is checkable rather than hopeful: when ax and
+  // ay are INTEGERS this enumerates exactly the world cells the old bound did,
+  // so every integer-A case is bit-identical. Every dataset that calibrated
+  // this routine is integer-A -- graze-probe.csv 12,416 rows, growmeet.csv
+  // 8,136 and toothmeet.csv 4,705, ALL of them with integral ax and ay
+  // (checked, zero exceptions) -- which is exactly why the contradiction
+  // survived: the rule is unobservable unless A sits between cells.
+  // toothmeet-cfg row 0 is this very tooth at angle 180, and it too only ever
+  // probes integer soul positions.
+  for (let cy = at; cy <= ab; cy++) {
+    const rowA = maskA.px[cy];
+    if (!rowA) continue;
+    const py = ay - aoy + cy;
+    if (py < top || py > bottom) continue;
+    for (let cx = al; cx <= ar; cx++) {
+      if (!rowA[cx]) continue;
+      const px = ax - aox + cx;
+      if (px < left || px > right) continue;
 
       const dx = px - bx;
       const dy = py - by;
