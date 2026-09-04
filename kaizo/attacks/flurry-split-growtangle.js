@@ -257,6 +257,15 @@ export const splitGrowtangle = {
   },
 
   step(e, state) {
+    // THE VALUE THE MANAGER SEES THIS FRAME. obj_roaringknight_boxsplitter_attack
+    // is object index 8 and this organism is 909, so the game steps the MANAGER
+    // FIRST and its `obj_knight_split_growtangle.split` read is always the value
+    // from BEFORE this step ran. The sim's scene-level order is the other way
+    // round (this type declares stepOrder -0.5 to land before the soul, the
+    // manager 0.25 to land after the cut objects), so the frame-start value is
+    // published here and the manager reads it. See the manager's end gate.
+    e.split_seen = e.split;
+
     if (!e.init) {
       if (e.difficulty === 2) {
         e.split_wait = 4;

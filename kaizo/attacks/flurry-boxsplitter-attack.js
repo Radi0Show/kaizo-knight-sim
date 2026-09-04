@@ -263,7 +263,26 @@ export const boxsplitterAttack = {
       const splitter = state.entities.find(
         (x) => x.alive && x.type.name === 'obj_knight_split_growtangle',
       );
-      if (e.local_turntimer < 0 && !(splitter && splitter.split)) {
+      // `split_seen`, NOT `split` -- the organism publishes the frame-start
+      // value at the top of its own step because THE GAME STEPS THIS MANAGER
+      // FIRST (object index 8 against the organism's 909), so this read never
+      // sees a flag the organism cleared on the same frame.
+      //
+      // MEASURED, _tok3 f8490: the last cycle's con-4 merge reaches distance 0
+      // on f8489 and clears `split` there; the recording holds the turn open one
+      // more frame and tears it down on f8490 (turntimer 515.1333 -> -2). Reading
+      // the live flag ended it on f8489 -- the trace gate's f8489 divergence, with
+      // `inv` and the population stuck a frame ahead for the rest of the fight.
+      //
+      // WHY NOT A stepOrder: the manager would have to sort before -0.5, which
+      // also puts it before every default-0 object in the attack -- and it DRAWS
+      // (the per-cut `vertical` roll), so that moves its draws to the front of
+      // the frame and rewrites the slash stream. Tried: the run dies outright,
+      // the recorded slash-angle queue exhausted. The 8,488 frames that already
+      // match are the receipt that the draw order is right as it stands, so the
+      // index order is expressed on the one read that measurably needs it.
+      const splitSeen = splitter && (splitter.split_seen ?? splitter.split);
+      if (e.local_turntimer < 0 && !splitSeen) {
         // KAIZO (Step_0 75-83): the turn only releases once the knight is
         // fully opaque again; otherwise the alpha climbs 0.1 — but
         // instance_destroy() runs UNCONDITIONALLY on this same frame, so the

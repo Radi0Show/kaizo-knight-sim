@@ -116,8 +116,13 @@ function replaySlashOrder(state, list) {
   // that merely coincides.
   const WINDOW = 32;
   let scan = q.at;
-  const limit = Math.min(q.entries.length, q.at + WINDOW);
-  while (scan < limit && taken.length < list.length) {
+  // THE BOUND IS RE-READ EVERY PASS because the splice below SHRINKS
+  // `q.entries`. Hoisting it (as this did) leaves a stale length, and once the
+  // feed runs low near the end of the fight `q.entries[scan]` is undefined and
+  // the whole run dies on `.angle`. It never fired while the queue stayed long;
+  // it surfaced the moment a fix elsewhere consumed one more entry.
+  while (taken.length < list.length) {
+    if (scan >= q.entries.length || scan >= q.at + WINDOW) break;
     const want = norm(q.entries[scan].angle);
     const idx = list.findIndex((v, i) => !used[i] && Math.abs(norm(v) - want) < 0.01);
     if (idx < 0) { scan += 1; continue; }   // the other manager's fan
