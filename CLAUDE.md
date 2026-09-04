@@ -43,10 +43,35 @@ npm run verify             # the vendored ENGINE's 60 suites -- an integrity che
 
 The metric is the byte gate's **first divergence frame** against the tracked
 recording `_tok3` (`~/knight-research/kaizo-mod/fullfight/`). On 2026-09-04
-it stands at **bullets f6757, trace f10897**. The bullets front is one f32 ulp
-in the gravity recomposition with no code behind it — structurally unfittable
-from this recording, and BLOCKED on a motion-probe recording. The trace front
-is live. Everything else is derived.
+the TRACE sheet is **byte-exact over all 12,637 frames** (`trace : OK`) and
+**bullets stands at f6757** — one f32 ulp in the gravity recomposition with no
+code behind it, structurally unfittable from this recording, and BLOCKED on a
+motion-probe recording. Everything else is derived.
+
+TWO FACTS ABOUT THE REFERENCE ITSELF, both measured 2026-09-04:
+- The graze feed now covers the whole fight (re-recorded as `_tok5`, adopted
+  after its trace AND bullets sheets proved byte-identical to `_tok3`; the raw
+  set lives in `fullfight/tok5-raw/`, the old feed in `fullfight/backup-*/`).
+  Budget a graze recording at Frames/20 + 60 s: the graze log holds the game
+  near 21 fps, and the recorder's default (Frames/30) is what cut `_tok4` short.
+- **The recorder's default OutDir is `traces/`, and the oracle checks scan it.**
+  A full-fight recording dropped there silently became five checks' oracle
+  (`check-oracle-{crescent,multislash,stars,stream,tracking}`, reading
+  `kaizo_oracle_seq_tok5.csv` in place of `seq_deep`). Pass `-OutDir` or move
+  the files out before running the suite.
+
+THE PARTY IN EVERY `_tok*` RECORDING IS SWOONED after its first swoon: the
+oracle patch pins `global.hp` each frame but never calls `scr_revive`, and
+being down is FIVE globals (`charmove`, `charcantarget`, `chardead`,
+`charaction`, `charspecial`). Full health, no menu, no attacks — only Kris
+fights. The sim's `--keep-alive` mirrors it (`keepAliveMode: 'pin'`; a
+`'revive'` mode exists), which is why the gate never saw it. It is NOT
+one-to-one with a revived party: a one-character party changes the knight's
+target rerolls (`while (!charcantarget[mytarget])`), i.e. the RNG stream. And
+even a real `scr_revive` sets only three of the five — a revived member cannot
+act until the next turn's menu re-arms `charaction`. Fixing the reference means
+a patch that revives on keep-alive, `keepAliveMode: 'revive'`, and a new
+recording; that resets the trace front to the first swoon. Decision pending.
 
 Two instruments answer questions this number cannot, and both are worth
 reaching for before theorising:

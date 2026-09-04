@@ -461,6 +461,24 @@ const WATCHED = new Set(WATCHED_OBJECTS);
 
 // ── INPUT FEEDS ───────────────────────────────────────────────────────────
 
+/**
+ * Does the recording carry the recorder's trailing idle row -- one data row
+ * more than the token has input frames? Counts non-empty lines minus the
+ * header. Returns 1 or 0 so the caller can add it straight to the frame count;
+ * 0 when no oracle was given or the file cannot be read (the old behaviour).
+ */
+function oracleTrailingRow(oraclePath, feedFrames) {
+  if (!oraclePath) return 0;
+  try {
+    const text = readFileSync(oraclePath, 'utf8');
+    let rows = 0;
+    for (const line of text.split(/\r?\n/)) if (line.length) rows += 1;
+    return rows - 1 === feedFrames + 1 ? 1 : 0;
+  } catch {
+    return 0;
+  }
+}
+
 const IDLE = {
   left: false, right: false, up: false, down: false, focus: false,
   confirm: false, cancel: false, button3: false,
@@ -1683,19 +1701,45 @@ function main() {
       syncFrames = sync;
       feedName += `, synced at ${sync}`;
       if (!framesExplicit) {
-        frames = feed.frames + sync;
-        console.error(`  frames: ${frames} = the feed's ${feed.frames} + the sync ${sync},`
-          + " so the run reaches the recording's last input-driven frame");
+        // PLUS ONE: THE RECORDER'S TRAILING ROW. The oracle patch logs the frame
+        // AFTER its last input-driven one -- _tok3 carries rows 0..13000 for a
+        // 13000-entry token -- and on that frame the game reads every input as
+        // 0, because its readers return 0 for any index >= global.oracle_n
+        // (oracle_kaizo_fight.csx, the `_f >= global.oracle_n` guards). The
+        // sim's replay.inputAt returns IDLE past the token's end, which is the
+        // same input. So that row IS reproducible, and without it the gate ran
+        // 12,636 byte-exact frames and still read "LENGTH MISMATCH: the sim
+        // trace stops short of the recording" -- the one recorded frame with no
+        // sim counterpart. Measured 2026-09-04 once the trace sheet had nothing
+        // else left to differ on.
+        //
+        // CONDITIONAL ON THE RECORDING ACTUALLY CARRYING THAT ROW. The oracle
+        // checks (check-oracle-*.mjs) run this tracer against older, shorter
+        // recordings whose spawn ledgers stop at the last input frame; an
+        // unconditional +1 made the sim spawn one frame the mod never logged
+        // and reddened five of them ("every sim value is one the mod
+        // produced"). So the row is counted, not assumed: +1 only when the
+        // --oracle file has feed.frames + 1 data rows (frames 0..feed.frames).
+        const trailing = oracleTrailingRow(flag('--oracle', null), feed.frames);
+        frames = feed.frames + sync + trailing;
+        console.error(`  frames: ${frames} = the feed's ${feed.frames} + the sync ${sync}`
+          + (trailing ? ' + 1, so the run reaches the recording\'s last input-driven'
+            + ' frame AND the recorder\'s trailing idle row after it'
+            : ', so the run reaches the recording\'s last input-driven frame'
+            + ' (the recording carries no trailing row)'));
       }
       // THE WARNING HAS TO COUNT THE OFFSET TOO. It used to fire on
       // `frames > feed.frames`, which is true of every correctly-sized synced
       // run, so the one message that should mean "you are running past your
       // inputs" cried wolf on the default.
-      if (frames - sync > feed.frames) {
+      // ONE idle frame past the feed is the recorder's own trailing row (see
+      // above); the warning is for running FURTHER than that.
+      if (frames - sync > feed.frames + 1) {
         console.error(`kaizo-trace: WARNING --frames ${frames} runs past the feed:`
           + ` with sync ${sync} it needs ${frames - sync} input frames and the feed`
-          + ` has ${feed.frames}; frames ${feed.frames + sync}..${frames - 1} run on`
-          + ' IDLE input, which no recording of this feed can match.');
+          + ` has ${feed.frames}; frames ${feed.frames + sync + 1}..${frames - 1} run on`
+          + ' IDLE input beyond the recorder\'s single trailing row, which no'
+          + ' recording of this feed can match.');
       }
     }
   } else {
