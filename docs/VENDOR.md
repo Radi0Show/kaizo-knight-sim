@@ -263,3 +263,29 @@ suites green AND regen-fullfight reproduces the vanilla trace BYTE-IDENTICAL.
 
 Port to knight-sim, prove against its 60, re-vendor.
 
+PENDING PORT-BACK (2026-09-07): render/title.js draws the wordmark from
+SEGMENTS so a lane can colour part of it.
+
+`drawTitle` took no options and drew one hardcoded white line:
+
+    centred(ctx, font, 'BLACK KNIFE SIMULATOR', 60, c_white, 1.6);
+
+It now takes an `opts` bag whose `title` is an array of [text, rgb] segments,
+laid end to end from one measured centre by a new `centredSegments()` helper --
+measured as a whole, because one `centred()` call per segment centres each
+independently and stacks them.
+
+THE DEFAULT IS THE OLD LINE EXACTLY: `opts.title ?? [['BLACK KNIFE SIMULATOR',
+c_white]]`, so knight-sim, which passes no opts, is unchanged to the pixel.
+
+WHY: the kaizo build's title screen paints KAIZO in the Knight's own blue
+(kaizo/attacks/kaizo-colors.js getSwordcolor -- swordtype 0, pure blue) and the
+rest white. The alternative was a hardcoded hex in a vendored file, or a second
+copy of title.js in kaizo/, and both are worse than one parameter.
+
+Proven: vanilla regen-fullfight reproduces every trace BYTE-IDENTICAL, the
+engine's 60 suites are green, the kaizo suites are green, and the kaizo byte
+gate still reads trace OK / bullets f6757.
+
+Port to knight-sim, prove against its 60, re-vendor.
+

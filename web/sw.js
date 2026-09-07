@@ -21,7 +21,7 @@
 // ONLY caches carrying this prefix. (knight-sim's worker was given the same
 // discipline on the same day, for its own prefix.)
 const PREFIX = 'kaizoknight-';
-const CACHE = PREFIX + '0.1.10';
+const CACHE = PREFIX + '0.1.11';
 
 self.addEventListener('install', (e) => {
   e.waitUntil(

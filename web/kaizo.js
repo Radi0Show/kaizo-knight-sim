@@ -31,11 +31,12 @@
 import { createState, stepFrame } from '../sim/index.js';
 import { drain } from '../sim/clock.js';
 import { buildKaizoScene, KAIZO_NOTE, KAIZO_VERSIONS } from '../kaizo/scenes/kaizo-fight.js';
+import { getSwordcolor } from '../kaizo/attacks/kaizo-colors.js';
 import { decodeConfig } from '../sim/share.js';
 import { WEAPONS, ARMOR, canEquip } from '../sim/equipment.js';
 import { ITEMS } from '../sim/items.js';
-import { MODES } from '../sim/modes.js';
-import { drawGameOver, stepGameOver, makeGameOver } from '../render/title.js';
+import { MODES, createTitle, stepTitle } from '../sim/modes.js';
+import { drawTitle, drawGameOver, stepGameOver, makeGameOver } from '../render/title.js';
 import { ATTACK_MENU } from '../sim/scenes/single.js';
 import { createTvTurnoff, stepTvTurnoff } from '../sim/tvturnoff.js';
 import { drawTvTurnoff } from '../render/draw/tvturnoff.js';
@@ -196,8 +197,22 @@ function maskHeldInput() {
   for (const k of Object.keys(raw)) if (raw[k]) inputMask[k] = true;
 }
 
-// ---- settings: READ the main page's entry, write nothing ------------------
-const SETTINGS_KEY = 'knightsim.settings';
+// ---- settings -------------------------------------------------------------
+//
+// THIS PAGE USED TO READ THE MAIN PAGE'S ENTRY AND WRITE NOTHING, which was
+// right while it had no menu: knight-sim and this build sit on the SAME ORIGIN
+// in production, so they share localStorage, and a second page writing
+// `knightsim.settings` would silently rewrite the real fight's volume, gear and
+// bag. web/index.html's comment names that hazard as the reason the root
+// redirects rather than standing in a copy of the title page.
+//
+// The title screen landed here, so the page now writes -- and it writes to its
+// OWN key. The main page's entry is still read, but only to SEED this one the
+// first time, so anyone who had already built a loadout on the real fight
+// arrives here with it instead of at the defaults. After that the two are
+// independent, which is what the shared origin requires.
+const SETTINGS_KEY = 'knightsim.settings';        // the real fight's; read-only here
+const KAIZO_SETTINGS_KEY = 'kaizoknight.settings'; // this page's; the only one written
 const settings = {
   gear: null,
   bag: null,
@@ -206,7 +221,10 @@ const settings = {
   scaling: 'fit',
 };
 try {
-  const saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? 'null');
+  // This page's own entry wins; the real fight's is the one-time seed.
+  const saved = JSON.parse(
+    localStorage.getItem(KAIZO_SETTINGS_KEY) ?? localStorage.getItem(SETTINGS_KEY) ?? 'null',
+  );
   if (saved?.gear?.length === 3) {
     settings.gear = saved.gear.map((g) => ({ weapon: g.weapon | 0, armor: (g.armor ?? []).map((a) => a | 0) }));
   }
@@ -290,6 +308,64 @@ if (skip > 0) {
 
 let acc = 0;
 let last = performance.now();
+// ── THE TITLE SCREEN ─────────────────────────────────────────────────────
+//
+// The page used to boot straight into the fight. It now opens on the same
+// menu the vanilla title has -- same modes, same settings pages, same credits,
+// drawn by the same render/title.js -- because the two builds should not feel
+// like two different products.
+//
+// THE WORDMARK IS THE ONE DIFFERENCE, and KAIZO is painted in the Knight's own
+// blue: `getSwordcolor()` is the mod's single source for that colour
+// (kaizo/attacks/kaizo-colors.js -- swordtype 0, pure blue, the `default` arm
+// the mod ships), so if the swordtype setting ever moves, the wordmark moves
+// with it instead of holding a hardcoded hex that quietly drifts.
+const title = createTitle();
+// THE MENU EDITS `title`, so it starts from whatever was loaded above --
+// otherwise opening SETTINGS would show defaults and saving would wipe a
+// loadout the player had already built.
+if (settings.gear) title.gear = settings.gear;
+if (settings.bag) title.bag = settings.bag;
+title.volumes.music = settings.volumes.music;
+title.volumes.sfx = settings.volumes.sfx;
+title.shake = settings.shake;
+title.scaling = settings.scaling;
+
+/** Volume, screen shake and canvas scaling, applied live from the menu. */
+function applySettings() {
+  audio.setVolumes(title.volumes.music / 100, title.volumes.sfx / 100);
+  // `global.flag[12]`: SET means "do not move the view".
+  state.flag12 = title.shake ? 0 : 1;
+  if (scalingMode !== title.scaling) {
+    scalingMode = title.scaling;
+    fitCanvas();
+  }
+  // The run reads these on its next reset().
+  settings.gear = title.gear;
+  settings.bag = title.bag;
+}
+
+/** Save to THIS PAGE'S key only -- see the note above SETTINGS_KEY. */
+function persistSettings() {
+  try {
+    localStorage.setItem(KAIZO_SETTINGS_KEY, JSON.stringify({
+      v: 1,
+      gear: title.gear, bag: title.bag, volumes: title.volumes,
+      shake: title.shake, scaling: title.scaling,
+    }));
+  } catch { /* private mode etc. — the session still works, unsaved */ }
+  applySettings();
+}
+const KAIZO_WORDMARK = () => [
+  ['KAIZO', getSwordcolor(state)],
+  [' KNIGHT SIMULATOR', [255, 255, 255]],
+];
+
+// `?frames=N` is a deterministic fast-forward for debugging and it has no
+// business sitting behind a menu, so that one boots straight in, exactly as
+// the whole page used to.
+if (skip > 0) title.mode = 'normal';
+
 let over = null;   // the Knight's own Game Over (see render/title.js)
 let tvOff = null;  // the CRT power-off that closes a won run
 
@@ -309,6 +385,17 @@ function reset() {
   acc = 0;
 }
 
+/**
+ * Leave the title for the fight. `state.runMode` is what the director reads
+ * (ENDLESS must not reach the ending), and it has to be set BEFORE reset()
+ * builds the scene.
+ */
+function startRun() {
+  state.runMode = title.mode;
+  maskHeldInput();
+  reset();
+}
+
 window.addEventListener('keydown', (e) => {
   if (e.code === 'KeyR') reset();
 });
@@ -323,8 +410,50 @@ function frame(now) {
     if (pe.reset) reset();
   }
 
+  // THE MENU, while no mode is chosen. The fight does not step behind it.
+  if (!title.mode) {
+    const { steps: ms } = drain(acc, elapsed);
+    acc = 0;
+    for (let i = 0; i < Math.max(1, ms); i++) {
+      const r = stepTitle(title, gatedKeys(), ATTACK_MENU);
+      if (r.moved) audio.play([{ name: 'snd_menumove', pitch: 1, gain: 1 }]);
+      if (r.selected) audio.play([{ name: 'snd_select', pitch: 1, gain: 1 }]);
+      if (r.error) audio.play([{ name: 'snd_error', pitch: 1, gain: 1 }]);
+      if (title.dirty) {
+        title.dirty = false;
+        persistSettings();
+        applySettings();
+      }
+      if (r.chosen) {
+        // SINGLE ATTACK IS REFUSED HERE, and deliberately. Its picker is
+        // ATTACK_MENU -- the VANILLA roster (sim/scenes/single.js) -- so
+        // choosing it would run vanilla attacks under a page banner that says
+        // KAIZO, which is exactly what this repo's fourth law forbids
+        // ("nothing invented ships unlabelled", and its converse: nothing
+        // labelled kaizo may quietly be the real fight). It needs a kaizo
+        // attack table of its own before it can be honest; until then the
+        // menu row is visible but refuses, rather than lying.
+        if (title.mode === 'single') {
+          title.mode = null;
+          audio.play([{ name: 'snd_error', pitch: 1, gain: 1 }]);
+        } else {
+          startRun();
+        }
+        break;
+      }
+    }
+    if (title.mode) {
+      requestAnimationFrame(frame);
+      return;
+    }
+    renderer.draw(state);
+    drawTitle(ctx, title, renderer.sprites, ATTACK_MENU, { title: KAIZO_WORDMARK() });
+    requestAnimationFrame(frame);
+    return;
+  }
+
   // THE TV TURNS OFF after a won run, then the fight restarts fresh — the
-  // kaizo page has no title screen to return to.
+  // kaizo page returns to its title screen.
   if (tvOff) {
     const { steps: ts, accumulator: ta } = drain(acc, elapsed);
     acc = ta;
