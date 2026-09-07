@@ -111,6 +111,17 @@ export function partyStatus(state) {
 /** `scr_dead(slot)` — the five globals. Slot-indexed, roster-bounded. */
 export function scrDead(state, slot) {
   if (slot < 0 || slot >= rosterSize(state)) return;
+  // KAIZO_PARTY_DEBUG=1 logs every down and revive with the sim frame, the way
+  // KNIGHT_GRAZE_DEBUG mirrors the grazelog. It exists because the recorder
+  // pins HP without ever calling scr_revive, so the party in every _tok*
+  // recording is swooned from its first fall onward -- full HP, no menu, no
+  // attacks, only Kris fighting -- and nothing in the trace sheets says when
+  // that happened. This does. (partyHp is CHARACTER-indexed via the roster;
+  // the flags are SLOT-indexed -- both are printed by slot here.)
+  if (typeof process !== 'undefined' && process.env?.KAIZO_PARTY_DEBUG) {
+    console.error(`[party] f=${state.frame} scr_dead slot ${slot}`
+      + ` hp=${state.partyHp?.[slot]} chardead=${state.chardead?.[slot]}->1`);
+  }
   if (state.charmove) state.charmove[slot] = 0;
   if (state.charcantarget) state.charcantarget[slot] = 0;
   if (state.chardead) state.chardead[slot] = 1;
@@ -121,6 +132,10 @@ export function scrDead(state, slot) {
 /** `scr_revive(slot)` — THREE of the five. charaction/charspecial stay 0. */
 export function scrRevive(state, slot) {
   if (slot < 0 || slot >= rosterSize(state)) return;
+  if (typeof process !== 'undefined' && process.env?.KAIZO_PARTY_DEBUG) {
+    console.error(`[party] f=${state.frame} scr_revive slot ${slot}`
+      + ` hp=${state.partyHp?.[slot]} (charaction/charspecial stay ${state.charaction?.[slot]}/${state.charspecial?.[slot]})`);
+  }
   if (state.charmove) state.charmove[slot] = 1;
   if (state.charcantarget) state.charcantarget[slot] = 1;
   if (state.chardead) state.chardead[slot] = 0;
