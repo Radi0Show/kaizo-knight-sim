@@ -59,6 +59,29 @@ import { VERSION } from './version.js';
 console.log(KAIZO_NOTE);
 
 const canvas = document.getElementById('game');
+
+// ── THE BOOT HUD ─────────────────────────────────────────────────────────
+//
+// This page fetches ~1,660 sprite frames before it can draw anything, and
+// until it does the canvas is plain black. If ANY of that stalls -- a slow
+// server, a throttled background tab, a request that never returns -- the
+// page is indistinguishable from a page that crashed: black, silent, no
+// error anywhere. That cost a whole session of debugging, so boot now says
+// where it is, on the canvas, in plain 2D text that needs no sprite font.
+const bootCtx = canvas.getContext('2d');
+function boot(msg) {
+  try {
+    console.log('[kaizo boot] ' + msg);
+    bootCtx.setTransform(1, 0, 0, 1, 0, 0);
+    bootCtx.fillStyle = '#000';
+    bootCtx.fillRect(0, 0, canvas.width, canvas.height);
+    bootCtx.fillStyle = '#8ab';
+    bootCtx.font = '16px ui-monospace, monospace';
+    bootCtx.fillText('KAIZO KNIGHT — ' + msg, 24, 40);
+  } catch { /* a canvas we cannot touch is not worth failing boot over */ }
+}
+boot('loading sprites…');
+
 const renderer = await createRenderer(canvas, { overrides: KAIZO_DRAW_OVERRIDES });
 const ctx = renderer.ctx;
 
@@ -123,6 +146,7 @@ async function loadKaizoOverlay(sprites) {
   }));
   return added;
 }
+boot('merging the kaizo overlay…');
 const overlayCount = await loadKaizoOverlay(renderer.sprites);
 console.log(`kaizo sprite overlay: ${overlayCount} sprites merged`);
 
@@ -321,6 +345,7 @@ let last = performance.now();
 // (kaizo/attacks/kaizo-colors.js -- swordtype 0, pure blue, the `default` arm
 // the mod ships), so if the swordtype setting ever moves, the wordmark moves
 // with it instead of holding a hardcoded hex that quietly drifts.
+boot('building the title…');
 const title = createTitle();
 // THE MENU EDITS `title`, so it starts from whatever was loaded above --
 // otherwise opening SETTINGS would show defaults and saving would wipe a
@@ -551,6 +576,7 @@ function frame(now) {
   }
 
   renderer.draw(state);
+boot('starting…');
   requestAnimationFrame(frame);
 }
 
