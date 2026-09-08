@@ -62,6 +62,47 @@ def version_scripts(text: str, version: str) -> str:
     return SCRIPT_RE.sub(sub, text)
 
 
+class DevServer(ThreadingHTTPServer):
+    """ThreadingHTTPServer that cannot accumulate threads.
+
+    MEASURED, and it is the whole reason this class exists. A page here pulls
+    ~1,660 sprite frames per load, and a browser abandons a lot of them on every
+    navigation -- each abandoned one raises ConnectionAbortedError out of
+    `copyfile`, unwinding a thread that ThreadingHTTPServer, with
+    `daemon_threads` at its default False, then JOINS at shutdown and keeps a
+    handle on meanwhile. After a few hours of reloads the process had thousands
+    of them and had slowed to a crawl:
+
+        long-running devserver.py   2015 ms per 800-byte PNG
+        freshly started, same code    17 ms
+        plain python -m http.server   19 ms
+
+    That is ~106x, and it read as "the game takes forever to load" or, with the
+    canvas still black, as the page failing to boot entirely. It is the server,
+    not the assets: the sprites total 0.9 MB across 1,205 files, averaging 800
+    bytes each, so per-request cost is the entire story.
+
+    `daemon_threads` lets a finished connection's thread go immediately, and
+    `handle_error` below stops a client hanging up mid-file from printing a
+    traceback per abandoned request.
+    """
+
+    daemon_threads = True
+
+    def handle_error(self, request, client_address):
+        """A browser hanging up mid-response is NORMAL here, not an error.
+
+        Navigating away from a page with hundreds of images in flight aborts
+        every one of them. The default handler prints a full traceback for each,
+        which buries the 404s and errors that actually matter -- the log was
+        thousands of ConnectionAbortedError frames and nothing else.
+        """
+        exc = sys.exc_info()[1]
+        if isinstance(exc, (ConnectionAbortedError, ConnectionResetError, BrokenPipeError)):
+            return
+        super().handle_error(request, client_address)
+
+
 class NoCacheHandler(SimpleHTTPRequestHandler):
     def end_headers(self):
         self.send_header("Cache-Control", "no-store, must-revalidate")
@@ -127,4 +168,4 @@ if __name__ == "__main__":
     # pane does) is obeyed; then an explicit argv port; then the default.
     port = int(os.environ.get("PORT") or (sys.argv[1] if len(sys.argv) > 1 else 8177))
     print(f"serving with no-store + per-load module versioning on http://localhost:{port}", flush=True)
-    ThreadingHTTPServer(("", port), NoCacheHandler).serve_forever()
+    DevServer(("", port), NoCacheHandler).serve_forever()

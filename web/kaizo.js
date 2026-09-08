@@ -629,14 +629,29 @@ setInterval(() => {
 // So the worker is a production-only affordance now, and a local load also
 // TEARS DOWN whatever a previous visit installed, because unregistering only
 // on the next load would leave the first one still stale.
-const swLocal = ['localhost', '127.0.0.1', '[::1]', ''].includes(location.hostname);
-if ('serviceWorker' in navigator && !swLocal) {
+// `?nosw` TURNS IT OFF, and it has to, because the worker is CACHE-FIRST and
+// precaches './kaizo.js': edit the file, and the browser keeps running the
+// previous one with no error anywhere, which reads exactly like the page
+// failing to boot. That cost a long session. The flag is the escape hatch --
+// and it does not merely skip registration, it TEARS DOWN whatever a previous
+// load installed, because skipping alone would leave the stale worker still
+// serving this very page.
+//
+// It is opt-out rather than off-by-default on localhost so that ordinary local
+// play keeps the cache: the page fetches ~1,660 sprite frames, and without the
+// worker every reload pays for all of them again.
+//
+//     http://localhost:8178/web/kaizo.html?nosw     <- developing
+//     http://localhost:8178/web/kaizo.html          <- playing
+const swOff = params.has('nosw');
+if ('serviceWorker' in navigator && !swOff) {
   navigator.serviceWorker.register(new URL('./sw.js', import.meta.url)).catch(() => {});
 } else if ('serviceWorker' in navigator) {
   navigator.serviceWorker.getRegistrations()
     .then((rs) => Promise.all(rs.map((r) => r.unregister())))
     .then(() => caches.keys())
     .then((ks) => Promise.all(ks.filter((k) => k.startsWith('kaizoknight-')).map((k) => caches.delete(k))))
+    .then(() => console.log('[kaizo] ?nosw — service worker unregistered and its caches dropped'))
     .catch(() => {});
 }
 

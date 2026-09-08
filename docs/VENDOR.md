@@ -312,3 +312,30 @@ cue in `missing`.
 
 Port to knight-sim, prove against its 60, re-vendor.
 
+PENDING PORT-BACK (2026-09-07c): tools/devserver.py uses daemon threads and
+stops logging a traceback for every abandoned request.
+
+MEASURED, and the numbers are the point:
+
+    long-running devserver.py    2015 ms per 800-byte PNG
+    freshly started, same code     17 ms
+    plain python -m http.server    19 ms
+
+~106x, on identical code. A page here pulls ~1,660 sprite frames per load and a
+browser abandons many of them on every navigation; each abandoned one raises
+ConnectionAbortedError out of copyfile, unwinding a thread that
+ThreadingHTTPServer (daemon_threads defaults to False) keeps a handle on. After
+a few hours of reloads the process had accumulated thousands and crawled.
+
+It read as "the game takes forever to load", and with the canvas still black it
+read as the page failing to boot at all -- which is what it was mistaken for.
+The assets are not the problem: the vanilla sprites are 0.9 MB across 1,205
+files, averaging 800 bytes, so per-request cost is the entire story. At 17 ms
+over six sockets the whole set is ~5 s.
+
+daemon_threads = True lets a finished connection go, and a handle_error that
+swallows ConnectionAborted/Reset/BrokenPipe stops the log being thousands of
+tracebacks with the real 404s buried in them.
+
+Port to knight-sim, prove against its 60, re-vendor.
+
