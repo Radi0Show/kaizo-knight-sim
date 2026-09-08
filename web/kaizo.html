@@ -50,32 +50,6 @@
     image-rendering: crisp-edges;
     image-rendering: pixelated;
   }
-  /* THE KAIZO BANNER. The repo's law is that nothing invented ships
-     unlabelled, and the schedule this page runs is invented by definition —
-     so the label sits OVER the top letterbox bar, always visible, and cannot
-     be scrolled away or clicked through. The in-canvas turn readout carries
-     the KAIZO prefix too; this is the plain-language half. */
-  #kaizo-banner {
-    position: absolute;
-    top: max(6px, env(safe-area-inset-top));
-    left: 0;
-    right: 0;
-    text-align: center;
-    pointer-events: none;
-    user-select: none;
-    z-index: 5;
-  }
-  #kaizo-banner .big {
-    font-size: 22px;
-    font-weight: bold;
-    letter-spacing: 6px;
-    color: #ff4747;
-    text-shadow: 0 0 8px rgba(255, 71, 71, 0.55);
-  }
-  #kaizo-banner .sub {
-    font-size: 11px;
-    color: #b98;
-  }
   #credit {
     position: absolute;
     left: 0;
@@ -181,12 +155,7 @@
 </head>
 <body>
   <canvas id="game" width="640" height="480"></canvas>
-  <div id="kaizo-banner">
-    <div class="big">KAIZO KNIGHT</div>
-    <div class="sub">NOT the real fight &mdash; verified attack engines, invented schedule &middot;
-      <a id="back" href="https://radi0show.github.io/knight-sim/web/" style="color:#778;pointer-events:auto">real fight</a></div>
-  </div>
-  <p id="credit">Game is by Toby Fox and the Deltarune Team &middot; KAIZO schedule is fan-invented</p>
+  <p id="credit">Game is by Toby Fox and the Deltarune Team</p>
   <div id="touch">
     <div id="dpad" class="pad"></div>
     <div id="btnZ" class="btn">Z</div>

@@ -68,17 +68,13 @@ const canvas = document.getElementById('game');
 // page is indistinguishable from a page that crashed: black, silent, no
 // error anywhere. That cost a whole session of debugging, so boot now says
 // where it is, on the canvas, in plain 2D text that needs no sprite font.
-const bootCtx = canvas.getContext('2d');
+// CONSOLE ONLY. This used to paint the stage onto the canvas, which made a
+// slow load legible instead of a black screen -- but the page is meant to look
+// exactly like the vanilla one, and the vanilla one shows black while it
+// loads. The breadcrumbs stay in the log, where they cost a player nothing and
+// still say which stage a bug report died at.
 function boot(msg) {
-  try {
-    console.log('[kaizo boot] ' + msg);
-    bootCtx.setTransform(1, 0, 0, 1, 0, 0);
-    bootCtx.fillStyle = '#000';
-    bootCtx.fillRect(0, 0, canvas.width, canvas.height);
-    bootCtx.fillStyle = '#8ab';
-    bootCtx.font = '16px ui-monospace, monospace';
-    bootCtx.fillText('KAIZO KNIGHT — ' + msg, 24, 40);
-  } catch { /* a canvas we cannot touch is not worth failing boot over */ }
+  console.log('[kaizo boot] ' + msg);
 }
 boot('loading sprites…');
 
@@ -181,7 +177,22 @@ if (window.matchMedia) {
 }
 
 // ---- input (three sources OR'd, same as main.js) --------------------------
-const audio = createAudio();
+// THE MOD'S OWN SONG. Kaizo Roaring Knight ships `kaizoknight.ogg` beside the
+// mod ("custom song (optional)/"), and it is what plays over this fight, so the
+// recreation plays it rather than the vanilla knight theme.
+//
+// It lives under kaizo/assets/, which is PUBLISH-GATED in full by that
+// directory's own .gitignore -- it is EnderCat8's work, and kaizo/HANDOFF.md
+// §5-C is explicit that republishing another author's work needs their
+// permission. So the file is used locally and committed nowhere, exactly like
+// the sprite overlay. A clone without it falls back to the vanilla theme on its
+// own: an override whose file 404s leaves the cue in `missing` and the loader
+// carries on.
+const audio = createAudio({
+  overrides: {
+    mus_knight: new URL('../kaizo/assets/audio/kaizoknight.ogg', import.meta.url).href,
+  },
+});
 const keyboard = bindKeyboard(window);
 const gamepad = bindGamepad();
 const touch = bindTouch({
@@ -629,10 +640,6 @@ if ('serviceWorker' in navigator && !swLocal) {
     .catch(() => {});
 }
 
-// THE BUILD NUMBER, on the banner the page already carries, so a bug report
-// can name its build (web/version.js). knight-sim draws VERSION on its title
-// screen; this page never shows that screen, so the banner is where it goes.
-{
-  const sub = document.querySelector('#kaizo-banner .sub');
-  if (sub) sub.append(` \u00b7 v${VERSION}`);
-}
+// THE BUILD NUMBER rides the TITLE SCREEN now, exactly as knight-sim's does
+// (render/title.js draws VERSION). It used to be appended to the page banner
+// because this page had no title screen; it has one, and the banner is gone.

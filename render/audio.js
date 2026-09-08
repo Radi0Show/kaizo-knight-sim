@@ -28,7 +28,16 @@
 // Module-relative, not document-relative — same rule as render/sprites.js.
 const BASE = new URL('../assets/audio/', import.meta.url).href;
 
-export function createAudio() {
+/**
+ * @param {object} [opts]
+ * @param {Object<string,string>} [opts.overrides] - cue name -> replacement
+ *   file. A bare name resolves against the vanilla audio folder like any
+ *   manifest entry; an absolute URL (or a root-relative path) is used as it
+ *   stands, which is how a LANE ships its own audio from its own directory.
+ *   The kaizo build replaces `mus_knight` this way. Omit it and nothing about
+ *   this module changes.
+ */
+export function createAudio({ overrides } = {}) {
   /** name -> AudioBuffer, once decoded. */
   const buffers = new Map();
   /** name -> in-flight decode, so a burst of cues fetches once. */
@@ -74,6 +83,11 @@ export function createAudio() {
       } else {
         available = new Map();
       }
+      // THE LANE'S OWN CUES WIN, and they are applied here rather than at the
+      // call site so `preloadAll` below decodes the replacement instead of the
+      // file it replaces -- decoding both would cost a player a download of a
+      // song that never plays.
+      if (overrides) for (const [k, v] of Object.entries(overrides)) available.set(k, v);
       preloadAll();
     })
     .catch(() => {
@@ -126,7 +140,11 @@ export function createAudio() {
     // decodeAudioData works on a SUSPENDED context, so the preload does not
     // have to wait for the player's first keypress — only playback does.
 
-    const p = fetch(`${BASE}${available.get(name)}`)
+    // An override may carry a whole URL; a manifest entry is a bare filename
+    // under BASE. Telling them apart here keeps every other caller unchanged.
+    const file = available.get(name);
+    const url = /^(?:[a-z]+:)?\/\//i.test(file) || file.startsWith('/') ? file : `${BASE}${file}`;
+    const p = fetch(url)
       .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error('404'))))
       .then((buf) => c.decodeAudioData(buf))
       .then((decoded) => {

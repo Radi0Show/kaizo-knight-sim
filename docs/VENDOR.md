@@ -289,3 +289,26 @@ gate still reads trace OK / bullets f6757.
 
 Port to knight-sim, prove against its 60, re-vendor.
 
+PENDING PORT-BACK (2026-09-07b): render/audio.js createAudio takes CUE OVERRIDES.
+
+`createAudio()` took no arguments and resolved every cue against the vanilla
+audio folder. It now takes `{ overrides }`, a cue -> file map applied right
+after the manifest loads (so `preloadAll` decodes the replacement instead of
+the file it replaces -- decoding both would cost a player a download of a song
+that never plays), and the fetch tells an absolute URL from a bare manifest
+filename so a lane can ship audio from its own directory.
+
+Omit the option and nothing changes: knight-sim calls `createAudio()` and gets
+exactly what it got before.
+
+WHY: Kaizo Roaring Knight ships its own `kaizoknight.ogg`, and that is the song
+that plays over the fight, so the recreation plays it instead of the vanilla
+knight theme. The file lives under kaizo/assets/, publish-gated in full by that
+directory's own .gitignore -- it is EnderCat8's work and kaizo/HANDOFF.md §5-C
+requires their permission to republish -- so it is used locally and committed
+nowhere, exactly like the sprite overlay. A clone without it falls back to the
+vanilla theme on its own, because an override whose file 404s just leaves the
+cue in `missing`.
+
+Port to knight-sim, prove against its 60, re-vendor.
+
