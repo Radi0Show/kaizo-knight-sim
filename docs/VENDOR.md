@@ -339,3 +339,35 @@ tracebacks with the real 404s buried in them.
 
 Port to knight-sim, prove against its 60, re-vendor.
 
+PENDING PORT-BACK (2026-09-07d): render/audio.js STREAMS music instead of
+decoding it.
+
+`fire()` decoded every cue to an AudioBuffer. That is right for effects -- a few
+KB each, they overlap, they need sample-accurate starts -- and wrong for a song:
+decodeAudioData expands a track to raw 32-bit PCM and holds all of it, and the
+decode is a visible stall on the frame the track is cued.
+
+`fireStream()` now handles any `mus_` cue with an <audio> element routed through
+createMediaElementSource, so it stays inside the same gain graph and the music
+slider, the MASTER ceiling and stopLoop all keep working untouched. It returns
+an object presenting the three surfaces the rest of the module uses on a
+BufferSource -- stop(), playbackRate.value, addEventListener -- so play(),
+startLoop() and stopLoop() cannot tell the difference. Returning null falls back
+to the decode path, which is what happens if a browser refuses
+createMediaElementSource.
+
+MEASURED on the 4.4 MB kaizo song, with a harness that counts Audio
+constructions (note: `new Audio()` is DETACHED, so querying the document for
+<audio> finds nothing even when this works -- that cost one wrong reading):
+
+    cue returned in                     0.4 ms   (was a full decode)
+    Audio elements constructed          1, loop=true, readyState 4
+    buffered ahead                      98.2 s
+    mus_knight in decoded buffers       no, after 5 s
+
+Also: `resume` now retries any paused stream, because an <audio> element is
+refused before a user gesture exactly as the context is, and unlike the context
+nothing else was retrying it.
+
+Port to knight-sim, prove against its 60, re-vendor.
+
