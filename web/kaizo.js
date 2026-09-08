@@ -566,8 +566,29 @@ setInterval(() => {
 // './sw.js' somewhere that does not exist. The worker's cache prefix is
 // kaizoknight-, and it only ever deletes its own prefix (see web/sw.js), so
 // it cannot evict the real fight's cache on a shared origin, nor be evicted.
-if ('serviceWorker' in navigator) {
+//
+// NOT ON LOCALHOST, and this cost a whole debugging session. web/sw.js is
+// CACHE-FIRST (`caches.match(...).then((hit) => hit ?? fetch(...))`) and it
+// precaches './kaizo.js', with skipWaiting() + clients.claim() so it takes
+// over the very load that registers it. In development that means the browser
+// serves the PREVIOUS kaizo.js forever: you edit the file, the dev server
+// (tools/devserver.py, no-store, module URLs versioned per load) serves the
+// new one correctly, curl shows the new one -- and the page keeps running the
+// old one, with no error anywhere. It reads exactly like the page failing to
+// boot.
+//
+// So the worker is a production-only affordance now, and a local load also
+// TEARS DOWN whatever a previous visit installed, because unregistering only
+// on the next load would leave the first one still stale.
+const swLocal = ['localhost', '127.0.0.1', '[::1]', ''].includes(location.hostname);
+if ('serviceWorker' in navigator && !swLocal) {
   navigator.serviceWorker.register(new URL('./sw.js', import.meta.url)).catch(() => {});
+} else if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.getRegistrations()
+    .then((rs) => Promise.all(rs.map((r) => r.unregister())))
+    .then(() => caches.keys())
+    .then((ks) => Promise.all(ks.filter((k) => k.startsWith('kaizoknight-')).map((k) => caches.delete(k))))
+    .catch(() => {});
 }
 
 // THE BUILD NUMBER, on the banner the page already carries, so a bug report
