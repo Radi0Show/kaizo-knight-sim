@@ -37,6 +37,7 @@ import { WEAPONS, ARMOR, canEquip } from '../sim/equipment.js';
 import { ITEMS } from '../sim/items.js';
 import { MODES, createTitle, stepTitle } from '../sim/modes.js';
 import { drawTitle, drawGameOver, stepGameOver, makeGameOver } from '../render/title.js';
+import { drawBackground } from '../render/background.js';
 import { ATTACK_MENU } from '../sim/scenes/single.js';
 import { createTvTurnoff, stepTvTurnoff } from '../sim/tvturnoff.js';
 import { drawTvTurnoff } from '../render/draw/tvturnoff.js';
@@ -446,7 +447,18 @@ function frame(now) {
       requestAnimationFrame(frame);
       return;
     }
-    renderer.draw(state);
+    // THE FOUNTAIN ONLY, exactly as the vanilla title does it (web/main.js):
+    // reset the transform the fight's renderer leaves behind, clear, draw the
+    // background, then the menu. Calling renderer.draw(state) here instead --
+    // which is what this first did -- draws the whole FIGHT under the menu, and
+    // render/title.js's own header says why that is wrong: the party, the HP
+    // bars, the TP meter and a stray soul stay legible through the text and it
+    // reads as a pause screen. It also leaves the renderer's transform in place
+    // for everything drawn afterwards.
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, renderer.VIEW_W, renderer.VIEW_H);
+    drawBackground(ctx, state, renderer.sprites);
     drawTitle(ctx, title, renderer.sprites, ATTACK_MENU, { title: KAIZO_WORDMARK() });
     requestAnimationFrame(frame);
     return;
