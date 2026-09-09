@@ -1,4 +1,5 @@
-// THE VERSION, appended to the KAIZO banner on the page (web/kaizo.js).
+// THE VERSION, shown bottom-left of the title screen (render/title.js draws
+// it; the page banner it used to ride is gone).
 //
 // BUMP THE PATCH NUMBER ON EVERY CHANGE THAT SHIPS — a fix, a feature, a
 // tweak; if a player could notice it, it gets a number. Same discipline as
@@ -12,4 +13,4 @@
 //
 // This repo's line starts at 0.1.0 (2026-09-02, the split from knight-sim, whose
 // web line was at 1.0.13). The two numbers are unrelated on purpose.
-export const VERSION = '0.1.16';
+export const VERSION = '0.1.17';

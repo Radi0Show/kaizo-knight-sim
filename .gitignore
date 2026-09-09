@@ -58,3 +58,6 @@ node_modules/
 # clone, the same failure that once shipped DEVICE_KNIGHT as an empty
 # shell. Raw GAME DATA (game.ios, *.audiogroup, dumps) stays ignored
 # above — that is a different rule and it does not move.
+
+# Local dev-server launch config for the Claude app; not part of the repo.
+/.claude/
