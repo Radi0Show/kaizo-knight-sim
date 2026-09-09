@@ -45,6 +45,7 @@
 import { createState, stepFrame } from '../../../sim/index.js';
 import { destroy, spawn } from '../../../sim/entity.js';
 import { buildSingleAttackScene } from '../../../sim/scenes/single.js';
+import { ensureSoul } from './scaffold-soul.mjs';
 import { PARTY, ACTION_DEFEND, scrDamage } from '../../../sim/damage.js';
 import { gmlEq } from '../../../sim/gml.js';
 import { roaring2, finalSlashLine, roaringFinalCleanUp } from '../../attacks/roaring-final.js';
@@ -87,6 +88,7 @@ function assertNear(got, want, eps, label) {
 function build({ ac = 104, sideb = false, seed = 12345, invc = 0.5 } = {}) {
   const state = createState({ seed });
   buildSingleAttackScene(state, { seed, attack: 'roaring', difficulty: 0 });
+  ensureSoul(state); // the drill no longer spawns the soul at build (scaffold-soul.mjs)
   const dir = state.entities.find((x) => x.alive && x.type.name === 'practice_director');
   if (dir) destroy(dir);
   // The single scene may have launched the SIM roaring already; the kaizo

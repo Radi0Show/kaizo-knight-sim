@@ -44,6 +44,7 @@
 import { createState, stepFrame } from '../../../sim/index.js';
 import { spawn, destroy } from '../../../sim/entity.js';
 import { buildSingleAttackScene } from '../../../sim/scenes/single.js';
+import { ensureSoul } from './scaffold-soul.mjs';
 import { scrEaseOut } from '../../../sim/gml.js';
 import { HEART_RECT } from '../../../sim/masks.js';
 import {
@@ -87,6 +88,7 @@ function assertEq(got, want, label) {
 function scene({ seed = 12345, soulX = 314, soulY = 162 } = {}) {
   const state = createState({ seed });
   buildSingleAttackScene(state, { seed, attack: 'combination', difficulty: 0 });
+  ensureSoul(state); // the drill no longer spawns the soul at build (scaffold-soul.mjs)
   const dir = state.entities.find((e) => e.alive && e.type.name === 'practice_director');
   if (dir) destroy(dir);
   state.kaizo = { sideb: true, approx: [] };

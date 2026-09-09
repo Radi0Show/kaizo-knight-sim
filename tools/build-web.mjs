@@ -9,7 +9,7 @@
 //
 // This repo is ~45% comments by line, on purpose. The GML citations, the
 // `ORIGINAL BUG:` markers and the "this was tried and reverted" notes in
-// `sim/`, `kaizo/`, `render/` and `input/` are the most valuable thing in the
+// `sim/`, `render/` and `input/` are the most valuable thing in the
 // project — CLAUDE.md asks for them explicitly, and every one of them is a
 // fact about the real game that was expensive to learn. They must NEVER be
 // deleted from source.
@@ -86,22 +86,21 @@ import { stripByExt } from './strip-comments.mjs';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(HERE, '..');
 
-// THE SERVED SET. `web/` is the two pages and their entry modules; the rest is
-// everything those modules reach. `kaizo/` is in the list because `kaizo.html`
-// is a real second page — `web/kaizo.js` imports `../kaizo/scenes/kaizo-fight.js`
-// and loads sprites from `../kaizo/assets/sprites/` — so a build without it
-// would 404 half the site. Directory layout is mirrored exactly, because every
+// THE SERVED SET. `web/` is the page and its entry module; the rest is
+// everything that module reaches — the same five directories the hub's
+// vendor script copies. Directory layout is mirrored exactly, because every
 // import in here is relative (`../sim/`, `../../sim/`) and flattening would
-// break all of them.
-const SERVED = ['web', 'sim', 'render', 'input', 'assets', 'kaizo'];
+// break all of them. (The kaizo recreation used to be a second page here; it
+// lives in its own repo since 2026-09-02 and builds its own tree.)
+const SERVED = ['web', 'sim', 'render', 'input', 'assets'];
 
 // Text a browser is handed and a human can read in DevTools. Everything else —
 // sprites, audio, fonts, .json data — is copied byte for byte.
 const STRIP_EXT = new Set(['.js', '.mjs', '.css', '.html', '.htm']);
 
-// Never descend into these. `tools/` (the one inside `kaizo/`) is verification
-// machinery that no browser ever requests; `oracle/` is captured ground truth
-// from the real game, where a `//` is content and not a comment.
+// Never descend into these. `tools/` is verification machinery that no
+// browser ever requests; `oracle/` is captured ground truth from the real
+// game, where a `//` is content and not a comment.
 const SKIP_DIRS = new Set(['tools', 'oracle', 'node_modules', '.git', 'traces']);
 
 // Notes and dotfiles are not served either, and shipping them just leaks the
@@ -261,12 +260,11 @@ const failures = [];
 // `_site/` IS THE DIRECTORY SOMEONE WOULD UPLOAD. So it has to answer the same
 // question the repo already answers: is this file allowed to leave the machine?
 //
-// It is, and the answer is already written down — in git. `kaizo/assets/.gitignore`
-// gates all 446 files under `kaizo/assets/sprites/`: EnderCat8's own art for
-// Kaizo Roaring Knight, which per `kaizo/HANDOFF.md` §5-C may not be published
-// without their permission, plus the manifest and the masks.json derived from
-// it. `kaizo/tools/checks/check-sprites.mjs` calls that a PUBLISH GATE and
-// tests it. A build that mirrors the tree blindly walks straight through it.
+// It is, and the answer is already written down — in git. `.gitignore` is
+// what keeps extracted game data and any art that may not be redistributed
+// out of the public tree (the kaizo lane's 446 gated mod sprites were the
+// case that made this a gate). A build that mirrors the tree blindly walks
+// straight through it.
 //
 // So the gate is consulted rather than reimplemented: git is asked, once, which
 // of the candidate files it refuses to track, and those are withheld. Encoding
@@ -276,7 +274,7 @@ const failures = [];
 // Withholding these is not a degradation. Those files are gitignored, so a
 // fresh clone does not have them either, and the renderer's documented fallback
 // covers it: "any entity whose sprite is missing draws from its COLLISION MASK
-// instead" (CLAUDE.md, Sprites). The kaizo page still runs.
+// instead" (CLAUDE.md, Sprites).
 //
 // If git is not available the build STOPS rather than guessing. A publish gate
 // that fails open is not a gate.
@@ -294,8 +292,8 @@ function gatedSet(relPaths) {
     // exit 1 means "nothing matched", which is a legitimate empty answer.
     if (err.status === 1) return new Set(String(err.stdout || '').split('\n').map((s) => s.trim()).filter(Boolean));
     console.error('build-web: could not consult git for the publish gate.');
-    console.error('  kaizo/assets/.gitignore gates another author\'s art (HANDOFF §5-C);');
-    console.error('  refusing to build a tree that might carry it. Install git, or');
+    console.error('  .gitignore is what keeps unpublishable files out of the tree;');
+    console.error('  refusing to build one that might carry them. Install git, or');
     console.error('  build with an explicit --out and review the result by hand.');
     console.error(`  git said: ${String(err.stderr || err.message).trim().split('\n')[0]}`);
     process.exit(3);
@@ -420,8 +418,8 @@ fs.rmSync(TMP, { recursive: true, force: true });
 //
 // THE ONE FAILURE MODE A SERVED SET CAN HAVE. `node --check` proves each file
 // still parses; it says nothing about whether the file NEXT to it got copied.
-// This build deliberately leaves things out — `kaizo/tools/`, `*.md`, dotfiles,
-// the 446 gated sprites — and every omission is a chance to have cut something
+// This build deliberately leaves things out — `*.md`, dotfiles, whatever git
+// ignores — and every omission is a chance to have cut something
 // a module actually imports. In the browser that is a 404 and a blank page, and
 // it would not show up in any suite here, because the suites run against the
 // source tree where the file is present.

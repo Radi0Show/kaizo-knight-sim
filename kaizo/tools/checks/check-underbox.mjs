@@ -25,6 +25,7 @@
 import { createState, stepFrame } from '../../../sim/index.js';
 import { spawn, destroy } from '../../../sim/entity.js';
 import { buildSingleAttackScene } from '../../../sim/scenes/single.js';
+import { ensureSoul } from './scaffold-soul.mjs';
 import { gmlCreate, gmlIrandom, gmlChoose } from '../../../sim/rng.js';
 import { gmlRound } from '../../../sim/gml.js';
 import { HEART_RECT } from '../../../sim/masks.js';
@@ -64,6 +65,7 @@ function near(a, b, eps = 1e-3) {
 function run(ac, { sideb = false, seed = 12345, frames = 420, dcDamage } = {}) {
   const state = createState({ seed });
   buildSingleAttackScene(state, { seed, attack: 'underbox', difficulty: 0 });
+  ensureSoul(state); // the drill no longer spawns the soul at build (scaffold-soul.mjs)
   const dir = state.entities.find((e) => e.alive && e.type.name === 'practice_director');
   if (dir) destroy(dir);
   state.kaizo = { sideb };
@@ -328,6 +330,7 @@ console.log('chained teardown (Alarm_1 turn_type arms)');
 function runChained(turnType, { nextUp = -999, seed = 12345, frames = 520 } = {}) {
   const state = createState({ seed });
   buildSingleAttackScene(state, { seed, attack: 'underbox', difficulty: 0 });
+  ensureSoul(state); // the drill no longer spawns the soul at build (scaffold-soul.mjs)
   const dir = state.entities.find((e) => e.alive && e.type.name === 'practice_director');
   if (dir) destroy(dir);
   state.kaizo = { sideb: false };
@@ -374,6 +377,7 @@ function runChained(turnType, { nextUp = -999, seed = 12345, frames = 520 } = {}
     // chained runner does. Cheap, and it keeps `run` untouched.
     const st = createState({ seed: 12345 });
     buildSingleAttackScene(st, { seed: 12345, attack: 'underbox', difficulty: 0 });
+    ensureSoul(st); // the drill no longer spawns the soul at build (scaffold-soul.mjs)
     const d = st.entities.find((e) => e.alive && e.type.name === 'practice_director');
     if (d) destroy(d);
     st.kaizo = { sideb: false };

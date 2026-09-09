@@ -41,6 +41,7 @@
 import { createState, stepFrame } from '../../../sim/index.js';
 import { spawn, destroy } from '../../../sim/entity.js';
 import { buildSingleAttackScene } from '../../../sim/scenes/single.js';
+import { ensureSoul } from './scaffold-soul.mjs';
 import { HEART_SMALL_MASK } from '../../../sim/masks.js';
 import { trackingSwordsManager } from '../../../sim/attacks/tracking-swords.js';
 import {
@@ -88,6 +89,7 @@ function assertEq(got, want, label) {
 function scene(difficulty, { ac = 13, sideb = false, seed = 12345 } = {}) {
   const state = createState({ seed });
   buildSingleAttackScene(state, { seed, attack: 'tunnel', difficulty: 0 });
+  ensureSoul(state); // the drill no longer spawns the soul at build (scaffold-soul.mjs)
   const dir = state.entities.find((e) => e.alive && e.type.name === 'practice_director');
   if (dir) destroy(dir);
   state.kaizo = { sideb };
@@ -196,6 +198,7 @@ console.log('D. Create: myattackchoice 101 skips the wind-up');
   function bareCreate(ac) {
     const state = createState({ seed: 12345 });
     buildSingleAttackScene(state, { seed: 12345, attack: 'tunnel', difficulty: 0 });
+    ensureSoul(state); // the drill no longer spawns the soul at build (scaffold-soul.mjs)
     const dir = state.entities.find((e) => e.alive && e.type.name === 'practice_director');
     if (dir) destroy(dir);
     state.kaizo = {};

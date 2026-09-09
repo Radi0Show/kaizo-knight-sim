@@ -25,16 +25,18 @@
 
 import { spawn } from '../entity.js';
 import { cue } from '../audio.js';
-import { scrMovetowards, scrEaseOut, lerp } from '../gml.js';
+import { lerp } from '../gml.js';
 import { gmlRandomRange, gmlChoose, gmlRandom } from '../rng.js';
 import { pointingStar } from './pointing-star.js';
 import { heartFollower } from './pointing-starchild.js';
 
 export const starsController = {
   name: 'obj_dbulletcontroller',
-  // See pointingCone's stepOrder note. The controller precedes the cone,
-  // which precedes the heart: [-2, -1, 0].
-  stepOrder: -2,
+  // See pointingCone's stepOrder note. The CONE precedes the controller,
+  // which precedes the heart: [cone -2, dc -1, heart 0]. This was [-2, -1]
+  // the other way round, and two launch-frame pad draws in fight.js were
+  // paying for the inversion at every star — see the note there.
+  stepOrder: -1,
 
   create(e, state) {
     e.btimer = 0;
@@ -43,6 +45,27 @@ export const starsController = {
     e.init = 2;
     e.size = 0;
     e.special = 0;
+
+    // `delay = 0; subdelay = 0;` — the type-98 init block
+    // (obj_dbulletcontroller Step_0 l.1980-1981), the same block whose
+    // `global.turntimer += 30` is paid in step() below. The starchild stagger
+    // chain (`with (obj_dbulletcontroller) { other.delay += delay; ... }`,
+    // obj_knight_pointing_starchild Step) lives on the CONTROLLER in the
+    // game, so every fresh controller — every Stars turn — starts it over at
+    // 25. The sim keeps the pair on state (pointing-starchild.js
+    // chainChildDelay), and nothing reset it between turns: the second
+    // difficulty-2 Stars turn began where the first ended (58, then 108,
+    // 162, 208...), the first homing shard flipped later each turn (launch
+    // +180, +237, +289, +335, +388 with turntimer already negative) and from
+    // the sixth turn nothing homed at all — "the homing stars stop working
+    // once you get past the original phase 3 stars". Measured in the single
+    // drill over eight runs on one state; an R-restart "fixed" it because
+    // web/main.js reset() builds a fresh state. The whole-fight diff could
+    // never see it: tools/fullfight-trace.mjs --shards replays every homing
+    // delay from the recording (which restarts at 25 on each of verify37's
+    // four d2 Stars turns). Byte-identical on all six recorded fights.
+    state.childDelay = 0;
+    state.childSubdelay = 0;
 
     // obj_heart_follower — the soft-following ghost the homing starchildren
     // aim at (they lead the soul rather than tracking it exactly). The type-98
@@ -92,23 +115,19 @@ export const starsController = {
       );
       if (!cone) return;
 
-      // THE ANGLE THE CONE WILL HAVE THIS FRAME, not the one it has. Two
-      // exact measurements pin an ordering the per-instance model cannot
-      // produce: the first star's special is us[39] of the anchored stream
-      // TO THE LAST DIGIT only if dir used angle 56.25 — the value the cone
-      // reaches during the SAME frame — while size sits at us[38], which
-      // requires the controller's rolls to precede the cone's two drag
-      // draws. So the game's dc reads a current-frame angle while drawing
-      // first. Reproduced by advancing a COPY of the cone's own
-      // deterministic ramp (movetowards 0.025, ease_out 6) — no state is
-      // touched, no draws consumed; the cone still runs its real update
-      // afterwards. Marked as an ordering reconciliation: the underlying
-      // event scheduling is not fully understood, the two measurements are.
-      let coneAngle = cone.angle;
-      if ((cone.angle ?? 0) < (cone.target_angle ?? 60) && (cone.con ?? 0) >= 2) {
-        const nextLerp = scrMovetowards(cone.angle_lerp ?? 0, 1, 0.025);
-        coneAngle = lerp(0, cone.target_angle ?? 60, scrEaseOut(nextLerp, 6));
-      }
+      // THE CONE'S ANGLE AS IT STANDS — no look-ahead. This used to advance a
+      // private copy of the cone's ramp (movetowards 0.025, ease_out 6),
+      // because "the first star's special is us[39] to the last digit only
+      // if dir used angle 56.25, the value the cone reaches during the SAME
+      // frame". That was an inverted step order seen from the other side:
+      // the cone steps BEFORE this controller (it is the younger instance —
+      // the controller creates it a frame after its own birth, and the
+      // runner walks the step phase newest-first), so by the time this runs
+      // the cone genuinely has this frame's angle. The kaizo lane measured
+      // it three ways (its ledger, "The Starstorm pads were an inverted step
+      // order"); here the receipt is the whole-fight diff staying byte-exact
+      // with the look-ahead, the pads and the old order all gone together.
+      const coneAngle = cone.angle;
 
       // DIFFICULTY 2 RE-ROLLS THE BURST AXIS PER STAR, before the star is
       // created (the choose sits directly above `scr_childbullet` in the

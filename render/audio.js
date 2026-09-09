@@ -379,6 +379,15 @@ export function createAudio({ overrides } = {}) {
   /** Every loop off — the driver calls this on reset and on pause. */
   function stopAll() {
     for (const name of [...loops.keys()]) stopLoop(name);
+    // AND THE ONES STILL DECODING. A loop cued before its buffer landed sits
+    // in `wantedLoops` and starts when the decode does — right for a fight,
+    // wrong for one that has just been LEFT: exit a run (Escape, Start, a
+    // held R) inside mus_knight's first-load window and the title screen
+    // began playing the fight's music a beat later. Forgetting the wish
+    // here is what makes stopAll mean everything, not just the sounding.
+    // (The music streams now, so the window is the stream's own start-up
+    // rather than a decode; the wish is still recorded and still cleared.)
+    wantedLoops.clear();
   }
 
   return {

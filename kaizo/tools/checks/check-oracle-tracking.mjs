@@ -170,6 +170,7 @@ import { pathToFileURL } from 'node:url';
 import { createState, stepFrame } from '../../../sim/index.js';
 import { spawn, destroy } from '../../../sim/entity.js';
 import { buildSingleAttackScene } from '../../../sim/scenes/single.js';
+import { ensureSoul } from './scaffold-soul.mjs';
 // THE KAIZO MODULE, not the vanilla one. kaizo/attacks/diagonal-bullets.js is
 // the copy carrying the mod's type-152 deltas; sim/attacks/diagonal-bullets.js
 // is the v1.03 original and stays the vanilla suite's subject. See
@@ -304,6 +305,7 @@ function seqPathFor(tracePath) {
 function bench(seed, sideb = false) {
   const st = createState({ seed, traceBulletSlots: 0 });
   buildSingleAttackScene(st, { seed, attack: 'rotating-slash', difficulty: 0 });
+  ensureSoul(st); // the drill no longer spawns the soul at build (scaffold-soul.mjs)
   const dir = st.entities.find((e) => e.alive && e.type.name === 'practice_director');
   if (dir) destroy(dir);
   st.kaizo = {

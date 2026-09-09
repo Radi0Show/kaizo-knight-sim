@@ -166,6 +166,7 @@ import { pathToFileURL } from 'node:url';
 import { createState, stepFrame } from '../../../sim/index.js';
 import { destroy } from '../../../sim/entity.js';
 import { buildSingleAttackScene } from '../../../sim/scenes/single.js';
+import { ensureSoul } from './scaffold-soul.mjs';
 import { real } from '../../../sim/trace.js';
 import { VC_TABLE, VD_TABLE } from '../../versions/vc-script.js';
 import { launchVCAttack, openVCArena, vcTurnLength, vcSelfEnding } from '../../scenes/kaizo-mod-launcher.js';
@@ -264,6 +265,7 @@ function probeLeg1() {
   if (!row) return { shipped: false, threw: 'atk_Frenzy1 missing from VC_TABLE' };
   const state = createState({ seed: 1, traceBulletSlots: 0 });
   buildSingleAttackScene(state, { seed: 1, attack: 'underbox', difficulty: 0 });
+  ensureSoul(state); // the drill no longer spawns the soul at build (scaffold-soul.mjs)
   const dir = state.entities.find((e) => e.alive && e.type.name === 'practice_director');
   if (dir) destroy(dir);
   state.kaizo = {
@@ -522,6 +524,7 @@ const tableFor = (sideb) => {
 function runSim(row, { seed = 20260810, frames = 600, sideb = false } = {}) {
   const state = createState({ seed, traceBulletSlots: 0 });
   buildSingleAttackScene(state, { seed, attack: 'underbox', difficulty: 0 });
+  ensureSoul(state); // the drill no longer spawns the soul at build (scaffold-soul.mjs)
   const dir = state.entities.find((e) => e.alive && e.type.name === 'practice_director');
   if (dir) destroy(dir);
   state.kaizo = {

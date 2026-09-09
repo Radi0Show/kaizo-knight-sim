@@ -15,7 +15,7 @@ import { loadFont, drawText, textWidth, textHeight } from './font.js';
 import { VERSION } from '../web/version.js';
 import {
   MODES, SETTINGS_PAGES, TITLE_EXTRAS, CREDITS, ITEM_PICKER, GEAR_PAGES,
-  pocketOf, previewStats,
+  pocketOf, previewStats, wornBy,
 } from '../sim/modes.js';
 import { ITEMS, INVENTORY_SIZE } from '../sim/items.js';
 import { difficultyBlurb } from '../sim/scenes/single.js';
@@ -38,7 +38,7 @@ function centred(ctx, font, text, y, color, scale = 1) {
  * Centre ONE line built from several coloured segments.
  *
  * The whole line is measured first and the segments are laid end to end from
- * that origin -- calling `centred()` once per segment would centre each of
+ * that origin — calling `centred()` once per segment would centre each of
  * them independently and stack them on top of each other.
  *
  * It exists so a lane can colour part of the wordmark: the kaizo build paints
@@ -187,9 +187,11 @@ export function drawTitle(ctx, title, sprites, attacks, opts = {}) {
     }
   }
 
-  centred(ctx, font, title.pickingAttack
-    ? 'Z  choose      X  back'
-    : 'arrows  move      Z  choose', 448, DIM, 0.75);
+  // NO KEY HINTS. The footer used to say "arrows move  Z choose", then grew
+  // a second line for R / Escape / Start; both are gone by request — the
+  // screen is the game's own menu and nothing else. The controls live in
+  // PLAYTEST.md, and the version below is the one line of small print kept,
+  // because a bug report needs it.
 
   // The build number, bottom-left. Small and dim: it is for bug reports
   // ("which version are you on?"), not decoration — the replay-token
@@ -216,13 +218,10 @@ function drawSettings(ctx, title, sprites, font) {
     for (let i = 0; i < SETTINGS_PAGES.length; i++) {
       const y = 170 + i * 40;
       const on = i === s.cursor;
-      // UNUSED IS NO LONGER DIM. It was drawn grey because it was inert —
-      // the menu convention for "this does nothing" — and it now opens the
-      // KAIZO fight, so leaving it grey would read as disabled to the one
-      // player in a hundred who tries it anyway.
+      const unused = SETTINGS_PAGES[i].id === 'unused';
       if (on && heart) drawSpriteExt(ctx, heart, 0, 160 + bob, y + 4, 1, 1, 0, null, 1);
       drawText(ctx, font, SETTINGS_PAGES[i].name, 190, y,
-        { color: rgb(on ? HILITE : c_white) });
+        { color: rgb(on ? HILITE : (unused ? DIM : c_white)) });
     }
     // SHARE SETUP's confirmation, on the row itself rather than as a popup —
     // `s.shared` is a frame countdown the step sets, so it clears itself even
@@ -389,6 +388,11 @@ function drawSettings(ctx, title, sprites, font) {
     const rows = [
       { name: 'SCREEN SIZE', value: title.scaling === 'fit' ? 'FULL' : 'SMALL' },
       { name: 'SCREEN SHAKE', value: title.shake ? 'ON' : 'OFF' },
+      // The on-screen Z/X layout (sim/modes.js `swapZX`), shown as the order
+      // the two buttons sit in. Drawn on every device — the page has no way
+      // to know about the pointer and a row that vanished would be stranger
+      // than one that does nothing on a desktop.
+      { name: 'TOUCH BUTTONS', value: title.swapZX ? 'X / Z' : 'Z / X' },
     ];
     for (let i = 0; i < rows.length; i++) {
       const y = 190 + i * 60;
@@ -493,13 +497,27 @@ function drawSettings(ctx, title, sprites, font) {
       const name = id === 0 ? '(Nothing)' : table[id]?.name ?? '?';
       const ok = id === 0 || canEquip(kind, id, eq.char);
       if (on && heart) drawSpriteExt(ctx, heart, 0, 370 + bob, y + 4, 1, 1, 0, null, 1);
-      // `min(1, 200 / width)` — the item menu's squeeze, never a clip.
+      // WHO HAS IT ON, as DIM initials right of the name — K, S, R for the
+      // three slots. Worn pieces used to leave the list entirely (the "take
+      // out already equipped items" request), which also made the
+      // ShadowMantle vanish for everyone; the list is whole again and says
+      // who wears what instead, so a second LodeStone reads as a choice.
+      // Right-aligned inside the box; the name yields to it.
+      const tag = wornBy(kind, id, title.gear).map((c) => 'KSR'[c]).join(' ');
+      const tagW = tag ? textWidth(font, tag) * 0.7 : 0;
+      const tagX = 612 - tagW;
+      // `min(1, 200 / width)` — the item menu's squeeze, never a clip; the
+      // room is what is left before the tag.
       const w = textWidth(font, name) * 0.85;
-      const squeeze = Math.min(1, 200 / w);
+      const room = tag ? Math.min(200, tagX - 8 - 400) : 200;
+      const squeeze = Math.min(1, room / w);
       drawText(ctx, font, name, 400, y, {
         color: rgb(on ? HILITE : (ok ? c_white : DIM)),
         xscale: 0.85 * squeeze, yscale: 0.85,
       });
+      if (tag) {
+        drawText(ctx, font, tag, tagX, y + 2, { color: rgb(DIM), xscale: 0.7, yscale: 0.7 });
+      }
     }
     // The selected piece's stats, under the list.
     const selId = pocket[eq.pocket];

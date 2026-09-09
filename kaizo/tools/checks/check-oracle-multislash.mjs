@@ -138,6 +138,7 @@ import { createState, stepFrame } from '../../../sim/index.js';
 import { destroy } from '../../../sim/entity.js';
 import { settleBox } from '../../../sim/battlebox.js';
 import { buildSingleAttackScene } from '../../../sim/scenes/single.js';
+import { ensureSoul } from './scaffold-soul.mjs';
 import { real } from '../../../sim/trace.js';
 import { VC_TABLE, VD_TABLE } from '../../versions/vc-script.js';
 import {
@@ -256,6 +257,7 @@ function ledgerFor(seq, entry) {
 function bench(seed, sideb) {
   const st = createState({ seed, traceBulletSlots: 0 });
   buildSingleAttackScene(st, { seed, attack: 'rotating', difficulty: 0 });
+  ensureSoul(st); // the drill no longer spawns the soul at build (scaffold-soul.mjs)
   const dir = st.entities.find((e) => e.alive && e.type.name === 'practice_director');
   if (dir) destroy(dir);
   st.kaizo = {

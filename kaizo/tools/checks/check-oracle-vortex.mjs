@@ -154,6 +154,7 @@ import { createState, stepFrame } from '../../../sim/index.js';
 import { destroy } from '../../../sim/entity.js';
 import { real } from '../../../sim/trace.js';
 import { buildSingleAttackScene } from '../../../sim/scenes/single.js';
+import { ensureSoul } from './scaffold-soul.mjs';
 import { VC_TABLE } from '../../versions/vc-script.js';
 import {
   launchVCAttack, openVCArena, vcTurnLength, vcMoveheartDest, vcSelfEnding } from '../../scenes/kaizo-mod-launcher.js';
@@ -343,6 +344,7 @@ function drive(id, frames, seed = SEED) {
   const row = rowById(id);
   const st = createState({ seed, traceBulletSlots: 0 });
   buildSingleAttackScene(st, { seed, attack: 'rotating-slash', difficulty: 0 });
+  ensureSoul(st); // the drill no longer spawns the soul at build (scaffold-soul.mjs)
   // The single-attack drill's own director would relaunch on its own clock.
   const dir = st.entities.find((e) => e.alive && e.type.name === 'practice_director');
   if (dir) destroy(dir);
