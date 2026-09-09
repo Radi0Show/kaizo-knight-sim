@@ -73,6 +73,7 @@ import { resetTensionBar } from '../render/tensionbar.js';
 import { KAIZO_DRAW_OVERRIDES } from '../kaizo/render/index.js';
 
 // The label reaches the console too, for anyone reading a bug report's log.
+// The page note; the running version's own note follows once it is known (below).
 console.log(KAIZO_NOTE);
 
 const canvas = document.getElementById('game');
@@ -295,17 +296,20 @@ const params = new URLSearchParams(location.search);
 // THE SCENE. main.js chooses here between the full fight and one attack on
 // repeat (`?mode=practice&attack=<id>&difficulty=<n>`); this page has exactly
 // one scene, the kaizo fight, and `?v=` picks which KAIZO_VERSIONS entry
-// builds it (registry in kaizo-fight.js; unknown -> A):
-//   A = the invented remix; C = the Kaizo Roaring Knight v2.3.3 recreation
-//   (WIP, approximations ledgered); D = its B-Side (Weird Route).
+// builds it (registry in kaizo-fight.js; unknown -> C):
+//   C = the Kaizo Roaring Knight v2.3.3 recreation — THE DEFAULT since
+//   2026-09-08 (it used to be A, the invented remix over vanilla attacks,
+//   which is why "most attacks that should appear don't appear at all");
+//   D = its B-Side (the Weird Route, Kris & Noelle); A = the old remix.
 // `?mode=` still skips the title the way main.js's does (below); `practice`
 // is refused, for the reason the title loop gives at SINGLE.
-const versionId = KAIZO_VERSIONS[(params.get('v') ?? 'A').toUpperCase()]
-  ? (params.get('v') ?? 'A').toUpperCase()
-  : 'A';
+const versionId = KAIZO_VERSIONS[(params.get('v') ?? 'C').toUpperCase()]
+  ? (params.get('v') ?? 'C').toUpperCase()
+  : 'C';
 // The log names the running version, so a bug report's console is
 // self-identifying (the page banner that used to carry it is gone).
 boot(`version ${versionId} — ${KAIZO_VERSIONS[versionId].name}`);
+if (KAIZO_VERSIONS[versionId].note) console.log(KAIZO_VERSIONS[versionId].note);
 
 function build(st) {
   buildKaizoScene(st, { version: versionId });

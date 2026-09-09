@@ -20,8 +20,10 @@ import { createKaizoHeroes } from '../party/heroes.js';
 import { VC_TABLE, VD_TABLE, VC_KNIGHT } from '../versions/vc-script.js';
 
 export const KAIZO_NOTE =
-  'KAIZO KNIGHT — a deliberately unfair remix. NOT the real fight. '
-  + 'Verified attack engines, invented schedule.';
+  'KAIZO KNIGHT — a recreation of EnderCat8\'s "Kaizo Roaring Knight" mod '
+  + '(v2.3.3): its schedule, attacks and party, diffed frame by frame against '
+  + 'recordings of the mod. Not the real fight, not our design; every '
+  + 'approximation is ledgered.';
 
 /**
  * DRAFT schedule, version A ("KAIZO: AUTHENTIC") — see HANDOFF.md §5.
@@ -69,7 +71,18 @@ export const KAIZO_TABLE = {
 
 /** Version registry — the shape multiple Kaizo variants hang off (HANDOFF §5). */
 export const KAIZO_VERSIONS = {
-  A: { name: 'KAIZO: AUTHENTIC', table: KAIZO_TABLE, invented: 'schedule only' },
+  // V-A — the ORIGINAL invented remix (vanilla attacks on an invented
+  // schedule). It was the page's default until 2026-09-08, which is why
+  // "most attacks that should appear don't appear at all": the mod's own
+  // attacks live in V-C. Kept reachable at ?v=A; not the default, not the
+  // recreation, and its note says so.
+  A: {
+    name: 'KAIZO: AUTHENTIC (the invented remix — NOT the mod)',
+    table: KAIZO_TABLE,
+    invented: 'schedule only',
+    note: 'KAIZO: AUTHENTIC — the original invented remix: vanilla attacks on an '
+      + 'invented schedule. Not the mod; the recreation is ?v=C.',
+  },
   // B: { name: 'KAIZO: B-SIDE', ... }   — invented/revamped content, later.
   //
   // V-C — the ORACLE lane (HANDOFF §5-C): a recreation of EnderCat8's
@@ -80,7 +93,7 @@ export const KAIZO_VERSIONS = {
   // header. Attacks at not-yet-translated difficulty branches run
   // APPROXIMATED and ledgered in state.kaizo.approx.
   C: {
-    name: 'KAIZO: ORACLE (Kaizo Roaring Knight v2.3.3 recreation, WIP)',
+    name: 'KAIZO ROARING KNIGHT v2.3.3 — the recreation (the page\'s default)',
     table: VC_TABLE,
     hooks: () => vcHooks({ sideb: false }),
     knight: VC_KNIGHT,
@@ -196,7 +209,9 @@ export function buildKaizoScene(state, { version = 'A' } = {}) {
 
   state.kaizo = {
     version,
-    note: KAIZO_NOTE,
+    // Per version: the remix says it is the remix; the recreations carry
+    // the page's note.
+    note: v.note ?? KAIZO_NOTE,
     table: v.table,
     scheduleActive: true,
     launched: [],
