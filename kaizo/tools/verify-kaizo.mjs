@@ -659,8 +659,16 @@ if (KV.C) {
   if (existsSync(checkDir)) {
     const checks = readdirSync(checkDir).filter((f) => /^check-.*\.mjs$/.test(f)).sort();
     console.log('');
+    // REPORTED BY THEIR OWN BLOCK FURTHER DOWN, so this loop must not run
+    // them as well: each replays thousands of frames against a recording,
+    // and the generic line below ("not wired into the launcher yet") is the
+    // wrong reason for them anyway — they are unenforced because they are
+    // RED against the mod, which is a different and louder fact.
+    const REPORTED_BELOW = new Set(['check-oracle-roaringdelta']);
+
     for (const file of checks) {
       const name = file.replace(/\.mjs$/, '');
+      if (REPORTED_BELOW.has(name)) continue;
       let passed = true;
       try {
         execFileSync(process.execPath, [join(checkDir, file)], { stdio: 'pipe' });
@@ -699,6 +707,58 @@ if (KV.C) {
       ok(passed, 'sabotage-oracle-schedule (the oracle check can actually fail)');
     } else {
       ok(false, 'sabotage-oracle-schedule.mjs is missing — check-oracle-schedule is unguarded');
+    }
+
+    // ── check-oracle-roaringdelta — REPORTED, NOT ENFORCED, and RED ─────────
+    //
+    // The roar's finale held frame-for-frame against MODE 1 attack-lock
+    // recordings (kaizo-mod/locks/). It is NOT in WIRED because it FAILS
+    // today and the failure is the point: it is the first thing that has ever
+    // held atk_RoaringDelta's finale against the mod past its sixth volley,
+    // and it found a real fault on all five locked launches of the
+    // 2026-09-09 recordings. Wiring it into the enforced set would redden the
+    // gate for a defect the gate cannot fix; hiding it would lose the only
+    // measurement of the roar there is. So it prints, loudly, like the
+    // whole-fight gate above.
+    //
+    // ITS SABOTAGE IS REPORTED TOO, AND THAT IS NOT A DODGE — it is what the
+    // harness can mean today. `--sabotage` injects eleven corruptions per
+    // recording and demands the finding land ON THE CORRUPTED CELL, and this
+    // check reports only the FIRST divergence per group, so a REAL divergence
+    // earlier in the same group masks the injected one. Measured 2026-09-09:
+    // 7 of 11 caught cell-exact; the four misses are each the real fault
+    // reported instead (roar timer @f470 masked by chargeuptimer @f469,
+    // slash-lines l0_x @f1487 masked by `lines` at the same frame, B-Side
+    // clock @f454 masked by @f453), plus the dropped-star case, whose index
+    // expectation is too precise: every star shares an object name, so a
+    // deleted row only shows up where a DIFFERENT object next appears (#8,
+    // not #2). So the differ demonstrably fails when the data changes; the
+    // cell-exact contract is what has to wait.
+    //
+    // Flip BOTH to ok(...) in the same commit that makes the check byte-exact.
+    const roarCheck = join(checkDir, 'check-oracle-roaringdelta.mjs');
+    if (existsSync(roarCheck)) {
+      let rdPassed = true;
+      try {
+        execFileSync(process.execPath, [roarCheck, '--quiet'], { stdio: 'pipe' });
+      } catch {
+        rdPassed = false;
+      }
+      console.log(`  ${rdPassed ? '--  ' : 'WIP '} check-oracle-roaringdelta: `
+        + `${rdPassed ? 'skipping or passing' : 'FAILING'} (not enforced — the `
+        + "finale runs one frame late from the roar's C+214; see the ledger)");
+
+      let rdSab = true;
+      try {
+        execFileSync(process.execPath, [roarCheck, '--sabotage'], { stdio: 'pipe' });
+      } catch {
+        rdSab = false;
+      }
+      console.log(`  ${rdSab ? '--  ' : 'WIP '} check-oracle-roaringdelta --sabotage: `
+        + `${rdSab ? 'every case caught at its cell' : 'FAILING'} (not enforced — `
+        + 'the real divergences mask the injected ones; see the note above)');
+    } else {
+      ok(false, 'check-oracle-roaringdelta.mjs is missing — the roar is held against nothing');
     }
 
     // THE OTHER TEN. sabotage-oracle-schedule guards one of the wired oracle

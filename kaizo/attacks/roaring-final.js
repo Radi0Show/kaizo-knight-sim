@@ -221,6 +221,25 @@ export const roaring2 = {
   name: 'obj_knight_roaring2',
 
   create(e, state) {
+    // `scr_darksize();` — Create_0 LINE 1, and it is the whole of that
+    // script: `inst.image_xscale = 2; inst.image_yscale = 2;`
+    // (gml_GlobalScript_scr_darksize.gml). So this instance is scale 2 from
+    // the instant it exists, before any Step of its own or anyone else's.
+    //
+    // MEASURED: the recorded seq's creation row for obj_knight_roaring2 is
+    // xscale/yscale 2 on all five locked launches of the 2026-09-09
+    // recordings (A and B side), and this module carried the assignment in
+    // its STEP instead, so the birth frame read the engine default 1 —
+    // check-oracle-roaringdelta's first CREATION VALUES divergence. Nothing
+    // in the finale reads the phantom's own scale (it is drawn from
+    // fake_x/fake_y), but its `sprite_width` does, and the step re-assert
+    // this replaces had no line behind it in either dump: the mod's Step
+    // writes image_xscale only inside `with` blocks aimed at the arena and
+    // the stars (Step_0:39-63, 163-164 — `other.timer` there is this
+    // instance).
+    e.image_xscale = 2;
+    e.image_yscale = 2;
+
     // Create: image_speed = 0. The knight's frames are driven by
     // knight_sprite_speed instead, so leaving the default 1 here made the
     // engine walk image_index underneath that as well.
@@ -576,8 +595,8 @@ export const roaring2 = {
     //
     // The renderer already reads `knight_sprite` directly for the scanline
     // rows (drawKnightRows), so nothing needed it copied here.
-    e.image_xscale = 2;
-    e.image_yscale = 2;
+    // (scr_darksize's scale is set in Create, where the GML has it — see the
+    // note there. A per-frame re-assert lived here with no line behind it.)
 
     // THE KNIGHT HIDES HIMSELF. obj_knight_roaring2 never touches his
     // image_alpha — his own Draw does it, at the end of the con-2 burn-out
