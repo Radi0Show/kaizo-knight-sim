@@ -470,6 +470,28 @@ export function knightTarget(state, target, opts = {}) {
  * revival costs, which are out of scope.
  */
 export function scrDamage(state, damage, target, opts = {}) {
+  // ── THE KAIZO DAMAGE SEAM, INERT unless a scene installs it ─────────────
+  //
+  // The mod rewrites scr_damage from its first line, not at one site: kaizo's
+  // `gml_GlobalScript_scr_damage.gml` opens with the B-Side GLOOM precompute
+  // (:5-17, `ceil(damage / 6)` floor 10 and the `> 120` x0.8 soften), takes
+  // half off Noelle by CHARACTER id (:157-160), sends EVERYONE to -999 with
+  // doomtype 12 (:225-231 — Kris's `round(-maxhp / 2)` mercy is gone), banks
+  // the gloom after the HP write (:245-265), and reads the party through
+  // `global.char[]` so a two-member roster works. scr_damage_maxhp carries
+  // its own copies with different ratios. None of that can be expressed as
+  // an override of one line here, and sim/ must not import kaizo/ (the
+  // isolation contract), so each of the four entry points defers WHOLE to a
+  // hook the kaizo lane hands in on the state — the same shape as
+  // `state.kaizo.hooks.knightTarget` below and `comboChainNext` in
+  // sim/attacks/combination.js. Four names, one per entry, because the
+  // wrappers here call the inner function and a single hook on the inner
+  // one would run the mod's targeting twice under this file's own.
+  //
+  // NO HOOK -> byte-identical to what it was. Nothing in sim/ sets
+  // `state.kaizo`, so the six vanilla whole-fight diffs cannot see this line.
+  const kHook = state.kaizo?.hooks?.scrDamage;
+  if (kHook) return kHook(state, damage, target, opts);
   // Scene parity with the universal oracle harness, which replaces
   // obj_collidebullet's Other_15 with a pure hit counter: when a scene
   // declares damage disabled, NONE of scr_damage happens — no HP change, no
@@ -487,15 +509,35 @@ export function scrDamage(state, damage, target, opts = {}) {
   const hp = state.partyHp;
   if (!hp || hp[target] <= 0) return 0;
 
-  let t = scrDamageCalculation(damage, target, mantle, state);
-
+  // TRUEDAMAGE TAKES NOTHING OFF. scr_damage's chapter-3 block, verbatim:
+  //
+  //     if (global.chapter == 3 && truedamage == 1) { }          // <- EMPTY
+  //     else if (oldcalculation) tdamage = ceil(tdamage - battledf * 3);
+  //     else tdamage = scr_damage_calculation(tdamage, target);
+  //     if (chapter == 3 && i_ex(obj_knight_enemy) && truedamage == 0) { ...mantle x0.33... }
+  //     if (global.chapter == 3 && truedamage == 1) { }          // <- EMPTY again
+  //     else { defend ceil(2t/3); element reduction }
+  //     if (tdamage < 1) tdamage = 1;
+  //
+  // So the roar's CATCH (obj_knight_enemy Other_12 -> truedamage 1) lands its
+  // 40 whole: no DF walk, no ShadowMantle, no DEFEND, no element. This build
+  // walked it through the defence anyway — 40 became 6/25/20 on the default
+  // party — which is why five catches downed nobody here where the game downs
+  // Susie on the fifth (5 x 40 >= 190). Reported from reddit as "increase the
+  // damage for Roaring"; the report was right and the triage that called it
+  // the game's numbers had trusted this function. The whole-fight recordings
+  // pin party HP, so no trace could see it.
+  let t = damage;
   let mantled = false;
-  if (mantle) {
-    t = gmlRound(t * 0.33);
-    mantled = true;
+  if (!opts.truedamage) {
+    t = scrDamageCalculation(damage, target, mantle, state);
+    if (mantle) {
+      t = gmlRound(t * 0.33);
+      mantled = true;
+    }
+    if (state.charaction?.[target] === ACTION_DEFEND) t = Math.ceil((2 * t) / 3);
+    if (!mantled) t = Math.ceil(t * (opts.elementReduction ?? 1));
   }
-  if (state.charaction?.[target] === ACTION_DEFEND) t = Math.ceil((2 * t) / 3);
-  if (!mantled) t = Math.ceil(t * (opts.elementReduction ?? 1));
   if (t < 1) t = 1;
 
   // Flurry (myattackchoice 2) at difficulty 1 or 3 takes a further third off,
@@ -558,6 +600,10 @@ export function scrDamage(state, damage, target, opts = {}) {
  * `aoe` is set.
  */
 export function scrDamageSingle(state, damage, target, opts = {}) {
+  // The kaizo seam — see scrDamage. Consulted BEFORE the gates because the
+  // mod's own copy carries them (`global.inv < 0` is scr_damage.gml:3).
+  const kHook = state.kaizo?.hooks?.scrDamageSingle;
+  if (kHook) return kHook(state, damage, target, opts);
   if (state.damageEnabled === false) return 0;
   if (state.invTimer >= 0) return 0;
   // `with (obj_knight_enemy) progamer = false;` — scr_damage's chapter-3
@@ -600,6 +646,11 @@ export function scrDamageSingle(state, damage, target, opts = {}) {
  * the per-character gate inside scr_damage cannot swallow the second and third.
  */
 export function scrDamageAll(state, damage, opts = {}) {
+  // The kaizo seam — see scrDamage. The mod's scr_damage_all brackets its
+  // loop with `obj_knight_enemy.aoedamage = true` (scr_damage_all.gml), which
+  // is what makes a party-wide hit draw no targeting RNG there.
+  const kHook = state.kaizo?.hooks?.scrDamageAll;
+  if (kHook) return kHook(state, damage, opts);
   if (state.damageEnabled === false) return 0;
   if (state.invTimer >= 0) return 0;
   // `with (obj_knight_enemy) progamer = false;` — scr_damage's chapter-3
@@ -660,6 +711,11 @@ export function partyWiped(state) {
  * Roaring there is no redirect at all.
  */
 export function scrDamageMaxhp(state, fraction, ignoreDefend = false, cannotFell = false, opts = {}) {
+  // The kaizo seam — see scrDamage. kaizo's scr_damage_maxhp.gml: Noelle
+  // x0.75 on the FRACTION, gloom `ceil(tdamage / 4)` with no 45 cap
+  // (:169-174, :245-261), and the same -999 fell.
+  const kHook = state.kaizo?.hooks?.scrDamageMaxhp;
+  if (kHook) return kHook(state, fraction, ignoreDefend, cannotFell, opts);
   if (state.invTimer >= 0) return 0;
   const hp = state.partyHp;
 
