@@ -53,7 +53,7 @@
 // through both so a call site can reproduce whichever indexing its GML used.
 
 import { HERO_SPRITES } from '../../sim/heroes.js';
-import { PARTY as SIM_PARTY, DEFAULT_GEAR } from '../../sim/damage.js';
+import { PARTY as SIM_PARTY } from '../../sim/damage.js';
 import { statsOf } from '../../sim/equipment.js';
 import {
   NOELLE_CHAR_ID, noelleSpec, kaizoActsForRoster, KRIS_FELL_SPRITE,
@@ -119,10 +119,41 @@ const WRITER_Y_OFFSET = -24;
  * slot i is always char i+1; here it is re-keyed by CHARACTER id, which is
  * what the Create actually branches on (`object_index == obj_herokris`).
  */
+/**
+ * WHAT THE VANILLA THREE WEAR ON A MOD ROSTER — scr_gamestart's chapter-3
+ * block, which is what the mod's own boot equips and what the recorder
+ * starts from (it loads no save):
+ *
+ *     global.charweapon[1] = 16; chararmor1[1] = 1; chararmor2[1] = 10;   // :177-179
+ *     global.charweapon[2] = 17; chararmor1[2] = 1; chararmor2[2] = 10;   // :185-187
+ *     global.charweapon[3] = 18; chararmor1[3] = 1; chararmor2[3] = 10;   // :193-195
+ *
+ * (gml_GlobalScript_scr_gamestart.gml, identical in the mod and v105 —
+ * MechaSaber / AutoAxe / FiberScarf, AmberCard + GlowWrist.) This used to be
+ * sim/damage.js's DEFAULT_GEAR — the VANILLA sim's invented "Taunt Kris"
+ * build with the ShadowMantle on Kris — which flips scr_kaizo_target's
+ * `_mantlechar` branch and gives Kris the x0.33 on a route nothing measured
+ * it on. The A-Side recording's party receipt (kaizo-fight.js
+ * KAIZO_TOK3_GEAR) reads exactly these three lines back out of the mod, so
+ * they are the one loadout with a measurement behind them.
+ *
+ * SAVE-DEPENDENT, like Noelle's (noelle.js): the mod's settings-sign picker
+ * writes `global.char` and nothing else (obj_npc_sign Draw_0:152-155), so a
+ * player's own file overrides all of this on load (scr_load.gml:120-132).
+ * The bundled v2.3.3 save, for the record, carries Saber10 / TennaTie /
+ * Jevilstail on Kris and no mantle either. A scene that wants a different
+ * build passes `gear` to installRoster.
+ */
+export const GAMESTART_CH3_GEAR = {
+  [CHAR_KRIS]: { weapon: 16, armor: [1, 10] },
+  [CHAR_SUSIE]: { weapon: 17, armor: [1, 10] },
+  [CHAR_RALSEI]: { weapon: 18, armor: [1, 10] },
+};
+
 function vanillaSpec(charId, { sideb = false } = {}) {
   const p = SIM_PARTY[charId - 1];
   const spec = { ...HERO_SPRITES[charId - 1] };
-  const gear = DEFAULT_GEAR[charId - 1];
+  const gear = GAMESTART_CH3_GEAR[charId];
   let swoon = spec.defeat;
   let frozen = spec.hurt;
 
@@ -273,6 +304,23 @@ export function havecharTable(globalChar) {
     }
   }
   return { havechar, charpos, chartotal };
+}
+
+/**
+ * `xchunk` per slot — scr_charbox:24-47, keyed on `chartotal` AND the slot:
+ *
+ *     charpos == 0 && chartotal == 3 -> 0      charpos == 0 && chartotal == 2 -> 108
+ *     charpos == 1 && chartotal == 3 -> 213    charpos == 1 && chartotal == 2 -> 322
+ *     charpos == 2 && chartotal == 3 -> 426    charpos == 0 && chartotal == 1 -> 213
+ *
+ * A two-member party is CENTRED (108 / 322), not packed left at the three-
+ * member x's. render/menu.js reads this off `state.partyChunks` (its
+ * partyChunks seam, the same shape as partySprites); installRoster sets it.
+ */
+export function charboxChunks(chartotal) {
+  if (chartotal === 2) return [108, 322];
+  if (chartotal === 1) return [213];
+  return [0, 213, 426];
 }
 
 /**
@@ -516,6 +564,8 @@ export function installRoster(state, {
   state.kaizo.havechar = table.havechar;
   state.kaizo.charpos = table.charpos;
   state.kaizo.chartotal = table.chartotal;
+  // scr_charbox's per-headcount x positions, for the HUD (charboxChunks).
+  state.partyChunks = charboxChunks(table.chartotal);
   if (gear) state.kaizo.gear = gear;
 
   // `global.hp[0]` — the cell the target==3 loop reaches on a short party.

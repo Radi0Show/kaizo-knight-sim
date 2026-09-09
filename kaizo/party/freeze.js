@@ -646,13 +646,16 @@ export function scrHealallitemspell(state, amount, healFn = defaultHealFn, healR
 export function scrHealitemspell(state, target, amount, healFn = defaultHealFn, healRibbons = 0) {
   ensureFreezeState(state);
   const ch = charIdOfSlot(state, target);
+  // `global.spelldelay` lives on state.kaizo.spelldelay here — the one name
+  // the scene driver reads (kaizo/party/scenes.js) and the spell module
+  // documents; this used to write state.spelldelay, which nothing read.
   if (kFreezeChar(state, ch)) {
-    state.spelldelay = FROZEN_SPELLDELAY;
+    if (state.kaizo) state.kaizo.spelldelay = FROZEN_SPELLDELAY;
     return false;                          // the wasted action
   }
   const healAmount = amount + Math.ceil(amount / 8) * healRibbons;
   const healed = healFn(state, target, healAmount);
-  state.spelldelay = FROZEN_SPELLDELAY;    // vanilla also lands on 15 here
+  if (state.kaizo) state.kaizo.spelldelay = FROZEN_SPELLDELAY;    // vanilla also lands on 15 here
   return { healed, target, spelldelay: FROZEN_SPELLDELAY };
 }
 
@@ -865,4 +868,64 @@ export function balloonTurnAdvances(state) {
  */
 export function balloonSuppressed(state) {
   return !!kFreezeChar(state, 2);
+}
+
+/**
+ * `global.hp[2]` for a Susie who is NOT in the party. The mod reads her
+ * CHARACTER cell whoever holds slot 1, and on a Kris + Noelle file that cell
+ * still carries whatever the save (or a fresh boot) gave her — scr_gamestart's
+ * chapter-3 block, `global.maxhp[2] = 190; global.hp[2] = global.maxhp[2];`
+ * (gml_GlobalScript_scr_gamestart.gml:181-182), which is what the recorder
+ * boots with. Save-dependent in principle; the boot value is the one the
+ * dump states. It only decides whether `balloonturn` climbs from -1 to 0,
+ * and no line exists at either.
+ */
+export const SUSIE_GAMESTART_HP = 190;
+
+/**
+ * THE ENEMY-TALK BALLOON ADVANCE, the mod's version — the hook sim/dialogue.js
+ * advanceBalloon consults (`state.kaizo.hooks.advanceBalloon`). obj_knight_enemy
+ * Step_0:206-211, inside the `enemytalk && talked == 0` branch:
+ *
+ *     if (practicemode || k_sideb || !i_ex(obj_herosusie)) balloonturn = -1;
+ *     if (global.hp[2] > 0 || k_freeze[2]) {
+ *         balloonturn++;
+ *         if (balloonturn == 6) { msgsetloc(0, "Heheh.../%", ...); ... }
+ *         ...
+ *     }
+ *
+ * On the B-Side the counter is knocked back to -1 EVERY enemy-talk before the
+ * increment, so it reads 0 at most and no `balloonturn == N` line can ever
+ * match: **no Susie exchange on the B-Side, ever** — and `createballoon`
+ * stays false, which sends the knight straight to `global.mnfight = 1.5`
+ * (:340-343). The same reset covers practice mode and a roster without Susie,
+ * so a hypothetical A-Side Kris + Noelle party is silent too.
+ *
+ * The lines themselves (balloonturn 6..) are the vanilla exchange the engine
+ * owns; this hook is installed ONLY where the reset fires (the V-D roster
+ * block), so when the reset does not apply it defers to the engine's own
+ * advance rather than re-typing the taunts here. Returns the knight's line
+ * or null, like the function it replaces.
+ */
+export function kaizoAdvanceBalloon(dlg, state, engineAdvance = null) {
+  const k = state.kaizo ?? {};
+  const practicemode = !!k.practicemode;
+  const sideb = !!k.sideb;
+  const susiePresent = !!haveChar(state, 2);
+  if (!(practicemode || sideb || !susiePresent)) {
+    // The reset does not fire: the vanilla path, unchanged.
+    return engineAdvance ? engineAdvance(dlg, state) : null;
+  }
+  dlg.balloonturn = -1;
+  const slot = slotOfCharId(state, 2);
+  const hp2 = slot < 0 ? SUSIE_GAMESTART_HP : state.partyHp[slot];
+  if (hp2 > 0 || kFreezeChar(state, 2)) {
+    dlg.balloonturn += 1;
+    // balloonturn is 0 here and every line is keyed 6 or higher (Step_0:213
+    // onward): nothing matches, nothing is created.
+  }
+  dlg.ballooncon = 0;
+  dlg.text = null;
+  dlg.speaker = null;
+  return null;
 }

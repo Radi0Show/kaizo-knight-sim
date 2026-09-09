@@ -451,6 +451,13 @@ const director = {
     // A version's per-frame knight corrections (V-C: the 0.18 opening
     // damagereduction, replacing the vanilla 0.2 stepKnightAnim just set).
     e.hooks.postAnim?.(state);
+    // obj_knight_enemy's END STEP (Step_2) — the B-Side GLOOM engine lives
+    // there (kaizo/party/gloom.js). The knight is a record here, not an
+    // entity, so the scene calls it from its own end step, after the
+    // reaction timers, and hands over the sim's `mnfight == 2`: clockOn
+    // rises with the arena and holds through the sweep until alarm[2] fires,
+    // which is the span the controller decrements turntimer over.
+    e.hooks.knightEndStep?.(state, { clockOn: e.clockOn });
     // obj_dmgwriter's Draw is now stepped by stepFrame itself, AFTER the
     // endStep phase — the writers' throw rolls belong to the frame's END
     // slot, after every end-step consumer of the same frame. See the header
@@ -1267,6 +1274,11 @@ const director = {
         // at selection, so a cancelled ACT leaves no trace. See
         // resolveActPages in sim/spells.js.
         a.pages = resolveActPages(state, a.c ?? 0, a.act ?? 0);
+        // A version's own ACT text (V-D: the B-Side CHECK, obj_knight_enemy
+        // Other_23:4-9 / Step_0:950-964). resolveActPages runs FIRST so the
+        // engine's counters (`checkcount`, the HoldBreath latch) advance as
+        // they always have; the hook only replaces the pages.
+        a.pages = e.hooks.actPages?.(state, a.c ?? 0, a.act ?? 0, a.pages) ?? a.pages;
         a.w = { pos: 1, page: 0, halted: false, pmb: 0, automash: 0 };
       }
       const w = a.w;
@@ -1308,6 +1320,14 @@ const director = {
       state.battlemsg = a.pages[Math.min(w.page, a.pages.length - 1)];
       return;
     }
+    // LANE W2: `actcon == 1 && !instance_exists(obj_writer)` -- the writer
+    // is gone (above), and the knight still holds scr_nextact until the
+    // act's own machine reaches actcon 1. Today only X-Slash's two-hit
+    // alarm chain (kaizo/party/spells.js kaizoActBusy) keeps it above 1;
+    // vanilla acts set actcon = 1 in the same Step as their text, so the
+    // hook is absent or false for them. Roster-gated: installed only by
+    // installKaizoMenu.
+    if (state.kaizo?.hooks?.actBusy?.(state)) return;
 
     if (state.menu.fight.some(Boolean) && !e.bar) {
       // ROSTER-AWARE. sim/damage.js's isUp tests `!state.chardead[slot]`

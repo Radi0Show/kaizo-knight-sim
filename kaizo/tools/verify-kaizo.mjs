@@ -513,6 +513,18 @@ if (KV.C) {
     // renderer silently falls back to drawing collision masks, so the art
     // being wrong looks exactly like the art being fine.
     'check-sprites',
+    // WIRED 2026-09-08. The three attack colours no recording can settle
+    // (the recorder logs no draw field, the byte gate has no r/g/b, sprite or
+    // depth column): Tunnel 2's blades fade to BLUE (diamondswordbullet_ext
+    // Step_0:4-5, ghosts c_blue), Starstorm 4's vortex swords wear
+    // spr_roaringknight_sword_ol_alt at cone.depth - 1 on a sha1-identical
+    // mask (sword_vortex Step_0:3-5), and every rotating-slash aim bloom is
+    // navy (knight_circle Create_0:2-4). Each ramp is pinned numerically to
+    // the GML constant with a vanilla control, and the swapped sword's
+    // contact test is proved equal to the engine's on a 6,027-cell grid.
+    // Deterministic, no recording, well under a second; sabotage-tested
+    // (each delta flipped back to vanilla reddens it).
+    'check-colours',
     // THE WEIRD ROUTE (V-D). The roster is wired into KAIZO_VERSIONS.D, so
     // its checks are live content, not work in progress: check-roster covers
     // Noelle and the two-slot party, check-weirdroute the B-Side schedule
@@ -521,6 +533,27 @@ if (KV.C) {
     // modules ARE imported by the wired party layer, so a regression in them
     // is a regression in something shipped.
     'check-roster', 'check-weirdroute', 'check-freeze', 'check-gloom',
+    // WIRED 2026-09-08 with the party layer's arrival on the live path: the
+    // damage / balloon / charbox / turn-end seams are consulted by a V-D
+    // scene built through buildKaizoScene and stepped through the real turn
+    // loop, so every assertion here is about the fight a player gets at
+    // ?v=D, not about a module called by hand. V-C is the control in each
+    // block. Deterministic, no recording, seconds.
+    'check-weirdroute-live',
+    // WIRED 2026-09-08 (lane W2): Noelle's menu, spells, ACTs and X-Slash on
+    // V-D, through the engine's CHARACTER-TABLE seam (sim/spells.js
+    // spellInfo / spellListFor / actsFor, `state.kaizo.hooks.*`) that
+    // kaizo/party/spells.js fills from the roster. check-noelle-menu drives
+    // sim/menu.js's stepMenu with inputs and asserts the rows, costs and
+    // acting pages against the GML constants; check-spells-kaizo casts
+    // IceShock through the live V-D loop (menu -> attackpress delay -> the
+    // seam -> obj_icespell -> the Knight's HP) and pins Heal Prayer x5,
+    // SleepMist, SnowGrave's hand-off to scenes.js, the ThornRing tick and
+    // the X-Slash two-hit alarm chain. Both refuse to pass with the seam
+    // removed (the vendored sim/menu.js imports it), and both went red under
+    // a constant sabotage (alarm 14 -> 13, divisor 9.5 -> 9, the X-Slash
+    // row dropped). Deterministic, no recording, seconds.
+    'check-noelle-menu', 'check-spells-kaizo',
     // THE ONLY CHECK HERE THAT IS NOT POSITIVE-ONLY. Everything above asserts
     // that our own modules do what we believe; this one holds the generated
     // V-C schedule against a RECORDING OF ENDERCAT8'S MOD

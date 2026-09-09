@@ -269,7 +269,7 @@ console.log('scr_healitemspell — a single-target heal on a frozen member is CO
   const res = scrHealitemspell(s, 0, 40, rosterHeal);
   assertEq(res, false, 'frozen single-target heal returns false');
   assertEq(s.partyHp[0], 100, 'no HP was restored');
-  assertEq(s.spelldelay, FROZEN_SPELLDELAY, 'the action was still paid for (spelldelay 15)');
+  assertEq(s.kaizo.spelldelay, FROZEN_SPELLDELAY, 'the action was still paid for (spelldelay 15, on state.kaizo where the scene driver reads it)');
   assert(isFrozen(s, 0), 'and the member is STILL frozen afterwards');
 
   // A REVIVE is eaten too — the most expensive way to learn the rule.

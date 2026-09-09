@@ -57,7 +57,7 @@ import { gmlRound } from '../../sim/gml.js';
 import { gmlChoose, gmlRandomRange, gmlIrandom } from '../../sim/rng.js';
 import { spawnDmgNumber, TYPE_PARTY, TYPE_DEAD, TYPE_SWOON } from '../../sim/dmgnumbers.js';
 import { scrShakescreen } from '../../sim/shake.js';
-import { cue } from '../../sim/audio.js';
+import { cue, cueStop } from '../../sim/audio.js';
 import {
   CHAR_NONE, CHAR_NOELLE, globalChar, rosterSize, charIdOf, memberAt,
   hpOfChar, setHpOfChar, maxhpOfChar, gearOfChar, statFor, setGloom, isUp,
@@ -486,7 +486,19 @@ export function gloomAccrue(state, chartarget, gloomdmg, { capAt45 = true } = {}
     let g = gloomdmg;
     if (chartarget === CHAR_NOELLE && gearOfChar(state, CHAR_NOELLE).weapon === THORN_RING) g = 0;
     const minhp = hp - 1;
-    value = (k.gloomByChar?.[chartarget] ?? 0) + g;
+    // THE CURRENT VALUE COMES FROM THE SLOT LEDGER when the character holds a
+    // slot. `state.kaizo.gloom[slot]` is what the DoT engine (gloom.js
+    // kaizoGloomStep, obj_knight_enemy Step_2:37 `k_gloom[i]--`) and the
+    // flurry family's maxhp path (kaizo/attacks/flurry-damage.js) decrement
+    // and write; the char mirror is written back by setGloom below and by
+    // the engine, so reading the mirror here would resume from a stale bank
+    // on the first hit after a tick. Char id 0 (the phantom cell the
+    // target==3 loop reaches) has no slot and keeps the mirror.
+    const curSlot = (k.globalChar ?? []).indexOf(chartarget);
+    const cur = curSlot >= 0 && k.gloom
+      ? (k.gloom[curSlot] ?? 0)
+      : (k.gloomByChar?.[chartarget] ?? 0);
+    value = cur + g;
     value = Math.min(value, minhp);
     if (capAt45 && value > 45) value = 45;
   } else {
@@ -760,8 +772,31 @@ export function scrDamageSingle(state, damage, target = 0, opts = {}) {
   if (state.invTimer >= 0) return 0;
   const dealt = scrDamage(state, damage, target, opts);
   state.invTimer = state.invc * 30;
-  if (dealt > 0) cue(state, 'snd_damage');
+  // `with (obj_heart) dmgnoise = 1;` — kaizo scr_damage.gml:204-207, the
+  // same lines as vanilla — and obj_heart's Step turns it into
+  // `snd_stop(snd_hurt1); snd_play(snd_hurt1);`. This copy used to cue
+  // snd_damage, the ENEMY-hit sound, the same slip sim/damage.js records
+  // and fixed; the mod does not touch the heart's cue.
+  if (dealt > 0) {
+    cueStop(state, 'snd_hurt1');
+    cue(state, 'snd_hurt1');
+  }
   return dealt;
+}
+
+/**
+ * THE FOUR SEAMS sim/damage.js consults, as one bundle for the scene that
+ * installs them (kaizo-fight.js, the V-D roster block). Every live caller of
+ * the engine's entry points — sim/bullets/regularbullet.js, the slashes, the
+ * splitslash, kaizo/attacks/knight-stream.js and knightlines.js, the two
+ * scr_damage_all_maxhp loops in quickslash.js and roaring-final.js, and the
+ * Roaring hit's direct scrDamage — reaches this module through them without
+ * being edited. Four names because the engine's wrappers call its inner
+ * scrDamage: hooking the inner one alone would run scr_kaizo_target under
+ * the engine's own knightTarget and spend the RNG twice per hit.
+ */
+export function kaizoDamageHooks() {
+  return { scrDamage, scrDamageSingle, scrDamageAll, scrDamageMaxhp };
 }
 
 /**
@@ -800,8 +835,13 @@ export function scrDamageAll(state, damage, opts = {}) {
   }
   if (k) k.aoedamage = false;
   state.invTimer = state.invc * 30;
-  // `damagenoise = 1` — one snd_damage for the whole party.
-  if (total > 0) cue(state, 'snd_damage');
+  // `with (obj_heart) dmgnoise = 1` per landed hit, one heart, one
+  // snd_hurt1 for the whole party — scr_damage.gml:204-207; see
+  // scrDamageSingle for the cue this used to play instead.
+  if (total > 0) {
+    cueStop(state, 'snd_hurt1');
+    cue(state, 'snd_hurt1');
+  }
   return total;
 }
 

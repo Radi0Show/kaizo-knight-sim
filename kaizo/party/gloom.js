@@ -488,11 +488,16 @@ export function kaizoGloomemit(state, slot) {
  *
  * @returns {{ticks: number, emits: number, draws: number}}
  */
-export function kaizoGloomStep(state) {
+export function kaizoGloomStep(state, { bullets = null } = {}) {
   if (!kaizoSideb(state)) return { ticks: 0, emits: 0, draws: 0 };
   const led = ensureGloom(state);
   const chars = rosterCharIds(state);
-  const bullets = scrIsphaseBullets(state);
+  // `scr_isphase("bullets")` — the turn loop passes its own answer (the
+  // director's `clockOn`, which is the sim's `mnfight == 2`: it rises with
+  // the arena and holds through the sweep until alarm[2] fires, exactly
+  // the span the controller decrements turntimer over); a caller with no
+  // loop gets the state-field fallback.
+  const inBullets = bullets === null ? scrIsphaseBullets(state) : !!bullets;
   let ticks = 0;
 
   // `for (var i = 1; i <= 4; i++)` — char ids, mapped to slots. Char ids with
@@ -513,11 +518,21 @@ export function kaizoGloomStep(state) {
     if (led.timer[slot] >= darktime) {
       led.emit[slot] = 1;
       led.timer[slot] = 0;
-      if (bullets) {
+      if (inBullets) {
         led.gloom[slot] -= 1;
         state.partyHp[slot] -= 1;
         ticks += 1;
       }
+    }
+  }
+  // The roster module's CHARACTER-indexed mirror (`state.kaizo.gloomByChar`,
+  // the mod's own `k_gloom[0..4]` shape — roster.js setGloom) is kept in
+  // step with the slot ledger the engine just moved, so a reader of either
+  // indexing sees the same meter. Only when the roster installed it.
+  if (Array.isArray(state.kaizo?.gloomByChar)) {
+    for (let charId = 1; charId <= 4; charId++) {
+      const slot = chars.indexOf(charId);
+      if (slot >= 0) state.kaizo.gloomByChar[charId] = led.gloom[slot] ?? 0;
     }
   }
 
@@ -534,6 +549,40 @@ export function kaizoGloomStep(state) {
     draws += kaizoGloomemit(state, slot);
   }
   return { ticks, emits, draws };
+}
+
+/**
+ * THE GLOOM CALL-OUT — obj_knight_enemy Step_0:647-676, the `downcount == 0`
+ * arm of the turn-end message block, verbatim in shape:
+ *
+ *     if (downcount == 0) {
+ *         if (k_sideb) {
+ *             var _gmsg = "";
+ *             if (!k_gtext[1] && k_gloom[1] >= 36) { _gmsg += "* Kris shivers coldly from GLOOM.&"; k_gtext[1] = true; }
+ *             ...[2], [3], [4] likewise...
+ *             if (_gmsg != "") global.battlemsg[0] = _gmsg;
+ *         }
+ *     }
+ *
+ * CHARACTER-indexed (`k_gloom[1..4]`, `k_gtext[1..4]`), once per character
+ * per fight, and the four lines CONCATENATE when more than one crosses 36 on
+ * the same turn end. Returns the string to put in `global.battlemsg[0]`, or
+ * null when nothing fires — the caller (kaizo-vc-hooks.js's turn end) owns
+ * the `downcount == 0` gate and the write. `k_gtext` is the knight's Create
+ * `[0, 0, 0, 0, 0]` (Create_0:119), kept here as `state.kaizo.gtext`.
+ */
+export function kaizoGloomMessages(state) {
+  if (!kaizoSideb(state)) return null;
+  const k = state.kaizo;
+  const gtext = (k.gtext ??= [0, 0, 0, 0, 0]);
+  let gmsg = '';
+  for (let charId = 1; charId <= 4; charId++) {
+    if (!gtext[charId] && kaizoCharboxGloom(state, charId) >= GLOOM_TEXT_THRESHOLD) {
+      gmsg += GLOOM_TEXT[charId];
+      gtext[charId] = 1;
+    }
+  }
+  return gmsg !== '' ? gmsg : null;
 }
 
 /**

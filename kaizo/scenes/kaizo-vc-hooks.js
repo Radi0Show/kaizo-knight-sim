@@ -13,7 +13,10 @@ import {
   launchVCAttack, openVCArena, vcTurnLength, vcMoveheartDest,
 } from './kaizo-mod-launcher.js';
 import { kaizoKnightActor, kaizoBlockStepTail } from '../actors/kaizo-knight-actor.js';
-import { isUp as rosterIsUp, rosterSize } from '../party/roster.js';
+import { isUp as rosterIsUp, rosterSize, statFor as rosterStatFor } from '../party/roster.js';
+import { applyKrisPartyMultiplier } from '../party/damage.js';
+import { downMessages } from '../party/freeze.js';
+import { kaizoGloomStep, kaizoGloomMessages } from '../party/gloom.js';
 import { createKaizoHeroes, stepKaizoHeroes } from '../party/heroes.js';
 import { VC_KNIGHT, VC_GATE_FRACTION, VC_LOOP, VC_PHASE4_DEFAULT } from '../versions/vc-script.js';
 
@@ -22,6 +25,156 @@ import { VC_KNIGHT, VC_GATE_FRACTION, VC_LOOP, VC_PHASE4_DEFAULT } from '../vers
  *  is blocked to ceil(damage / 5) — obj_heroparent Step 361-393: the block
  *  is CRIT-GATED (`points < 150`), so only a frame-perfect 150 lands whole. */
 const GUARD_DROP = 0.4;
+
+/**
+ * Kris's CHECK, the mod's version — obj_knight_enemy Other_23:1-9 defines
+ * the three strings (with the B-Side overrides), Step_0:950-964 plays them:
+ *
+ *     checkcount++;
+ *     if (checkcount == 1) { msgset(0, kaizo_check1A); msgnext(kaizo_check1B); }
+ *     else                   msgset(0, kaizo_check2);
+ *
+ * Two pages the first time, ONE on every repeat — where vanilla's second
+ * ACT is a different pair ("Kris points into the distance", sim/dialogue.js
+ * ACT_PAGES.point). The `/` and `/%` writer halts are page boundaries here,
+ * as they are in ACT_PAGES. Both routes are carried; only the B-Side pair is
+ * wired (kaizo-vc-hooks actPages), because the A-Side pair would change the
+ * V-C writer lifecycle the _tok3 gate is pinned to and wants its own run.
+ */
+export const KAIZO_CHECK_PAGES = {
+  A: {
+    first: ['* Kris analyzed the enemy!', "* But the numbers didn't seem feasible..."],
+    again: ["* Kris couldn't bear to check again."],
+  },
+  B: {
+    first: ['* Kris tried to analyze the enemy, but they froze.', '* You brought this upon yourself.'],
+    again: ['* Your actions were used up.'],
+  },
+};
+
+/**
+ * THE B-SIDE TURN-END MESSAGES — obj_knight_enemy Step_0:566-781, the block
+ * under `mnfight == 2 && turntimer <= 1 && setdownmessage == false`, AFTER
+ * the row advance has written the new row's telegraph (:523-552, which the
+ * `advance` hook below models). In the mod's order:
+ *
+ *   :580  if (phase == 4 && phase4turn < 3) {} else {
+ *   :585    the per-character down lines, latched once per fight
+ *           (kaizo/party/freeze.js downMessages: Kris "* Can't move your
+ *           body.&" on the B-Side, Noelle "* She was used up.&");
+ *   :647    if (downcount == 0 && k_sideb) the >= 36 GLOOM call-outs
+ *           (kaizo/party/gloom.js kaizoGloomMessages);
+ *         }
+ *   :679  if (kaizo_prevatk == "atk_RoaringDelta" && !practicemode) {
+ *           "* The enemy's guard falters, just for a moment..."
+ *           progamer: "* Kris coughed.&* The enemy pauses in wonder..."
+ *           k_sideb && progamer: "\ck* Well, aren't you something special...?
+ *           Go ahead." + didfullnohit = 1, turnsafternohit = 0,
+ *           curhp = monsterhp, idlesprite = spr_roaringknight_idle2
+ *         } else if (didfullnohit) { the turnsafternohit 1..4 taunts, each
+ *           branching on whether monsterhp fell since curhp; a hit taken
+ *           (!progamer) ends the run with one of two lines }
+ *   :758  prevatk == "atk_Multislash2" && k_sideb && progamer: "\ck* Not a
+ *         scratch yet, hm...?&* Impressive."
+ *   :768  phase > 1 && k_didspell && k_nospellsaw: the spell taunt, once
+ *   :773  !progamer && k_lastpro: k_lastpro = 0; after RoaringDelta "\ck* So
+ *         close, yet so far from perfection..."
+ *
+ * Every write is `global.battlemsg[0] = ...`, last one wins — so the order
+ * above IS the precedence. The variables live where the mod keeps them:
+ * `progamer`, `didfullnohit`, `turnsafternohit`, `curhp`, `lastpro` on the
+ * knight record (Create_0:65, :132-136), `didspell` / `nospellsaw` on
+ * state.kaizo where kaizo/party/scenes.js already puts k_didspell /
+ * k_nospellsaw. `kaizo_prevatk` is the row the knight just finished — or,
+ * on the turn the 60% gate trips, the row it skipped (:528 then :574 both
+ * assign it). `phase` is the knight's own, which the gate has already moved
+ * to 4 (:571) by the time :768 reads it.
+ *
+ * ONLY ON THE B-SIDE. The block's A-Side lines (the "guard falters" pair,
+ * :681-685) are the mod's too, but V-C's message path is what the _tok3
+ * gate was fitted around, so they wait for their own run; here they are
+ * reproduced because the B-Side branch nests inside them and the non-
+ * progamer B-Side turn gets the A-Side line.
+ *
+ * NOT DRAWN: `idlesprite = spr_roaringknight_idle2` is recorded on the
+ * knight record for the actor to pick up (kaizo-knight-actor.js
+ * applyKaizoIdleRecolor); the heroes-drawing lane owns whether it shows.
+ */
+function sidebTurnEndMessages(state, { prevatk, phase, phase4turn }) {
+  const kn = state.knight;
+  const k = state.kaizo;
+  if (!kn || !k?.sideb) return;
+  const practicemode = !!k.practicemode;
+  kn.didfullnohit ??= false;      // Create_0:135
+  kn.turnsafternohit ??= 0;       // Create_0:136
+  kn.lastpro ??= true;            // Create_0:132  k_lastpro = true
+  let msg = null;
+
+  // :580 — the finale's first three turn ends carry no down/gloom lines.
+  if (!(phase === 4 && phase4turn < 3)) {
+    const d = downMessages(state);
+    if (d.battlemsg !== null) msg = d.battlemsg;
+    if (d.downcount === 0) {
+      const g = kaizoGloomMessages(state);
+      if (g !== null) msg = g;
+    }
+  }
+
+  if (prevatk === 'atk_RoaringDelta' && !practicemode) {
+    msg = "* The enemy's guard falters, just for a moment...";
+    if (kn.progamer === true) {
+      msg = '* Kris coughed.&* The enemy pauses in wonder...';
+      // k_sideb — always true in here.
+      msg = "\\ck* Well, aren't you something special...^2?&* Go ahead.";
+      kn.didfullnohit = 1;
+      kn.turnsafternohit = 0;
+      kn.curhp = kn.hp;
+      kn.idlesprite = 'spr_roaringknight_idle2';
+    }
+  } else if (kn.didfullnohit) {
+    if (kn.progamer === true) {
+      kn.turnsafternohit += 1;
+      const t = kn.turnsafternohit;
+      const fell = kn.curhp > kn.hp;
+      if (t === 1) {
+        if (fell) { msg = "\\ck* Come on now...&* That surely isn't your best hit."; kn.curhp = kn.hp; }
+        else msg = '\\ck* Now what are you waiting for?';
+        kn.idlesprite = 'spr_roaringknight_idle2';
+      }
+      if (t === 2) {
+        if (fell) { msg = "\\ck* After all that, you're not putting your all into it...?"; kn.curhp = kn.hp; }
+        else msg = '\\ck* The guts to play with such a feat^1.&* Intriguing...';
+        kn.idlesprite = 'spr_roaringknight_idle2';
+      }
+      if (t === 3) {
+        if (fell) { msg = '\\ck* Strange..^1.&* Very strange...'; kn.curhp = kn.hp; }
+        else msg = '\\ck* If you insist on wasting your chance, so be it, I suppose.';
+        kn.idlesprite = 'spr_roaringknight_idle2';
+      }
+      if (t >= 4) msg = '\\ck* ...';
+    } else if (kn.curhp > kn.hp) {
+      msg = '\\ck* And with a little mistake^1, the perfection falls...';
+      kn.didfullnohit = false;
+    } else {
+      msg = '\\ck* A pity such a prime moment to strike was put to waste.';
+      kn.didfullnohit = false;
+    }
+  }
+
+  if (prevatk === 'atk_Multislash2' && !practicemode) {
+    if (kn.progamer === true) msg = '\\ck* Not a scratch yet, hm...^1?&* Impressive.';
+  }
+  if (phase > 1 && k.didspell && k.nospellsaw) {
+    k.nospellsaw = 0;
+    msg = "\\ck* Couldn't keep up without spells after all, huh...^1?&* What a shame.";
+  }
+  if (!kn.progamer && kn.lastpro && !practicemode) {
+    kn.lastpro = false;
+    if (prevatk === 'atk_RoaringDelta') msg = '\\ck* So close^1, yet so far from perfection...';
+  }
+
+  if (msg !== null) state.battlemsg = msg;
+}
 
 export function vcHooks({ sideb = false, roster = null } = {}) {
   return {
@@ -60,6 +213,29 @@ export function vcHooks({ sideb = false, roster = null } = {}) {
       // it is broken — so these two always travel together.
       stepHeroes: stepKaizoHeroes,
     } : {}),
+    // ── THE B-SIDE, per frame and per ACT ────────────────────────────────
+    ...(sideb ? {
+      // obj_knight_enemy's End Step (Step_2:15-79): the GLOOM engine — the
+      // per-character tick timers, the emitters' RNG, and the HP/gloom
+      // drain that runs only under `scr_isphase("bullets")`. The turn loop
+      // calls this after the knight's reaction timers and hands over its
+      // own `mnfight == 2` (kaizo-practice.js).
+      knightEndStep: (state, { clockOn = false } = {}) => {
+        kaizoGloomStep(state, { bullets: clockOn });
+      },
+      // Kris's CHECK reads the B-Side strings (KAIZO_CHECK_PAGES.B). The
+      // engine's resolveActPages has already advanced `checkcount`
+      // (state.actCounts.check) by the time this runs. ONLY CHECK (actId 0)
+      // takes the B-Side text: HoldBreath keeps its engine pages and X-Slash
+      // (actId 11, lane W2) keeps its own — the test used to be `=== 1`,
+      // which handed X-Slash the CHECK strings. Slot 0 only — the mod's
+      // Step_0:950 branch is `acting == 1`, the Kris ACT list.
+      actPages: (state, c, actId, pages) => {
+        if (c !== 0 || actId !== 0) return pages;
+        const n = state.actCounts?.check ?? 1;
+        return n === 1 ? KAIZO_CHECK_PAGES.B.first : KAIZO_CHECK_PAGES.B.again;
+      },
+    } : {}),
     openArena: (state, row) => openVCArena(state, row, { sideb }),
     launch: (state, row) => launchVCAttack(state, row, { sideb }),
     turnLength: (row) => vcTurnLength(row, { sideb }),
@@ -76,7 +252,16 @@ export function vcHooks({ sideb = false, roster = null } = {}) {
     endCutsceneReached: (state) => {
       const k = state.knight;
       if (k.animState !== 3 || !(k.hurttimer >= 0)) return false;
-      if ((k.chargeupcon ?? 0) === 1) return false;
+      // `chargeupcon == 0` — THE MOD'S TEST, verbatim (Draw_0:151). This was
+      // `=== 1`, which also let con 2/3 (the roar's launch and hidden states)
+      // through; it only held because nothing can land a hit while they do.
+      // The finale's CleanUp (roaring-final.js cleanUp, 2026-09-08) now
+      // returns him to 0 the way the mod does, so the gate can be the mod's.
+      if ((k.chargeupcon ?? 0) !== 0) return false;
+      // `!dont_fucking_kill_the_knight` — X-Slash raises it for the length of
+      // its act so its two hits cannot end the fight mid-animation
+      // (kaizo/party/spells.js, actcon 22 clears it).
+      if (state.kaizo?.xslash?.dontKill) return false;
       if ((k.blockanim ?? 0) > 0) return false;
       return !!k.haveusedroaring && k.endCutscene === 0 && k.endcon !== 1
         && k.hp <= VC_KNIGHT.maxhp * 0.6;
@@ -120,13 +305,28 @@ export function vcHooks({ sideb = false, roster = null } = {}) {
       const k = state.knight;
       const vars = (state.kaizo.vars ??= {});
       const blocked = accuracy < 150 && (vars.kaizo_block ?? true) && !k.endCutscene;
-      const at = statFor(state, slot).at;
+      // `global.battleat[myself]` — SLOT-indexed, summed from the character
+      // in that slot. sim/damage.js's statFor is the vanilla trio by slot,
+      // so on a roster it would hand Noelle (slot 1) Susie's AT 18 and Kris
+      // the vanilla loadout; the roster's statFor (kaizo/party/roster.js)
+      // reads `global.char[slot]`'s own base and gear. Roster-gated so V-C
+      // keeps the exact read the _tok3 gate is pinned to.
+      const hasRoster = !!state.kaizo?.roster;
+      const at = (hasRoster ? rosterStatFor(state, slot) : statFor(state, slot)).at;
       let damage = gmlRound((at * accuracy) / 20 - VC_KNIGHT.df * 3);
       damage = Math.ceil(damage * k.damagereduction);
       if (slot === 0) {
-        const alive = state.partyHp.filter((h) => h > 0).length;
-        if (alive <= 1) damage = Math.ceil(damage * 2.5);
-        else if (alive === 2) damage = Math.ceil(damage * 1.5);
+        if (hasRoster) {
+          // `_partyalive` over CHARACTER ids 1..4, gated by scr_havechar —
+          // obj_heroparent Step_0:379-387, kaizo/party/damage.js
+          // applyKrisPartyMultiplier (Kris + a living Noelle is 2 alive:
+          // ceil(x1.5) from the opening turn).
+          damage = applyKrisPartyMultiplier(damage, state);
+        } else {
+          const alive = state.partyHp.filter((h) => h > 0).length;
+          if (alive <= 1) damage = Math.ceil(damage * 2.5);
+          else if (alive === 2) damage = Math.ceil(damage * 1.5);
+        }
       }
       if (blocked) damage = Math.ceil(damage / 5);
       state.kaizo.lastHitBlocked = blocked;
@@ -195,6 +395,7 @@ export function vcHooks({ sideb = false, roster = null } = {}) {
         vars.resume = { phase, turn };
       }
 
+      const gateTripped = phase === 4 && prevPhase !== 4;
       const row = t[phase][turn];
       if (row?.msg) state.battlemsg = row.msg;
       if (state.knight.haveusedroaring && prevRowId !== 'atk_RoaringDelta') {
@@ -205,6 +406,26 @@ export function vcHooks({ sideb = false, roster = null } = {}) {
         } else {
           state.battlemsg = '* A powerful hit should be enough! Make your move!';
         }
+      }
+      // THE B-SIDE TAIL of the same turn end (Step_0:566-781): the down and
+      // GLOOM lines, the no-hit taunts, the Multislash2 line, the spell
+      // taunt, k_lastpro — after the telegraph, last write wins. See
+      // sidebTurnEndMessages. `kaizo_prevatk` on a gate turn is the row the
+      // gate SKIPPED: the launch block pre-advances `kaizo_attack` to the
+      // finished row's nextAttack (:528-529) and the gate then copies THAT
+      // into prevatk (:574) — the natural next, linear in the table with
+      // phase 3's tail looping to VC_LOOP, independent of the sim's own
+      // resume bookkeeping. `phase4turn` is 0 on the gate turn and row + 1
+      // inside the finale (Other_10 increments it at selection).
+      if (sideb) {
+        let naturalNext;
+        if (!lastInPhase) naturalNext = t[prevPhase][prevTurn + 1];
+        else if (prevPhase === 3) naturalNext = t[VC_LOOP.phase][VC_LOOP.turn];
+        else naturalNext = t[prevPhase + 1]?.[0];
+        const prevatk = gateTripped ? (naturalNext?.id ?? prevRowId) : prevRowId;
+        const knightPhaseNow = gateTripped ? 4 : prevPhase;
+        const phase4turn = gateTripped ? 0 : (prevPhase === 4 ? prevTurn + 1 : 0);
+        sidebTurnEndMessages(state, { prevatk, phase: knightPhaseNow, phase4turn });
       }
       // THE KNIGHT REPORTS THE ROW HE IS LEAVING, not the one he is taking.
       // The mod's selector sets `phase = kaizo_AT.attackPhase`

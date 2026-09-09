@@ -15,8 +15,10 @@ import { buildKaizoTurnLoop } from './kaizo-practice.js';
 import { vcHooks } from './kaizo-vc-hooks.js';
 import { kaizoVortexendFreeze } from '../attacks/sword-vortex.js';
 import { installRoster, WEIRD_ROUTE_PARTY } from '../party/roster.js';
-import { scrKaizoTarget, kaizoKnightTarget } from '../party/damage.js';
+import { scrKaizoTarget, kaizoKnightTarget, kaizoDamageHooks } from '../party/damage.js';
+import { kaizoAdvanceBalloon } from '../party/freeze.js';
 import { createKaizoHeroes } from '../party/heroes.js';
+import { installKaizoMenu } from '../party/spells.js';
 import { VC_TABLE, VD_TABLE, VC_KNIGHT } from '../versions/vc-script.js';
 
 export const KAIZO_NOTE =
@@ -242,6 +244,11 @@ export function buildKaizoScene(state, { version = 'A' } = {}) {
     installRoster(state, { charIds: v.party, sideb: version === 'D' });
     roster = state.kaizo.roster;
     state.kaizo = { ...marker, ...state.kaizo };
+    // LANE W2 (menu / spells / ACTs / X-Slash): fill the engine's
+    // character-table seam (sim/spells.js) from the roster and spawn the
+    // spell controller. Roster-gated by construction -- this block is
+    // `if (v.party)`. kaizo/party/spells.js has the provenance.
+    installKaizoMenu(state);
 
     // THE GAME KEEPS THREE SLOTS AND LEAVES THE SPARE EMPTY.
     //
@@ -288,6 +295,34 @@ export function buildKaizoScene(state, { version = 'A' } = {}) {
     // (sim/state.js). A two-person party needs its own, or obj_heroparent
     // steps a member who is not in the fight.
     state.heroes = createKaizoHeroes(state);
+
+    // ── THE PARTY LAYER GOES LIVE HERE, and only here ─────────────────────
+    //
+    // sim/damage.js's four entry points (scrDamage, scrDamageSingle,
+    // scrDamageAll, scrDamageMaxhp) each defer whole to a hook of the same
+    // name on `state.kaizo.hooks`, and sim/dialogue.js's advanceBalloon to
+    // `hooks.advanceBalloon`. Installing them is what puts kaizo/party/
+    // damage.js on the path every bullet actually travels
+    // (sim/bullets/regularbullet.js:145-147, the slashes, the splitslash,
+    // knight-stream.js:418, knightlines.js:951, the two local
+    // scr_damage_all_maxhp loops, roaring-final-star.js's direct scrDamage):
+    // Noelle's x0.5 (scr_damage.gml:157-160), the B-Side gloom precompute and
+    // accrual (:5-17, :245-265), the -999 fell for everyone (:225-231),
+    // scr_kaizo_target through global.char, scr_damage_maxhp's own ratios —
+    // and takes the Susie exchange off the B-Side (Step_0:206-211).
+    //
+    // ROSTER-GATED BY CONSTRUCTION: this block only runs for a version that
+    // brings its own party. V-C keeps the engine's scr_damage under the
+    // knightTarget hook below, which is what the _tok3 byte gate is pinned
+    // to; the mod's A-Side deltas that ride in the same script (the -999
+    // fell for Kris, the deleted Flurry softening) are therefore NOT live on
+    // V-C from here — they need the roster layer, and under the gate's HP
+    // pin they are invisible either way. `??=` for the reason the
+    // knightTarget install records: a check's recording wrapper must win.
+    state.kaizo.hooks ??= {};
+    const dmgHooks = kaizoDamageHooks();
+    for (const name of Object.keys(dmgHooks)) state.kaizo.hooks[name] ??= dmgHooks[name];
+    state.kaizo.hooks.advanceBalloon ??= kaizoAdvanceBalloon;
   }
 
   // ── TARGETING. The mod DELETES vanilla's block; sim/damage.js keeps it ───

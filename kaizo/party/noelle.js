@@ -87,6 +87,89 @@ export const NOELLE_GEAR_WEIRD_ROUTE = NOELLE_GEAR_THORNRING;
 export const THORN_RING = 13;
 
 /**
+ * WHAT A FRESH B-SIDE FILE ACTUALLY CARRIES (gap 10, read 2026-09-08). The
+ * report called 120/5/13/1 + ThornRing + [2, 8, 9] "inferred"; here is what
+ * each piece is, with the site that decides it.
+ *
+ * THE SETTINGS SIGN CHOOSES THE ROSTER AND NOTHING ELSE. obj_npc_sign
+ * Draw_0:31-41 asks "(How many party members?)" with the choices `1 / 3 / 2`
+ * (that order, verbatim), :89-90 maps the choice to `partyleft = [0, 2, 1]
+ * [choice]`, :100-103 offers Kris / Susie / Ralsei / Noelle, :124-125 fills
+ * `partychar[partyleft] = choice + 1; partyleft--` — the LAST slot first —
+ * and :152-155 commits `global.char = partychar; scr_fixparty(0)`, which
+ * re-packs by id (kaizo_settings_init:327-379, roster.js scrFixparty). No
+ * line of it touches hp/at/mag/df, charweapon, chararmor or spell[]. Its
+ * own text says where those come from: "(Equips can be adjusted and so
+ * on.)" (:137) — the overworld menu, on whatever the file holds.
+ *
+ * SO THE FILE DECIDES, AND THE FILE IS THE CHAPTER-2 TRANSFER:
+ *   - stats: `scr_load_chapter2.gml:314` runs scr_gamestart_chapter_override
+ *     at the END of the transfer, so a file made under the mod carries
+ *     120/5/13/1 (override :55-59) from its first save; obj_ch3_PTB02
+ *     Step_0:2-6 then floors ONLY maxhp at 120 every frame. A file
+ *     transferred under vanilla and later opened in the mod keeps the Ch2
+ *     values (`scr_load.gml:120-132` reads at/df/mag back; the bundled
+ *     "save file if you need one" is exactly that: 90 / 3 / 1 / 11).
+ *   - weapon and armour: `scr_load_chapter2.gml:91-110, 136-140` copy
+ *     `charweapon[i]` / `chararmor1[i]` / `chararmor2[i]` for EVERY i,
+ *     Noelle included. A Chapter-2 file with flag[456] set is a Snowgrave
+ *     file, and that route puts the ThornRing on her (the game's own
+ *     scr_spellinfo:110/123 half-cost is written for it). So a fresh
+ *     weird-route transfer carries 13 / 14 / 22 — the receipt for
+ *     NOELLE_GEAR_WEIRD_ROUTE above, now a transfer fact rather than a
+ *     reading of which branches would go dead.
+ *   - spells: `scr_load_chapter2.gml:170` copies `spell[i][j]`, twelve per
+ *     character. gamestart hands out [2, 8, 9]; the Chapter-2 route teaches
+ *     SnowGrave (10) and the transfer would carry it. This dump cannot show
+ *     the grant, so NOELLE_SPELLS stays [2, 8, 9] and a measured list is
+ *     installed with `state.kaizo.spells = { 4: [2, 8, 9, 10] }`
+ *     (kaizo/party/spells.js kaizoSpellList reads it ahead of the roster).
+ *
+ * WHAT THE USER'S OWN FILE COULD DIFFER IN, decodable offline
+ * (`%LOCALAPPDATA%\DELTARUNE\filech3_N`, 62 lines per character from line
+ * 17; Noelle's block 265-274, her spells 315-326, flag 456 at line 1009):
+ * at/mag/df if it was transferred under vanilla (3/11/1 at LV1, more if she
+ * levelled); the weapon if it was re-equipped in the Ch3 menu (12 or 13 are
+ * the only two she can wear); whether spell 10 is present; and Kris's own
+ * gear (lines 79-88), which is gap 11's.
+ */
+export const NOELLE_FRESH_FILE = {
+  stats: NOELLE_STATS,
+  gear: NOELLE_GEAR_THORNRING,
+  spells: [2, 8, 9],
+  /** SnowGrave, if the Chapter-2 file carried it — not decidable from this dump. */
+  maybeSpells: [10],
+};
+
+/**
+ * obj_npc_sign Draw_0:31-41, :89-90, :124-125, :152-155 — the picker,
+ * translated. `sizeChoice` is the "(How many party members?)" index over
+ * the choices `1 / 3 / 2` (0 -> one member, 1 -> three, 2 -> two); `picks`
+ * are the "(Select who you want.)" indices 0..3 (Kris, Susie, Ralsei,
+ * Noelle) in the order chosen. Returns `global.char` as scr_fixparty leaves
+ * it. The sign fills the highest slot first, and the compaction re-sorts by
+ * id, so the order picked never matters — which is why the sim's
+ * WEIRD_ROUTE_PARTY can be written [Kris, Noelle] without a slot table.
+ */
+export function scrSignParty(sizeChoice, picks) {
+  const _pl = [0, 2, 1];
+  let partyleft = _pl[sizeChoice] ?? 0;
+  const partychar = [0, 0, 0];
+  for (const choice of picks) {
+    if (partyleft < 0) break;
+    partychar[partyleft] = choice + 1;
+    partyleft -= 1;
+  }
+  // scr_fixparty(0), inlined: present ids in order 1 < 2 < 3 < 4 from slot 0.
+  const seen = [false, false, false, false, false];
+  for (let i = 0; i < 3; i++) if (partychar[i] >= 1 && partychar[i] <= 4) seen[partychar[i]] = true;
+  const out = [0, 0, 0];
+  let ind = 0;
+  for (let id = 1; id <= 4; id++) if (seen[id]) { out[ind] = id; ind += 1; }
+  return out;
+}
+
+/**
  * `sprite_prefetch(...)` — obj_ch3_PTB02's Other_17 (Room Start), verbatim and
  * in order. The mod prefetches Noelle's WHOLE battle set for a fight vanilla
  * never lets her enter; that list is itself the evidence the B-Side party is

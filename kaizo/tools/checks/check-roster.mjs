@@ -51,7 +51,7 @@ import {
   WEIRD_ROUTE_PARTY, NORMAL_ROUTE_PARTY, scrFixparty, buildRoster,
   installRoster, rosterSize, slotOf, charIdOf, isUp, havechar, globalChar,
   memberAt, hpOfChar, maxhpOfChar, setFreeze, SLOT_POS, slotDepth,
-  CHAR_KRIS, CHAR_NOELLE,
+  CHAR_KRIS, CHAR_NOELLE, gearOfChar,
 } from '../../party/roster.js';
 import {
   NOELLE_STATS, NOELLE_SPRITE_PREFETCH, NOELLE_SIDEB_SPRITES, noelleSprites,
@@ -329,9 +329,19 @@ section('scr_kaizo_target — two slots, one draw, never a third');
 section('the ShadowMantle absorbs TWO consecutive hits, not vanilla\'s three');
 
 {
-  // Kris wears armour 23 by default (DEFAULT_GEAR[0]).
-  const s = weirdRouteState({ seed: 31337 });
-  assert((s.kaizo.roster[0].gear.armor ?? []).includes(23), 'Kris starts mantled');
+  // THE MANTLE IS EQUIPPED FOR THE TEST, not worn by default. The roster's
+  // Kris wears scr_gamestart's chapter-3 build (MechaSaber + AmberCard +
+  // GlowWrist — roster.js GAMESTART_CH3_GEAR, gml_GlobalScript_scr_gamestart
+  // .gml:177-179), the loadout the mod boots with and the A-Side recording's
+  // party receipt read back; armour 23 is a save's choice, so the branch it
+  // flips is asserted with the mantle handed in explicitly.
+  const s0 = weirdRouteState({ seed: 31337 });
+  assert(!(s0.kaizo.roster[0].gear.armor ?? []).includes(23),
+    'Kris does NOT start mantled — the roster wears scr_gamestart\'s build');
+  assertDeep(s0.kaizo.roster[0].gear, { weapon: 16, armor: [1, 10] },
+    'Kris: MechaSaber (16), AmberCard (1) + GlowWrist (10) — scr_gamestart.gml:177-179');
+  const s = weirdRouteState({ seed: 31337, gear: { 1: { weapon: 16, armor: [23, 10] } } });
+  assert((gearOfChar(s, CHAR_KRIS).armor ?? []).includes(23), 'Kris is mantled for this block');
   s.knight.damagecounter = 0;
   const t1 = scrKaizoTarget(s, 1);
   const c1 = s.knight.damagecounter;
@@ -348,7 +358,7 @@ section('the ShadowMantle absorbs TWO consecutive hits, not vanilla\'s three');
     'hit 3 ROLLS — `damagecounter >= 2` disabled the redirect (vanilla ran to < 3)');
   assert(t3 === 0 || t3 === 1, 'and the roll still stays inside the roster');
   // The redirect itself costs no RNG at all.
-  const s2 = weirdRouteState({ seed: 5 });
+  const s2 = weirdRouteState({ seed: 5, gear: { 1: { weapon: 16, armor: [23, 10] } } });
   const before = s2.gmlRng.draws ?? 0;
   scrKaizoTarget(s2, 1);
   assertEq((s2.gmlRng.draws ?? 0) - before, 0, 'a mantle redirect draws NOTHING');
@@ -437,8 +447,9 @@ section('scr_damage_maxhp — x0.75, and NOT on a party-wide hit');
 {
   // Down Noelle and every roll must land on Kris (the companion branch has
   // nobody left to overwrite him with), so the arithmetic is deterministic.
-  // Kris is mantled by default: arg0 0.66 -> 0.33, ceil(160 * 0.33) = 53.
-  const s = weirdRouteState({ seed: 300, sideb: false });
+  // Kris is handed the mantle (the roster's default is scr_gamestart's
+  // build, no armour 23): arg0 0.66 -> 0.33, ceil(160 * 0.33) = 53.
+  const s = weirdRouteState({ seed: 300, sideb: false, gear: { 1: { weapon: 16, armor: [23, 10] } } });
   s.__rawHp[1] = -999;
   s.invTimer = -1;
   const dealt = scrDamageMaxhp(s, 0.66, true, false, { target: 0 });
@@ -579,12 +590,16 @@ assertDeep(gloomPrecompute(120), { gloomdmg: 20, damage: 120 },
   }
   assertEq(s.kaizo.gloom[0], 45, 'scr_damage caps gloom at 45');
   assertEq(s.kaizo.gloomByChar[1], 45, 'the char mirror caps with it');
-  // ...and the hp - 1 clamp is real too, and TIGHTER when HP is low.
-  s.__rawHp[0] = 20;
+  // ...and the hp - 1 clamp is real too, and TIGHTER when HP is low. The
+  // 60 hit lands 45 on an unmantled DF-5 Kris (three -3 steps... five, all
+  // above 160/5), so 60 HP leaves him on 15 and the meter at 14.
+  s.__rawHp[0] = 60;
   s.invTimer = -1;
   scrDamage(s, 60, 0, { aoe: true });
+  assert(s.__rawHp[0] > 1, 'he is still standing (the clamp, not the wipe, is under test)');
   assert(s.kaizo.gloom[0] <= s.__rawHp[0] - 1,
     'gloom is clamped to hp - 1 whenever that bites first');
+  assertEq(s.kaizo.gloom[0], s.__rawHp[0] - 1, '...and it bit: min(45 + 10, hp - 1) = hp - 1');
 }
 
 {

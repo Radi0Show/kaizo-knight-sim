@@ -480,6 +480,52 @@ physically **cuts the bar in half** at `gml_Object_obj_knight_enemy_Step_0.gml:1
 (`spr_tensionbar_sliced_top` flung off with gravity). Before that scene, max
 TP is the vanilla 250.
 
+**B-4 — the menu, the spells, the ACTs, X-Slash (landed 2026-09-08, lane
+W2: `kaizo/party/spells.js`, `check-noelle-menu`, `check-spells-kaizo`).**
+The engine indexes `SPELL_LIST` / `ACTS` by slot; the game by
+`global.char[charturn]`. The vendored `sim/spells.js` now carries a
+character-table seam (`spellInfo` / `spellListFor` / `actsFor` and hooks
+for `spellCost` / `castSpell` / `resolveActPages`, each `??` the vanilla
+table; knight-sim branch `kaizo-w2-seams`), and `installKaizoMenu` fills it
+from the roster inside `buildKaizoScene`'s `if (v.party)` block. What plays
+on V-D now: Noelle's MAGIC is `spell[4] = 2, 8, 9`
+(`gml_GlobalScript_scr_gamestart.gml:202-204`) with scr_spellinfo's names,
+`descb` and costs — IceShock 40 → 20 and SnowGrave `maxtension*2` → half
+with `charweapon[4] == 13` (`scr_spellinfo.gml:110, 123`, **byte-identical
+in v105**: the half-cost is the game's, not the mod's); her ACT is N-Action
+(`scr_monstersetup.gml:1866-1868`) with the one B-Side page / three A-Side
+pages (`obj_knight_enemy_Step_0.gml:1252-1274`); Kris's grid carries
+X-Slash at index 2, 62.5 TP, `actactor 11` (`Step_0:42-53`), selectable
+only with every partner down (`obj_battlecontroller_Step_0.gml:1099-1113`),
+charged at the grid's confirm (`:1170`), resolving as two
+`scr_damage_enemy(0, _xslashdmg)` hits 14 frames apart through `alarm[4]`
+with `dont_fucking_kill_the_knight` raised between them (`Step_0:980-1033`,
+`Alarm_4`) and the turn held until `actcon == 1`; the B-Side CHECK strings
+(`Other_23:4-8`) and the mod's HoldBreath repeat line ("They felt dizzy",
+`Step_0:972`). The casts: Heal Prayer is `battlemag * 5` through `scr_heal`
+against the roster's own maxhp, with the k_freeze gate wasting it
+(`scr_spell.gml:43-75`); IceShock draws ONE `random(10)`, spawns
+`obj_icespell`, primes `blockanim = 0.5` at timer 4 and divides at 15 by
+`7 − dr·9.5` (ring) / `6 − dr·7.5` (Susie alive) / `4.5 − dr·7.5`, floor 1
+(`obj_icespell_Draw_0.gml:12-21, 74-101`); SleepMist spawns a mist that
+cannot succeed (`obj_spell_mist`); SnowGrave is `scenes.js`'s
+`castSnowgrave` at the live battlemag plus the `k_sgscene = 1` arm
+(`Step_0:1543-1545`) — the scene's stepping is still B-3 / §6.C item 9.
+The ThornRing tick (`obj_battlecontroller_Step_0.gml:1544-1567`, every 12th
+frame down to `round(maxhp/3)`) runs from an invisible controller entity.
+**Three corrections to the gap report, from the diff:** `scr_spellinfo` is
+unchanged by the mod; the `12.5` at `scr_spell.gml:170` is case 5 (Red
+Buster), not IceShock; the `5.8` at `:184` is case 6 (Ralsei's party heal),
+not Heal Prayer — neither reachable on this roster. **Still open in this
+layer:** the ACT grid's greyed-head strip and the type-6 (`lighty`) damage
+number are data only (`xslashGridHeads`, writer `type: 6`) until render/
+grows a seam; the ally picker still walks three slots (the empty one heals
+`global.hp[0]`, faithfully clamped to 0); `dont_fucking_kill_the_knight` is
+exposed as `state.kaizo.xslash.dontKill` and not yet read by
+`kaizo-vc-hooks.js`'s `endCutsceneReached`; and that same file's `actPages`
+hook replaces the X-Slash page with the CHECK text (it tests
+`actId === 1` where it should test `actId !== 0`).
+
 ### 6.C NOT YET BUILT — ranked
 
 Ranked by how much of the *played* B-Side fight each unblocks. **All 27 chain
