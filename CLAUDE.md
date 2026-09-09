@@ -41,37 +41,39 @@ npm run verify             # the vendored ENGINE's 60 suites -- an integrity che
                            # of the copy under sim/, not this repo's metric
 ```
 
-The metric is the byte gate's **first divergence frame** against the tracked
-recording `_tok3` (`~/knight-research/kaizo-mod/fullfight/`). On 2026-09-04
-the TRACE sheet is **byte-exact over all 12,637 frames** (`trace : OK`) and
-**bullets stands at f6757** — one f32 ulp in the gravity recomposition with no
-code behind it, structurally unfittable from this recording, and BLOCKED on a
-motion-probe recording. Everything else is derived.
+The metric is the byte gate's **first divergence frame**, against two tracked
+recordings in `~/knight-research/kaizo-mod/fullfight/`:
+- `_tok3` — pin keep-alive, hence a ONE-CHARACTER fight from turn 3 (the
+  recorder pinned HP but never revived; being down is five globals). The
+  A-Side REGRESSION oracle: trace AND bullets **byte-exact over the whole
+  fight** since 2026-09-08 (the last cell, one f32 ulp in the gravity
+  recomposition at f6757, fell to the runner motion probe — knight-sim
+  v1.0.22). It must stay exact.
+- `_rev1` — revive keep-alive (the recorder now runs scr_revive after the
+  HP pin), the THREE-CHARACTER fight, adopted 2026-09-09: the FIDELITY
+  reference, and its front is the metric now. 2026-09-09: trace exact to
+  f8698, bullets to f8712; the front is the fight's one SPELL turn (Susie's
+  Rude Buster at the f8556 menu — obj_spellphase and the enemy picker; the
+  ledger's "2026-09-09 — _rev1 ADOPTED" has the whole diagnosis).
+Both verify in one `npm run verify:fullfight`; the regen reads the keep-alive
+mode off each recording's party receipt. Set `KAIZO_SIM_OUT=<dir>` when two
+regens may run at once — the default output folder is shared.
 
-TWO FACTS ABOUT THE REFERENCE ITSELF, both measured 2026-09-04:
-- The graze feed now covers the whole fight (re-recorded as `_tok5`, adopted
-  after its trace AND bullets sheets proved byte-identical to `_tok3`; the raw
-  set lives in `fullfight/tok5-raw/`, the old feed in `fullfight/backup-*/`).
+TWO FACTS ABOUT THE REFERENCES, both measured 2026-09-04:
+- The graze feed covers the whole fight for both (`_tok3`'s was re-recorded as
+  `_tok5` and adopted after its trace AND bullets proved byte-identical; the raw
+  sets live in `fullfight/tok5-raw/` and `fullfight/rev1-raw/`).
   Budget a graze recording at Frames/20 + 60 s: the graze log holds the game
   near 21 fps, and the recorder's default (Frames/30) is what cut `_tok4` short.
-- **The recorder's default OutDir is `traces/`, and the oracle checks scan it.**
-  A full-fight recording dropped there silently became five checks' oracle
-  (`check-oracle-{crescent,multislash,stars,stream,tracking}`, reading
-  `kaizo_oracle_seq_tok5.csv` in place of `seq_deep`). Pass `-OutDir` or move
-  the files out before running the suite.
+- **The recorder's default OutDir is `traces/`, and the oracle checks scan it;
+  the byte gate globs `fullfight/`.** Stage a recording OUTSIDE both (a
+  `<tag>-raw/` folder) and adopt it by hand with a PROVENANCE file.
 
-THE PARTY IN EVERY `_tok*` RECORDING IS SWOONED after its first swoon: the
-oracle patch pins `global.hp` each frame but never calls `scr_revive`, and
-being down is FIVE globals (`charmove`, `charcantarget`, `chardead`,
-`charaction`, `charspecial`). Full health, no menu, no attacks — only Kris
-fights. The sim's `--keep-alive` mirrors it (`keepAliveMode: 'pin'`; a
-`'revive'` mode exists), which is why the gate never saw it. It is NOT
-one-to-one with a revived party: a one-character party changes the knight's
-target rerolls (`while (!charcantarget[mytarget])`), i.e. the RNG stream. And
-even a real `scr_revive` sets only three of the five — a revived member cannot
-act until the next turn's menu re-arms `charaction`. Fixing the reference means
-a patch that revives on keep-alive, `keepAliveMode: 'revive'`, and a new
-recording; that resets the trace front to the first swoon. Decision pending.
+A REVIVED MEMBER CANNOT ACT UNTIL THE NEXT MENU: `scr_revive` sets three of the
+five swoon globals (`charmove`, `charcantarget`, `chardead`), never
+`charaction`/`charspecial` — the bar is built from `charaction` alone. The sim's
+`--keep-alive-mode revive` mirrors exactly that (kaizo/party/damage.js's
+roster-bounded scr_revive), and `_rev1`'s three-bolt bars prove it.
 
 Two instruments answer questions this number cannot, and both are worth
 reaching for before theorising:
