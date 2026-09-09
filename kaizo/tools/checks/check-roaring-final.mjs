@@ -39,18 +39,50 @@
 //   - THE TURN ENDS ITSELF (global.turntimer -1 + obj_heart destroyed), in
 //     both modes, with the landed hit buying exactly 6 extra frames
 //
+// ADDED 2026-09-08 (the roaring gap report's G2/G3/G4/G5/G10/G15 — every
+// routing the report found wrong by reading, with its GML receipt):
+//   - §15 the hit goes through kaizo/party/damage.js's scr_damage_all_maxhp:
+//     the V-C shape (no roster installed) still deals ceil(maxhp * 0.75);
+//     the B-Side Weird Route party takes ceil(ceil(maxhp * 0.75) * 0.8) with
+//     ceil(tdamage / 4) gloom on Kris, Noelle's x0.75 NOT applied (two gates
+//     the finale fails), and a two-person wipe trips the scripted failure
+//   - §16 a con-101 starchild touching the soul IN THE ROAR is the knight's
+//     catch (Other_12), flat 30 / 25 defending, raising hp_visible; outside
+//     the roar it is still the parent's 75; a B-Side catch banks 10 gloom
+//   - §17 CleanUp_0 fires on the sweep: chargeupcon 3 -> 0, siner2 0,
+//     image_alpha 1, the roar's sounds stopped, lines and hideback gone —
+//     in both roaring modes
+//   - §18 the con-101 children's lifetime in the roar (the Draw_0:107-123
+//     block is a no-op; the child's own fade is what kills them)
+//   - §19 THE ONLY RECORDING-BACKED ASSERTION HERE: the 256
+//     obj_afterimage_fade_to_white directions of the _knightglow lock sit in
+//     ONE anchored stream, the charge-up's own rolls are consecutive, and
+//     the sim's random(360) from the same index reproduces them. SKIPs
+//     loudly without the recording.
+//
 // PUBLISH GATE: V-C recreation of EnderCat8's Kaizo Roaring Knight — do not
 // publish without permission.
 
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { homedir } from 'node:os';
 import { createState, stepFrame } from '../../../sim/index.js';
 import { destroy, spawn } from '../../../sim/entity.js';
-import { buildSingleAttackScene } from '../../../sim/scenes/single.js';
+import { buildSingleAttackScene, } from '../../../sim/scenes/single.js';
+import { clearTurn } from '../../../sim/scenes/fight.js';
+import { tickChargeup } from '../../../sim/knight.js';
+import { gmlCreate, gmlU32, gmlRandom } from '../../../sim/rng.js';
 import { ensureSoul } from './scaffold-soul.mjs';
-import { PARTY, ACTION_DEFEND, scrDamage } from '../../../sim/damage.js';
+import { PARTY, ACTION_DEFEND } from '../../../sim/damage.js';
 import { gmlEq } from '../../../sim/gml.js';
 import { roaring2, finalSlashLine, roaringFinalCleanUp } from '../../attacks/roaring-final.js';
 import { kaizoKnightCatch } from '../../attacks/roaring-final-star.js';
+import { pointingStarchild } from '../../attacks/stars-pointing-starchild.js';
 import { HEART_2PX_MASK, FINALSLASH_MASK } from '../../attacks/knight-stream.js';
+import {
+  installRoster, NORMAL_ROUTE_PARTY, WEIRD_ROUTE_PARTY, CHAR_KRIS, CHAR_NOELLE,
+} from '../../party/roster.js';
+import { resolveTraces, readTrace } from './check-oracle-schedule.mjs';
 
 let failures = 0;
 let checks = 0;
@@ -85,7 +117,7 @@ function assertNear(got, want, eps, label) {
  * exactly the way the V-C launcher's type-107 case does — including the
  * `myattackchoice` the Create gate reads and the 999999 clock pin.
  */
-function build({ ac = 104, sideb = false, seed = 12345, invc = 0.5 } = {}) {
+function build({ ac = 104, sideb = false, seed = 12345, invc = 0.5, roster = null } = {}) {
   const state = createState({ seed });
   buildSingleAttackScene(state, { seed, attack: 'roaring', difficulty: 0 });
   ensureSoul(state); // the drill no longer spawns the soul at build (scaffold-soul.mjs)
@@ -97,10 +129,22 @@ function build({ ac = 104, sideb = false, seed = 12345, invc = 0.5 } = {}) {
     if (x.alive && x.type.name === 'obj_knight_roaring2') destroy(x);
   }
   state.kaizo = { sideb };
+  // `roster`: null is THE V-C SHAPE — kaizo-fight.js installs a roster only
+  // for a version that declares a party (V-D), so the shipped A-Side scene
+  // runs the party module on its vanilla-three fallback. The sections that
+  // need the mod's data layer (B-Side gloom, the two-person Weird Route)
+  // install one the way kaizo-fight.js does for V-D.
+  if (roster) installRoster(state, { charIds: roster, sideb });
   state.currentAc = ac;      // obj_knight_enemy.myattackchoice
   state.turntimer = 999999;  // the type-107 PINNER the launcher applies
   state.invc = invc;
-  const e = spawn(state, roaring2, { x: state.view.x + 320, y: state.view.y + 88 });
+  // Born AT THE KNIGHT, as kaizo-mod-launcher.js case 107 spawns it since
+  // 2026-09-08 (dbulletcontroller Step_0:2259); Create hoists it y -= 320.
+  const knight = state.entities.find((x) => x.alive && x.type.name === 'obj_knight_enemy');
+  const e = spawn(state, roaring2, {
+    x: knight ? knight.x : state.view.x + 425,
+    y: knight ? knight.y : state.view.y + 77,
+  });
   return { state, e };
 }
 
@@ -142,11 +186,15 @@ function runFinale({ sideb = false, seed = 12345, maxFrames = 2600, invulnerable
     specClearedAtCut: false,
     starchildren: 0,
     soulYAtCut: null,
+    // per con-101 child: { birth, lastSeen, activeOff, lastX, lastY, difficulty }
+    kids: [],
+    knightConAtEnd: null,
   };
   let key = `${e.final_con}.${e.attack_con}`;
   rec.phase[key] = -1;
   const seen = new Set(stars(state));
   const seenKids = new Set();
+  const kidRec = new Map();
   for (let f = 0; f < maxFrames; f++) {
     if (invulnerable) state.invTimer = 90; // nothing can land
     const before = state.gmlRng.draws ?? 0;
@@ -246,8 +294,27 @@ function runFinale({ sideb = false, seed = 12345, maxFrames = 2600, invulnerable
       (x) => x.alive && x.type.name === 'obj_knight_pointing_starchild' && !seenKids.has(x)
         && (seenKids.add(x), true),
     ).length;
+    // The children's lifetimes (§18). A reaped entity leaves the list, so
+    // "last seen alive" is the observable; the death frame is the one after.
+    for (const k of state.entities) {
+      if (!k.alive || k.type.name !== 'obj_knight_pointing_starchild') continue;
+      let r = kidRec.get(k);
+      if (!r) {
+        r = { birth: f, lastSeen: f, activeOff: -1, lastX: k.x, lastY: k.y, difficulty: k.difficulty };
+        kidRec.set(k, r);
+        rec.kids.push(r);
+      }
+      r.lastSeen = f;
+      r.lastX = k.x;
+      r.lastY = k.y;
+      if (r.activeOff < 0 && !(k.active === 1 || k.active === true)) r.activeOff = f;
+    }
 
-    if (state.turntimer === -1) { rec.endFrame = f; break; }
+    if (state.turntimer === -1) {
+      rec.endFrame = f;
+      rec.knightConAtEnd = state.knight ? state.knight.chargeupcon : null;
+      break;
+    }
   }
   return rec;
 }
@@ -542,11 +609,11 @@ console.log('10. the cut frame promotes every star to con 101');
 console.log('11. the hit — 75% of MAX HP, ignoring DEFEND, able to fell');
 
 function hitScenario({ throughSoul = true, invulnerable = false, defend = false,
-  hp = null, seed = 12345 } = {}) {
-  const { state, e } = build({ ac: 104, seed });
+  hp = null, seed = 12345, roster = null, sideb = false } = {}) {
+  const { state, e } = build({ ac: 104, seed, roster, sideb });
   stepFrame(state, {}); // let the scene settle and the 2px mask land
   if (hp) state.partyHp = hp.slice();
-  if (defend) state.charaction = [ACTION_DEFEND, ACTION_DEFEND, ACTION_DEFEND];
+  if (defend) state.charaction = state.partyHp.map(() => ACTION_DEFEND);
   state.invTimer = invulnerable ? 60 : -1;
   const soul = state.soul;
   soul.x = 310;
@@ -664,45 +731,36 @@ console.log('13. the retuned star catch (30 / 25, the 1-HP hole, hp_visible)');
     kaizoKnightCatch(state);
     return { state, e, before, after: state.partyHp.slice() };
   }
-  // The catch's raw damage is not observable directly — scr_damage runs the
-  // DF walk on top of it — so every number below is measured against a
-  // scr_damage CONTROL fed the value the mod's Other_12 passes. A catch that
-  // still passed the vanilla 40 fails these.
-  function control(raw, { defend = false, hp = [160, 190, 140] } = {}) {
-    const { state } = build({ ac: 104 });
-    stepFrame(state, {});
-    state.partyHp = hp.slice();
-    if (defend) state.charaction = [ACTION_DEFEND, ACTION_DEFEND, ACTION_DEFEND];
-    state.invTimer = -1;
-    const before = state.partyHp.slice();
-    for (let ti = 0; ti < 3; ti++) {
-      state.invTimer = -1;
-      scrDamage(state, raw, ti, { truedamage: true });
-    }
-    return before.map((h, i) => h - state.partyHp[i]);
-  }
-
+  // THE CATCH IS FLAT. Other_12 calls scr_damage() with obj_knight_roaring2
+  // alive, and the mod's scr_damage sets `truedamage = 1` on exactly that
+  // (kaizo gml_GlobalScript_scr_damage.gml:84-87); both defence branches are
+  // then EMPTY — `if (chapter == 3 && truedamage == 1) { }` at :128 (no
+  // scr_damage_calculation) and again at :162 (no DEFEND 2/3, no element) —
+  // so the number Other_12 passes is the number that lands: 30, 25 under
+  // DEFEND, hp - 1 under the clamp. These used to be measured against the
+  // VENDORED scrDamage as a control, which runs the DF walk under truedamage
+  // (30 came out 5 / 19 / 15) — a sim/damage.js deviation from the vanilla
+  // GML's own empty branch (v105 scr_damage.gml:183, :213), which is why the
+  // catch is routed through kaizo/party/damage.js since 2026-09-08 (G5).
   const plain = catchOnce({ hp: [160, 190, 140] });
   assertEq(plain.e.hp_visible, 1,
     'the first catch REVEALS the party HP HUD (`with (obj_knight_roaring2) hp_visible = 1`)');
   const dealt = plain.before.map((h, i) => h - plain.after[i]);
-  assertEq(dealt.join(), control(30).join(), 'the catch passes 30 (kaizo), not 40');
-  assert(dealt.join() !== control(40).join(), 'and 40 (vanilla) gives a different result');
+  assertEq(dealt.join(), '30,30,30', 'the catch lands 30 FLAT on each member (truedamage: no DF walk)');
 
   const def = catchOnce({ hp: [160, 190, 140], defend: true });
   const defDealt = def.before.map((h, i) => h - def.after[i]);
-  assertEq(defDealt.join(), control(25, { defend: true }).join(),
-    'DEFEND drops the raw to 25 — vanilla Other_12 has no such term');
-  assert(defDealt.join() !== control(30, { defend: true }).join(),
-    'and it is a REDUCTION, not just the sim damage path defend math');
+  assertEq(defDealt.join(), '25,25,25',
+    'DEFEND drops the raw to 25 — vanilla Other_12 has no such term, and no 2/3 applies');
 
   // `if (hp > 1 && hp <= damage) damage = hp - 1` — the survival clamp,
   // rewritten against the LIVE damage instead of a hardcoded 41. Chosen so
   // the clamp is the ONLY thing between the member and death.
   const low = catchOnce({ hp: [3, 190, 140] });
-  assert(low.after[0] > 0, 'the clamp keeps a 3-HP member alive');
-  assert(control(30, { hp: [3, 190, 140] })[0] >= 3,
-    '...where the unclamped 30 would have felled them');
+  assertEq(low.after[0], 1, 'the clamp leaves a 3-HP member on exactly 1');
+  const lowDef = catchOnce({ hp: [26, 190, 140], defend: true });
+  assertEq(lowDef.after[0], 1,
+    'clamp against the LIVE 25: a defending member on 26 is clamped (vanilla `hp < 41` would not be)');
 
   // THE 1-HP HOLE, preserved: `hp > 1` excludes someone already on 1, so the
   // clamp that is meant to spare them does not run at all.
@@ -739,6 +797,395 @@ console.log('14. determinism');
   assertEq(a.linesCreated, 30, 'seed 4242 also makes 30 lines');
   assertEq(c.linesCreated, 30, 'seed 777 also makes 30 lines');
   assert(a.endFrame > 0 && c.endFrame > 0, 'and both end their turn');
+}
+
+// ═══ 15. G2 — THE HIT IS THE MOD'S scr_damage_all_maxhp ══════════════════
+//
+// kaizo gml_GlobalScript_scr_damage_all.gml:30-55 -> scr_damage_maxhp.gml,
+// via kaizo/party/damage.js (roaring-final.js imports it since 2026-09-08;
+// before that the finale ran the VENDORED VANILLA scrDamageMaxhp under a
+// local wrapper, which has no B-Side softening, no gloom and no progamer).
+console.log('15. G2 — the hit routes through kaizo/party/damage.js (scr_damage_all_maxhp)');
+{
+  // (a) THE V-C SHAPE — no roster installed, the shipped A-Side scene. The
+  // party module reads maxhp off the roster (0 without one — the finale
+  // measured 0 damage the moment the import moved), so roaring-final.js
+  // stands the Normal Route three up for the length of the call. Same
+  // numbers as §11, and no roster left behind.
+  const want = PARTY.map((p) => Math.ceil(p.maxhp * 0.75)); // 120 / 143 / 105
+  const vc = hitScenario({ throughSoul: true });
+  assertEq(vc.state.kaizo.roster, undefined, 'V-C shape: the scene installs no roster');
+  for (let i = 0; i < 3; i++) {
+    assertEq(vc.before[i] - vc.after[i], want[i],
+      `V-C shape: slot ${i} still takes ceil(maxhp * 0.75) = ${want[i]} through the party module`);
+  }
+  assertEq(vc.state.kaizo.roster, undefined, 'and the call-scoped roster shim leaves none behind');
+
+  // (b) The Normal Route roster INSTALLED (the shape the party layer wants):
+  // identical numbers, no shim needed.
+  const nr = hitScenario({ throughSoul: true, roster: NORMAL_ROUTE_PARTY });
+  assertEq(nr.state.kaizo.roster.length, 3, 'Normal Route roster: three members');
+  for (let i = 0; i < 3; i++) {
+    assertEq(nr.before[i] - nr.after[i], want[i], `Normal Route roster: slot ${i} takes ${want[i]}`);
+  }
+
+  // (c) THE B-SIDE, on the party it actually runs with — the Weird Route's
+  // Kris + Noelle (V-D installs exactly this). scr_damage_maxhp.gml:170-174:
+  //     tdamage = ceil(maxhp * 0.75);
+  //     _gloomdmg = ceil(tdamage / 4);  tdamage = ceil(tdamage * 0.8);
+  // Kris 160 -> 120 -> 96, gloom 30. Noelle 120 -> 90 -> 72, and NOT
+  // ceil(ceil(120 * 0.75 * 0.75) * 0.8) = 55: her x0.75 (:161-164) sits inside
+  // `!i_ex(obj_knight_roaring2)` (:60) AND `aoedamage == false` (:61), and
+  // the finale's hit fails both gates. Gloom lands on Kris only — the
+  // ThornRing (`charweapon[4] == 13`, :249-252) zeroes Noelle's — with NO 45
+  // cap on this path (:253-256 has only the hp-1 clamp).
+  const b = hitScenario({ throughSoul: true, roster: WEIRD_ROUTE_PARTY, sideb: true });
+  assertEq(b.state.partyHp.length, 2, 'Weird Route roster: two members');
+  assertEq(b.state.kaizo.roster[0].charId, CHAR_KRIS, 'slot 0 is Kris');
+  assertEq(b.state.kaizo.roster[1].charId, CHAR_NOELLE, 'slot 1 is Noelle');
+  const krisMax = b.state.kaizo.roster[0].maxhp;
+  const noelleMax = b.state.kaizo.roster[1].maxhp;
+  assertEq(b.e.final_hit, 1, 'B-Side: the line lands');
+  assertEq(b.before[0] - b.after[0], Math.ceil(Math.ceil(krisMax * 0.75) * 0.8),
+    `B-Side Kris takes ceil(ceil(${krisMax} * 0.75) * 0.8) = ${Math.ceil(Math.ceil(krisMax * 0.75) * 0.8)}`);
+  assertEq(b.before[1] - b.after[1], Math.ceil(Math.ceil(noelleMax * 0.75) * 0.8),
+    `B-Side Noelle takes ceil(ceil(${noelleMax} * 0.75) * 0.8) = ${Math.ceil(Math.ceil(noelleMax * 0.75) * 0.8)} — NO x0.75 in the roar`);
+  assert(b.before[1] - b.after[1] !== Math.ceil(Math.ceil(noelleMax * 0.75 * 0.75) * 0.8),
+    'and it is not the x0.75-then-softened number');
+  assertEq(b.state.kaizo.gloom[0], Math.ceil(Math.ceil(krisMax * 0.75) / 4),
+    `B-Side gloom on Kris = ceil(tdamage / 4) = ${Math.ceil(Math.ceil(krisMax * 0.75) / 4)}, banked from the PRE-softened number`);
+  assertEq(b.state.kaizo.gloom[1], 0, 'B-Side gloom on Noelle = 0 (ThornRing immunity)');
+  assert(b.state.invTimer > 0, 'the B-Side hit grants invc * 30 too');
+
+  // (d) THE SCRIPTED WIPE ON A TWO-PERSON PARTY. Other_11:786-794 is
+  // character-indexed with `!scr_havechar(c) ||` clauses, so the absent ids
+  // 2 and 3 pass and two fells are a wipe. The partyHp[0..2] form this
+  // replaced could never fire here (a third index that is undefined).
+  const wipe = hitScenario({ throughSoul: true, roster: WEIRD_ROUTE_PARTY, sideb: true, hp: [10, 10] });
+  assertEq(wipe.e.final_hit, 1, 'two-person wipe: the hit lands');
+  assertEq(wipe.e.final_kill, 1, 'two-person wipe: both below 0 -> final_kill');
+  assertEq(wipe.after.join(), '1,1', 'and both are restored to exactly 1 HP');
+  assertEq(wipe.state.partyHp.length, 2, 'no phantom third member was written');
+}
+
+// ═══ 16. G3 / G5 — A STARCHILD IN THE ROAR IS THE CATCH ═════════════════
+//
+// kaizo obj_knight_pointing_starchild_Other_15.gml:1-16 — `if
+// (i_ex(obj_knight_roaring2)) { if (active == 1) { ...scr_precise_hit...;
+// with (obj_knight_enemy) event_user(2); } }` — the knight's Other_12, the
+// same 30 / 25 / hp-1 catch §13 pins, with `hp_visible = 1`. The non-roar arm
+// (34-68) is the parent's `target = 3; damage = 75`. Until 2026-09-08 the
+// sim ran the 75 in both.
+console.log('16. G3/G5 — a con-101 starchild touching the soul in the roar is the catch');
+{
+  function childTouch({ roster = null, sideb = false, defend = false, hp = null, roar = true } = {}) {
+    const { state, e } = build({ ac: 104, roster, sideb });
+    stepFrame(state, {}); // roaring2 alive, state.roaringActive latched
+    if (!roar) {
+      destroy(e, state);
+      stepFrame(state, {}); // re-latch: no obj_knight_roaring2 any more
+    }
+    if (hp) state.partyHp = hp.slice();
+    if (defend) state.charaction = state.partyHp.map(() => ACTION_DEFEND);
+    if (state.knight) state.knight.progamer = true;
+    const d = spawn(state, pointingStarchild, { x: state.soul.x, y: state.soul.y });
+    d.active = 1;
+    d.destroyonhit = 0;
+    state.invTimer = -1;
+    const before = state.partyHp.slice();
+    pointingStarchild.other15(d, state);
+    return { state, e, d, before, after: state.partyHp.slice() };
+  }
+
+  const inRoar = childTouch({ hp: [160, 190, 140] });
+  const dealt = inRoar.before.map((h, i) => h - inRoar.after[i]);
+  assertEq(dealt.join(), '30,30,30', 'in the roar: the catch, 30 flat to each member — not 75');
+  assertEq(inRoar.e.hp_visible, 1, 'in the roar: the touch REVEALS the party HP HUD');
+  assertEq(inRoar.d.alive, true, 'destroyonhit 0: the child passes through');
+  assert(inRoar.state.invTimer > 0, 'the catch grants invc * 30');
+  assertEq(inRoar.state.knight.progamer, false, 'scr_damage: `progamer = false` — the hitless run ends');
+
+  const def = childTouch({ hp: [160, 190, 140], defend: true });
+  assertEq(def.before.map((h, i) => h - def.after[i]).join(), '25,25,25',
+    'in the roar, DEFENDING: 25 (Other_12\'s `_dmg - 5`), no 2/3');
+
+  const outside = childTouch({ hp: [160, 190, 140], roar: false });
+  const outDealt = outside.before.map((h, i) => h - outside.after[i]);
+  assert(outDealt.join() !== '30,30,30', `outside the roar it is NOT the catch (${outDealt.join()})`);
+  assert(outDealt.every((x) => x > 0), 'outside the roar: the parent\'s party-wide 75 still lands');
+  assertEq(outside.e.hp_visible, 0, 'and nothing raises hp_visible outside the roar');
+
+  // G5: scr_damage.gml:5-17 on the B-Side — `_gloomdmg = ceil(damage / 6)`,
+  // floored at 10, banked per member per catch with the 45 cap (:245-261
+  // of scr_damage). ceil(30 / 6) = 5 -> 10 on Kris; Noelle's ThornRing
+  // zeroes hers. The vendored scrDamage banked nothing.
+  const bs = childTouch({ roster: WEIRD_ROUTE_PARTY, sideb: true });
+  assertEq(bs.state.partyHp.length, 2, 'B-Side catch on the two-person party');
+  assertEq(bs.before.map((h, i) => h - bs.after[i]).join(), '30,30', 'B-Side catch: 30 flat to both');
+  assertEq(bs.state.kaizo.gloom[0], 10, 'B-Side catch banks ceil(30 / 6) = 5 -> floored to 10 gloom on Kris');
+  assertEq(bs.state.kaizo.gloom[1], 0, 'and 0 on Noelle (ThornRing)');
+  const bs2 = kaizoKnightCatch(bs.state);
+  void bs2;
+  assertEq(bs.state.kaizo.gloom[0], 10, 'a second catch inside invulnerability banks nothing');
+  bs.state.invTimer = -1;
+  kaizoKnightCatch(bs.state);
+  assertEq(bs.state.kaizo.gloom[0], 20, 'a second catch after it banks another 10');
+}
+
+// ═══ 17. G4 — CleanUp_0 FIRES ON THE SWEEP, BOTH MODES ═══════════════════
+//
+// kaizo gml_Object_obj_knight_roaring2_CleanUp_0.gml:24-51. GameMaker runs it
+// on the turn sweep's instance_destroy; the engine fires the type's
+// `cleanUp(e, state)` from clearTurn's destroy(e, state). Until 2026-09-08
+// the finale declared none, so after atk_RoaringDelta the knight stayed at
+// chargeupcon 3 with an unreset bob, and the mod's fight-end gate
+// (`chargeupcon == 0`, Draw_0:151) could never have opened.
+console.log('17. G4 — CleanUp_0:24-51 on the sweep: chargeupcon 0, siner2 0, sounds, lines');
+{
+  const rec = runFinale({ invulnerable: true });
+  assert(rec.endFrame > 0, 'the finale handed the clock back');
+  assertEq(rec.knightConAtEnd, 3, 'at the hand-back the knight is still HIDDEN: chargeupcon 3');
+  const knightEnt = rec.state.entities.find((x) => x.alive && x.type.name === 'obj_knight_enemy');
+  knightEnt.siner2 = 77; // whatever the frozen bob was
+  rec.state.audioCues = [];
+  const liveLines = lines(rec.state).length;
+  assert(liveLines > 0, 'the 30 lines are still live entities before the sweep');
+  clearTurn(rec.state);
+  assertEq(rec.e.alive, false, 'the sweep destroys obj_knight_roaring2');
+  assertEq(rec.e.cleanedUp, true, 'and the type cleanUp ran on that route');
+  assertEq(rec.state.knight.chargeupcon, 0, 'CleanUp: chargeupcon = 0 (the mod\'s fight-end gate re-opens)');
+  assertEq(knightEnt.siner2, 0, 'CleanUp: siner2 = 0 (the bob restarts at its top)');
+  assertEq(knightEnt.image_alpha, 1, 'CleanUp: image_alpha = 1');
+  for (const s of ['snd_knight_stretch', 'snd_knight_roar', 'snd_stardrop', 'snd_knight_cut']) {
+    assert(rec.state.audioCues.some((c) => c.stop && c.name === s), `CleanUp: snd_stop(${s})`);
+  }
+  assertEq(lines(rec.state).length, 0, 'CleanUp: every final_lines[] marker destroyed');
+  assertEq(rec.e.hideback, -4, 'CleanUp: hideback destroyed');
+  // The labelled deviation: the one obj_growtangle this engine keeps per
+  // fight survives the sweep (SURVIVES_TURN), collapsed by attack_con 5.
+  const gt = rec.state.entities.find((x) => x.alive && x.type.name === 'obj_growtangle');
+  assert(gt && gt.growcon === 3 && gt.visible === false,
+    'DEVIATION (labelled): the growtangle is collapsed and hidden, not destroyed — the engine keeps one per fight');
+
+  // The ORDINARY kaizo roar (roaring_type 0): the same CleanUp on the same
+  // route. Its roaring_timer-375 block already zeroes chargeupcon inline;
+  // a sentinel proves the sweep's cleanUp runs in this mode too.
+  const v = build({ ac: 9 });
+  let vEnd = -1;
+  for (let f = 0; f < 900; f++) {
+    v.state.invTimer = 90;
+    stepFrame(v.state, {});
+    if (v.state.turntimer === -1) { vEnd = f; break; }
+  }
+  assert(vEnd > 0, 'ordinary mode: the roar ends its turn');
+  v.state.knight.chargeupcon = 3;
+  const vKnight = v.state.entities.find((x) => x.alive && x.type.name === 'obj_knight_enemy');
+  vKnight.siner2 = 55;
+  clearTurn(v.state);
+  assertEq(v.e.cleanedUp, true, 'ordinary mode: cleanUp ran on the sweep');
+  assertEq(v.state.knight.chargeupcon, 0, 'ordinary mode: chargeupcon = 0 at the sweep');
+  assertEq(vKnight.siner2, 0, 'ordinary mode: siner2 = 0 at the sweep');
+}
+
+// ═══ 18. G10 — THE con-101 CHILDREN'S LIFETIME IN THE ROAR ══════════════
+//
+// kaizo roaring2 Draw_0:107-123 runs `with (obj_knight_pointing_starchild)
+// { image_alpha = clamp01(remap(45, 60, 1, 0, timer)); if (< 1) active =
+// false; if (== 0) instance_destroy(); }` — on the CHILD'S `timer`, which
+// starchild Step_0:31 freezes at 0 while obj_knight_roaring2 exists, so it
+// reads 1 forever: a no-op (the report's G10, argued, now asserted). What
+// kills them is the child's own Draw fade on `drawtimer` (kaizo starchild
+// Draw_0:48-52, difficulty 0 from Create): active off past drawtimer 45,
+// destroyed at 60 — or obj_regularbullet's off-screen cull first (speed 5
+// in a fixed six-way fan from the top-edge curtain stars, no deceleration
+// while the roar lives). Either way NOTHING outlives drawtimer 60.
+console.log('18. G10 — con-101 starchildren: cull or fade, nothing past 60 frames');
+{
+  const rec = runFinale({ seed: 12345, invulnerable: true });
+  const kids = rec.kids;
+  assert(kids.length > 0, `con-101 children were born (${kids.length})`);
+  const births = [...new Set(kids.map((k) => k.birth))];
+  assertEq(births.length, 1, 'every child is born on ONE frame — the promoted stars burst together (timer 3)');
+  assert(kids.every((k) => k.difficulty === 0), 'every child has difficulty 0 (Create), so the fade gate is open');
+  const maxLife = Math.max(...kids.map((k) => k.lastSeen - k.birth));
+  assert(maxLife <= 59, `no child is seen past birth + 59 (drawtimer 60 destroys it): max +${maxLife}`);
+  const faded = kids.filter((k) => k.activeOff >= 0);
+  const culled = kids.filter((k) => k.activeOff < 0);
+  assert(faded.length > 0, `some children live to the fade (${faded.length})`);
+  assert(culled.length > 0, `some are culled off screen before it (${culled.length})`);
+  assert(faded.every((k) => k.activeOff - k.birth === 45),
+    'every child that reaches the fade goes INACTIVE exactly at birth + 45 (drawtimer 46 -> alpha < 1)');
+  assert(culled.every((k) => k.lastSeen - k.birth < 45),
+    'every child that never went inactive died before birth + 45');
+  // Two ways to die early, both the GML's: obj_regularbullet's wall cull
+  // (view -80 / +760 / -80 / +580 — tested at the top of the next step, so
+  // the last sighting is already past the line), or the SOUL — the child's
+  // Create sets `destroyonhit = 1`, and Other_15's `if (destroyonhit == 1)
+  // instance_destroy()` runs in the roar arm too (starchild Other_15:28-31);
+  // the curtains pin the soul to the top edge, right in the fan's path.
+  const v = rec.state.view;
+  const soul = rec.state.soul ?? { x: 310, y: 0 };
+  const atEdge = (k) => k.lastX < v.x - 80 || k.lastX > v.x + 760 || k.lastY < v.y - 80 || k.lastY > v.y + 580;
+  const atSoul = (k) => Math.abs(k.lastX - soul.x) <= 24 && Math.abs(k.lastY - soul.y) <= 24;
+  const edgeDeaths = culled.filter(atEdge).length;
+  const soulDeaths = culled.filter((k) => !atEdge(k) && atSoul(k)).length;
+  assertEq(edgeDeaths + soulDeaths, culled.length,
+    'every early death is the wall cull or a destroyonhit contact with the pinned soul');
+  assert(edgeDeaths > 0, `the wall cull is exercised (${edgeDeaths})`);
+  assert(soulDeaths > 0, `and so is the soul contact — the G3 route, destroyonhit 1 (${soulDeaths})`);
+  console.log(`  INFO: ${kids.length} children born at frame ${births[0]}; ${faded.length} faded, `
+    + `${edgeDeaths} culled at the edge, ${soulDeaths} on the soul; max lifetime +${maxLife}`);
+}
+
+// ═══ 19. G15 — THE KNIGHTGLOW RECORDING: 256 random(360)s IN ONE STREAM ═══
+//
+// THE ONLY ASSERTION IN THIS FILE HELD AGAINST THE REAL MOD. The
+// `_knightglow` attack-lock (MODE 1, 1500 frames, three locked charge-ups)
+// logs every obj_afterimage_fade_to_white the knight's charge-up makes
+// (knight_enemy Step_0:1384-1407: every 4th frame past chargeuptimer 10,
+// `fade.direction = random(360)` — ONE u32), and `direction` is recorded to
+// ten places. Inverting each direction against the anchored WELL512 stream
+// (the harness reseeds `seed + spawnn * 1000` per scr_bulletspawner; ac -1
+// calls none, so the charge-up rides the FIRST launch's anchor, n = 0)
+// reads the game's own draw layout off the recording (kaizo/tools/
+// read-draw-layout.mjs's method):
+//
+//   * all 256 resolve in the n = 0 stream — the charge-up never re-anchors;
+//   * inside every locked turn (mnfight 2 in the trace, the dispatch frame
+//     included) consecutive rolls are CONSECUTIVE stream indices: the
+//     charge-up spends exactly its one u32 per 4 frames and nothing else
+//     draws — sim/knight.js tickChargeup's claim, measured;
+//   * every non-1 gap sits on a between-turn frame (mnfight 0) — the
+//     280-draws-per-frame plateaus after each turn end are Draw-event debt
+//     of STRATEGY §2a's state-invisible class, reported, not modelled.
+//
+// SKIPs loudly without the recording (KAIZO_ORACLE_TRACES, or the
+// knight-research layout check-oracle-schedule resolves).
+console.log('19. G15 — the _knightglow lock: 256 fade_to_white directions vs the anchored stream');
+{
+  // run-kaizo-oracle.ps1:15 `-Seed 20260810` (and the fullfight token's line
+  // 1 — the same value). The inversion succeeding at n = 0 is its receipt.
+  const SEED = 20260810;
+  const { dir, looked } = resolveTraces();
+  const seqPath = dir ? join(dir, 'kaizo_oracle_seq_knightglow.csv') : null;
+  const tracePath = dir ? join(dir, 'kaizo_oracle_trace_knightglow.csv') : null;
+  if (!seqPath || !existsSync(seqPath) || !existsSync(tracePath)) {
+    console.log('  SKIP §19: no _knightglow recording (kaizo_oracle_seq_knightglow.csv + trace) found in '
+      + (dir ?? (looked ?? [join(homedir(), 'knight-research', 'kaizo-mod', 'traces')]).join(' / ')));
+  } else {
+    const seqRows = readFileSync(seqPath, 'utf8').replace(/\r/g, '').split('\n');
+    const seqHead = seqRows[0].split(',');
+    const cFrame = seqHead.indexOf('frame');
+    const cObj = seqHead.indexOf('object');
+    const cDir = seqHead.indexOf('direction');
+    const fades = seqRows.slice(1).filter(Boolean).map((l) => l.split(','))
+      .filter((c) => c[cObj] === 'obj_afterimage_fade_to_white')
+      .map((c) => ({ frame: Number(c[cFrame]), dir: Math.fround(Number(c[cDir])) }));
+    const trace = readTrace(tracePath);
+    const mnfightAt = new Map();
+    let dispatch = -1;
+    for (const r of trace.rows) {
+      const f = Number(r[trace.col.frame]);
+      mnfightAt.set(f, Number(r[trace.col.mnfight]));
+      if (dispatch < 0 && r[trace.col.kaizo_playing] === 'atk_KnightGlow') dispatch = f;
+    }
+
+    assertEq(fades.length, 256, 'the lock logs 256 obj_afterimage_fade_to_white rows');
+    assert(dispatch > 0, `the trace names the KnightGlow dispatch frame (f${dispatch})`);
+    assertEq(fades[0].frame, dispatch + 11,
+      'the first ghost is dispatch + 11: chargeuptimer 1 on the dispatch frame, 12 is the first `% 4 == 0 && > 10`');
+    assert(fades.every((r, i) => i === 0 || r.frame - fades[i - 1].frame === 4),
+      'every 4 frames, without a gap, through three locked turns and their menus');
+
+    // The inversion: fround(u32 / 2^32 * 360) keyed on the f32 — the recorded
+    // decimal parses back to the same f32 (never compare the printed strings:
+    // three rows are exact ties the runner rounds down and toFixed rounds up).
+    const rng = gmlCreate((SEED + 0 * 1000) >>> 0);
+    const byVal = new Map();
+    const N = 80000;
+    for (let k = 0; k < N; k++) {
+      const v = Math.fround((gmlU32(rng) / 4294967296) * 360);
+      if (!byVal.has(v)) byVal.set(v, []);
+      byVal.get(v).push(k);
+    }
+    const idx = fades.map((r, i) => {
+      const hits = byVal.get(r.dir);
+      if (!hits) return null;
+      if (hits.length === 1) return hits[0];
+      // a value the stream produced twice: take the one nearest its neighbour
+      const prev = i > 0 ? (byVal.get(fades[i - 1].dir)?.[0] ?? 0) : 0;
+      return hits.reduce((b, c) => (Math.abs(c - prev) < Math.abs(b - prev) ? c : b));
+    });
+    const unresolved = idx.filter((x) => x === null).length;
+    assertEq(unresolved, 0, `all 256 directions resolve in the n = 0 anchored stream (seed ${SEED}) — the charge-up never re-anchors`);
+
+    let inTurnPairs = 0;
+    let inTurnConsecutive = 0;
+    const gapsOffTurn = [];
+    let maxGap = 0;
+    for (let i = 1; i < fades.length; i++) {
+      if (idx[i] === null || idx[i - 1] === null) continue;
+      const gap = idx[i] - idx[i - 1];
+      maxGap = Math.max(maxGap, gap);
+      const inTurn = mnfightAt.get(fades[i].frame) === 2 && mnfightAt.get(fades[i - 1].frame) === 2;
+      if (inTurn) {
+        inTurnPairs += 1;
+        if (gap === 1) inTurnConsecutive += 1;
+      } else if (gap !== 1) {
+        gapsOffTurn.push({ frame: fades[i].frame, gap });
+      }
+      if (!inTurn && gap !== 1) {
+        assert(mnfightAt.get(fades[i].frame) !== 2 || mnfightAt.get(fades[i - 1].frame) !== 2,
+          `a non-1 gap (${gap}) at f${fades[i].frame} touches a between-turn frame`);
+      }
+    }
+    assert(inTurnPairs > 100, `enough in-turn pairs to say something (${inTurnPairs})`);
+    assertEq(inTurnConsecutive, inTurnPairs,
+      'inside the locked turns EVERY consecutive roll is the NEXT u32: one random(360) per 4 frames and nothing else draws');
+    assert(gapsOffTurn.length > 0 && maxGap > 1000,
+      `the between-turn plateaus are there to be reported (max gap ${maxGap} = 1 + 4 x ${(maxGap - 1) / 4} per frame)`);
+    const firstIdx = idx[0];
+    console.log(`  INFO: dispatch f${dispatch}; first roll f${fades[0].frame} = stream index ${firstIdx} of anchor n=0;`
+      + ` ${inTurnPairs} in-turn pairs all consecutive; ${gapsOffTurn.length} between-turn gaps, max ${maxGap}`);
+
+    // THE SIM'S OWN DRAW at that position: sim/knight.js tickChargeup spends
+    // one gmlRandom(rng, 360) at chargeuptimer 12 and every 4th tick after,
+    // and `turntimer = 1` at 60 (the trace's tt 0 at dispatch + 59). Seat a
+    // stream at the recorded index and the tick must draw exactly one u32
+    // whose random(360) is the recorded direction.
+    const { state } = build({ ac: 104 });
+    const seated = gmlCreate((SEED) >>> 0);
+    for (let k = 0; k < firstIdx; k++) gmlU32(seated);
+    const peek = gmlCreate((SEED) >>> 0);
+    for (let k = 0; k < firstIdx; k++) gmlU32(peek);
+    assertEq(Math.fround(gmlRandom(peek, 360)), fades[0].dir,
+      `random(360) of stream index ${firstIdx} IS the recorded f${fades[0].frame} direction ${fades[0].dir}`);
+    state.gmlRng = seated;
+    state.chargeupDrawTaken = false;
+    state.knight.chargeupcon = 1;
+    state.knight.chargeuptimer = 11;
+    state.turntimer = 200;
+    const d0 = seated.draws ?? 0;
+    tickChargeup(state);
+    assertEq(state.knight.chargeuptimer, 12, 'the tick advanced chargeuptimer to 12');
+    assertEq((seated.draws ?? 0) - d0, 1, 'and spent exactly ONE u32 there');
+    // ...and the cadence to 60: draws at 16, 20, ..., 60 (12 more), clock at 60.
+    let drawsAt = [];
+    for (let t = 13; t <= 60; t++) {
+      const before = seated.draws ?? 0;
+      tickChargeup(state);
+      if ((seated.draws ?? 0) - before === 1) drawsAt.push(t);
+      else assertEq((seated.draws ?? 0) - before, 0, `tick ${t} draws nothing`);
+    }
+    assertEq(drawsAt.join(), '16,20,24,28,32,36,40,44,48,52,56,60', 'one u32 every 4th tick through 60');
+    assertEq(state.turntimer, 1, '`chargeuptimer == 60 -> global.turntimer = 1`');
+    // Those 13 draws are the recorded f480..f528 rolls, in order.
+    const check = gmlCreate((SEED) >>> 0);
+    for (let k = 0; k < firstIdx; k++) gmlU32(check);
+    let match = 0;
+    for (let i = 0; i < 13; i++) if (Math.fround(gmlRandom(check, 360)) === fades[i].dir) match += 1;
+    assertEq(match, 13, 'the 13 draws of one locked charge-up reproduce the 13 recorded directions in order');
+  }
 }
 
 console.log(`\n${checks - failures}/${checks} assertions passed`);

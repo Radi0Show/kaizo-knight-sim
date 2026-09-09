@@ -355,7 +355,14 @@ function spawnControllerByTypeInner(state, type, opts = {}) {
     case 107: // roaring — fight.js case 9
       // `global.turntimer = 999999` -- kaizo dbulletcontroller Step_0:2253: a PINNER.
       state.turntimer = 999999;
-      return spawn(state, roaring2, { x: state.view.x + 320, y: state.view.y + 88 });
+      // `knight_roarin2 = instance_create(creatorid.x, creatorid.y,
+      // obj_knight_roaring2)` (kaizo dbulletcontroller Step_0:2259) — born AT
+      // THE KNIGHT; its Create hoists it `y -= 320` (roaring-final.js). The
+      // recorded row is `470, obj_knight_roaring2, 425, -242.76`
+      // (seq_roaringdelta). fight.js case 9 spawns the vendored module at
+      // (view+320, view+88); nothing reads that position, but a seq diff
+      // does, and Draw_0:17's draw_self() is off screen only from here.
+      return spawn(state, roaring2, { x: kx, y: ky });
     case 108: { // swordfall — fight.js case 10, kaizo module
       // `global.turntimer = 600` — an ASSIGNMENT, not the scr_turntimer
       // floor (kaizo dbulletcontroller Step_0:2283; vanilla used 999999).

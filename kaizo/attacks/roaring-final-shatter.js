@@ -59,6 +59,27 @@ import { spawn, destroy } from '../../sim/entity.js';
 import {
   gmlChoose, gmlRandom, gmlIrandom, gmlIrandomRange,
 } from '../../sim/rng.js';
+import { mergeColor } from '../../sim/gml.js';
+
+/**
+ * GML packed colours (BGR: `r | g << 8 | b << 16`) and the [r, g, b] triple
+ * the repo's merge_color takes. `shatter_blend` is kept in the mod's own
+ * shape — packed ints — because that is what the GML stores and what a
+ * future piece drawer would unpack.
+ */
+const gmUnpack = (c) => [c & 255, (c >> 8) & 255, (c >> 16) & 255];
+const gmPack = ([r, g, b]) => (r | (g << 8) | (b << 16)) >>> 0;
+const C_WHITE = 16777215;
+const C_RED = 255;
+const C_BLUE = 16711680;
+/**
+ * scr_lerpvar.gml:59-60, the final-hit tints: `merge_color(c_white, c_red,
+ * 0.6)` = (255, 102, 102) = 6711039 and `merge_color(c_blue, c_red, 0.6)` =
+ * (153, 0, 102) = 6684825. Computed, not typed, so the arithmetic is the
+ * repo's one merge_color.
+ */
+const SHATTER_HIT_FRONT = gmPack(mergeColor(gmUnpack(C_WHITE), gmUnpack(C_RED), 0.6));
+const SHATTER_HIT_BACK = gmPack(mergeColor(gmUnpack(C_BLUE), gmUnpack(C_RED), 0.6));
 
 /** `shatter_origins` — scr_lerpvar.gml line 48, verbatim (31 pairs). */
 const SHATTER_ORIGINS = [
@@ -126,11 +147,18 @@ export function screenshatterCreate(state, { finalHit = false } = {}) {
   // state and are kept faithfully.
   k.shatter_sprs = [];
   k.shatter_insts = [];
-  k.shatter_blend = [16777215, 16711680]; // c_white front, c_blue back (BGR)
+  k.shatter_blend = [C_WHITE, C_BLUE]; // c_white front, c_blue back (packed BGR)
   if (finalHit) {
-    // merge_color(c_white, c_red, 0.6) / merge_color(c_blue, c_red, 0.6) —
-    // stored as strings for a future renderer; nothing reads them headless.
-    k.shatter_blend = ['merge(c_white,c_red,0.6)', 'merge(c_blue,c_red,0.6)'];
+    // `shatter_blend = [merge_color(c_white, c_red, 0.6), merge_color(c_blue,
+    // c_red, 0.6)]` (scr_lerpvar.gml:59-60) — packed ints, see the constants.
+    // These were the STRINGS 'merge(c_white,c_red,0.6)' / 'merge(c_blue,
+    // c_red,0.6)' until 2026-09-08 — a data bug: image_blend is what
+    // render/draw/gm.js tinted() reads, and it throws on anything that is not
+    // a colour BY DESIGN, so the first sprite ever attached to a piece would
+    // have killed the draw loop on the final-hit path (the class
+    // roaring-final.js's C_RED note documents). No drawer here: the pieces
+    // are unrecorded and the renderer is another lane's.
+    k.shatter_blend = [SHATTER_HIT_FRONT, SHATTER_HIT_BACK];
     shatterDelay = 6;
     // `with (obj_dmgwriter) killtimer = -30;` — display-time extension for
     // the damage number; the sim's dmgnumbers carry no killtimer. Skipped.

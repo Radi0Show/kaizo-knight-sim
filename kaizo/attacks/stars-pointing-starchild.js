@@ -93,6 +93,13 @@ import {
 import { collidebulletOther15, regularbulletStep, regularbulletCreate } from '../../sim/bullets/regularbullet.js';
 import { chainChildDelay } from '../../sim/attacks/pointing-starchild.js';
 import { starOther15 } from './stars-pointing-star.js';
+// G3 (2026-09-08): IN THE ROAR a starchild's Other_15 is the KNIGHT'S CATCH
+// (kaizo obj_knight_pointing_starchild_Other_15.gml:1-16 -> `with
+// (obj_knight_enemy) event_user(2)` = Other_12: 30, 25 defending, the hp-1
+// clamp, hp_visible), not its own 75 party-wide. The catch lives with the
+// roaring star because that file is Other_12's only other caller; the import
+// cycle is benign (a hoisted function declaration, read only at call time).
+import { kaizoKnightCatch } from './roaring-final-star.js';
 import { STARCHILD_MASK, STARCHILD_TRAIL_MASK, scrPreciseHit, enginePairHit } from '../../sim/masks.js';
 
 // UNCHANGED BY THE MOD — the sim's objects, re-exported so a launcher that
@@ -471,9 +478,36 @@ export const pointingStarchild = {
     return scrPreciseHit(heart, e, mask, n);
   },
 
-  // The SAME 75-damage party-wide hit as its parent. KAIZO's Other_15 drops
-  // only the aoedamage with-wrappers (its scr_damage_all toggles them
-  // internally) — behaviour-neutral; starOther15 already models the toggle
-  // via scrDamageAll({aoe: true}).
-  other15: starOther15,
+  /**
+   * Other_15 — TWO arms on `i_ex(obj_knight_roaring2)` (kaizo l.1-33 and
+   * 34-68), both kept from vanilla but for the aoedamage with-wrappers.
+   * OUTSIDE the roar it is the parent's 75 party-wide (starOther15, which
+   * models the wrappers via scrDamageAll({aoe: true})). IN THE ROAR the hit
+   * is the knight's catch:
+   *
+   *     if (active == 1) {
+   *         var _hitbox = (obj_heart.sprite_index == spr_dodgeheart_smaller_2px) ? 0 : 2;
+   *         if (!scr_precise_hit(_hitbox)) exit;          // collides() above
+   *         if (i_ex(obj_knight_roaring2)) with (obj_knight_enemy) event_user(2);
+   *         if (destroyonhit == 1) instance_destroy();
+   *     }
+   *
+   * No `target = 3; damage = 75` in this arm — those are the non-roar arm's
+   * first two lines. REACHABLE: the finale's cut hands every curtain star
+   * con 101, whose six-way fan (speed 5, and no deceleration while the roar
+   * lives — Step_0:31 above) flies through a soul the curtains pinned to the
+   * top edge. Until 2026-09-08 this was `other15: starOther15` with no roar
+   * branch: 75 to everyone, two and a half catches per touch, and the HUD
+   * never raised.
+   */
+  other15(e, state) {
+    const roaring = state.entities.some(
+      (x) => x.alive && x.type.name === 'obj_knight_roaring2',
+    );
+    if (!roaring) return starOther15(e, state);
+    if (e.active !== 1 && e.active !== true) return;
+    kaizoKnightCatch(state);
+    // `destroy` takes THE ENTITY — see the sim module's note.
+    if (e.destroyonhit === 1) destroy(e);
+  },
 };

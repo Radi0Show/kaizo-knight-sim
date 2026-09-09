@@ -100,7 +100,17 @@ import { scrBulletInit, collidebulletOther15 } from '../../sim/bullets/regularbu
 // KAIZO: the vanilla `knightCatch` (sim/knight.js) is NOT used — the mod
 // retunes obj_knight_enemy's Other_12, which is the event the star's Other_15
 // fires. See kaizoKnightCatch at the bottom of this file.
-import { scrDamage, ACTION_DEFEND } from '../../sim/damage.js';
+//
+// G5 (2026-09-08): the catch's `scr_damage()` is the MOD's script — kaizo
+// gml_GlobalScript_scr_damage.gml — not the vendored vanilla one: B-Side
+// gloom `_gloomdmg = ceil(damage / 6)`, floored at 10, and `damage > 120 ->
+// ceil(damage * 0.8)` (5-17); `progamer = false`; `truedamage = 1` while
+// obj_knight_roaring2 exists (84), so no target reroll. kaizo/party/damage.js
+// is the faithful copy; this used to import sim/damage.js, so a B-Side catch
+// banked no gloom at all.
+import { scrDamage, ACTION_DEFEND } from '../party/damage.js';
+// `global.char[ti] == 0 -> continue` — the roster's slot count, not 3.
+import { rosterSize } from '../party/roster.js';
 import { scrChildbulletCopy } from '../../sim/childbullet.js';
 // KAIZO: the mod's starchild (same export symbol as the sim's) — the con-101
 // burst children must carry the mod's starchild deltas, not the vanilla's.
@@ -440,9 +450,11 @@ export function kaizoKnightCatch(state) {
 
   const dmgBase = 30;
   let total = 0;
+  const slots = rosterSize(state);
   for (let ti = 0; ti < 3; ti++) {
-    // `var _char = global.char[ti]; if (_char == 0) continue;` — the sim's
-    // party is always the three chapter-3 slots, so no slot is ever empty.
+    // `var _char = global.char[ti]; if (_char == 0) continue;` — an empty
+    // slot (the Weird Route's third) is skipped BEFORE `global.inv = -1`.
+    if (ti >= slots) continue;
     const hp = state.partyHp[ti];
     let damage = dmgBase;
     if (state.charaction?.[ti] === ACTION_DEFEND) damage = dmgBase - 5;

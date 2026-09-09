@@ -85,9 +85,12 @@
 //   * `room_goto(PLACE_FAILURE)` on the scripted party wipe — there is no
 //     room system here. Translated as `state.kaizo.finalFailure = true` AND
 //     a turn release, so the schedule cannot deadlock. See the site.
-//   * CleanUp_0's kaizo hunks are a no-op in this engine (no CleanUp hook;
-//     clearTurn sweeps the markers) — `roaringFinalCleanUp` is exported for
-//     a launcher that wants it explicitly.
+//   * CleanUp_0 is a `cleanUp(e, state)` on the type (2026-09-08): the engine
+//     fires it on every destroy(e, state), the turn sweep included
+//     (sim/entity.js). Its `with (obj_growtangle) instance_destroy()` is the
+//     one line NOT taken — this engine keeps ONE obj_growtangle for the whole
+//     fight (fight.js SURVIVES_TURN; openVCArena re-arms it and bails without
+//     one), so the collapse both modes already run stands in. See cleanUp.
 //
 // ────────────────────────────────────────────────────────────────────────
 // The sim module's own header, still true of every copied line:
@@ -160,7 +163,23 @@ import {
 } from '../../sim/fx.js';
 // ── KAIZO-ONLY imports, all used by the Other_11 finale below ────────────
 import { masksOverlap, HEART_MASK } from '../../sim/masks.js';
-import { scrDamageMaxhp } from '../../sim/damage.js';
+// G2 (2026-09-08): the finale's `scr_damage_all_maxhp(0.75, 1, 0)` is the
+// MOD's script (kaizo gml_GlobalScript_scr_damage_all.gml:30-55) calling the
+// MOD's scr_damage_maxhp (gml_GlobalScript_scr_damage_maxhp.gml), which is
+// not the vanilla one: `progamer = false` on any hit (5-9), the targeting
+// block gated `!i_ex(obj_knight_roaring2)` (60), B-Side `_gloomdmg =
+// ceil(tdamage / 4); tdamage = ceil(tdamage * 0.8)` (170-174) and a gloom
+// accrual with NO 45 cap (245-261). The faithful copy is kaizo/party/
+// damage.js. This used to import the VENDORED VANILLA scrDamageMaxhp from
+// sim/damage.js and re-implement the wrapper locally — wrong by every B-Side
+// number. Routed, not re-derived.
+import { scrDamageAllMaxhp } from '../party/damage.js';
+// The party-wipe test and its 1-HP restore are CHARACTER-indexed in the GML
+// (`scr_havechar(c) / global.hp[c]`, c = 1..4): read through the roster, never
+// through a third partyHp index a two-person party does not have.
+import {
+  havechar, hpOfChar, setHpOfChar, buildRoster, NORMAL_ROUTE_PARTY,
+} from '../party/roster.js';
 // The mod's two extracted masks already live in the kaizo tree — reused
 // rather than re-derived, so there is ONE geometry for each in kaizo/.
 // FINALSLASH_MASK: 10x10, origin (5,5), maskcount 0 -> solid bbox rect.
@@ -207,6 +226,18 @@ export const roaring2 = {
     // engine walk image_index underneath that as well.
     e.image_speed = 0;
     e.image_index = 0;
+
+    // `y -= 320;` — Create_0:46, vanilla and kaizo alike. The controller
+    // (kaizo dbulletcontroller Step_0:2259) births this instance AT THE
+    // KNIGHT (`instance_create(creatorid.x, creatorid.y, ...)`) and Create
+    // hoists it 320 above him: the recorded row is `470, obj_knight_roaring2,
+    // 425, -242.76` from a knight at y 77.24 (seq_roaringdelta). Nothing in
+    // the finale reads this position — the phantom is drawn from
+    // fake_x/fake_y — but a seq diff does, and Draw_0:17's draw_self() is off
+    // screen only because of it. The vendored sim module spawns at
+    // (view+320, view+88) and never hoists; this copy takes the launcher's
+    // knight position (kaizo-mod-launcher.js case 107) and the hoist.
+    e.y -= 320;
 
     // `obj_knight_enemy.chargeupcon = 2` — the launch hides the white
     // charged knight (instantly, in effect: sim/knight.js has the dead-fade
@@ -1435,6 +1466,52 @@ export const roaring2 = {
     if (e.intensity < 3.75) e.intensify = e.intensity;
     else e.intensify = scrApproach(e.intensify, 0, 0.1);
   },
+
+  /**
+   * CleanUp_0 (kaizo gml_Object_obj_knight_roaring2_CleanUp_0.gml), BOTH
+   * roaring modes. GameMaker runs it on every instance_destroy — for this
+   * object that is the turn sweep, `with (obj_bulletparent) instance_destroy()`,
+   * after the controller has handed the clock back — and the engine fires
+   * `cleanUp(e, state)` on the same route (sim/entity.js destroy(); clearTurn
+   * destroys with the state). It was MISSING here (2026-09-08): the finale
+   * left the knight at chargeupcon 3 — "the hidden state, held until the
+   * roar's CleanUp restores him" (sim/knight.js) — with an unreset bob, and
+   * only the ordinary roar's roaring_timer-375 block restored him.
+   *
+   *     24-29  with (obj_knight_enemy) { image_alpha = 1; siner2 = 0; chargeupcon = 0; }
+   *     30-33  snd_stop(snd_knight_stretch / snd_knight_roar / snd_stardrop / snd_knight_cut)
+   *     34-37  with (obj_growtangle) instance_destroy();       <- NOT taken, below
+   *     38-51  if (roaring_type == 1) destroy every final_lines[i], and hideback
+   *
+   * `chargeupcon = 0` is what re-opens the mod's fight-end gate
+   * (knight_enemy Draw_0:151 `chargeupcon == 0 && ... haveusedroaring ...`),
+   * so after atk_RoaringDelta the next landed hit can end the fight; `siner2
+   * = 0` puts the bob at its top for the turns AfterFinal resumes. The
+   * ordinary roar's inline restore at roaring_timer 375 stays as the vendored
+   * module has it; this runs again at the sweep with the same values.
+   *
+   * DEVIATION (labelled): the growtangle destroy is not taken. This engine
+   * keeps one obj_growtangle per fight (fight.js SURVIVES_TURN) and
+   * openVCArena re-arms it — with no instance it returns without a board.
+   * The collapse both modes already run (attack_con 5's `visible = false;
+   * growcon = 3; timer = 0`; roaring_timer 375's growcon 3) is the visible
+   * half of the destroy; the next arena open is the create.
+   */
+  cleanUp(e, state) {
+    const knight = state.entities.find(
+      (x) => x.alive && x.type.name === 'obj_knight_enemy',
+    );
+    if (knight) {
+      knight.image_alpha = 1;
+      knight.siner2 = 0;
+    }
+    if (state.knight) state.knight.chargeupcon = 0;
+    cueStop(state, 'snd_knight_stretch');
+    cueStop(state, 'snd_knight_roar');
+    cueStop(state, 'snd_stardrop');
+    cueStop(state, 'snd_knight_cut');
+    roaringFinalCleanUp(state, e);
+  },
 };
 
 /** `with (obj_knight_roaring_star)` order: newest first. */
@@ -1609,8 +1686,8 @@ export const hidebackCover = {
 
 /**
  * `scr_damage_all_maxhp(arg0, arg1, arg2)` — kaizo
- * gml_GlobalScript_scr_damage_all.gml:30-55, routed through the SIM's
- * verified scr_damage_maxhp per living member:
+ * gml_GlobalScript_scr_damage_all.gml:30-55 — is kaizo/party/damage.js's
+ * scrDamageAllMaxhp, imported above (G2, 2026-09-08):
  *
  *     if (global.inv < 0) {
  *         with (obj_knight_enemy) aoedamage = true;
@@ -1620,36 +1697,45 @@ export const hidebackCover = {
  *         global.inv = global.invc * 30;
  *     }
  *
- * `aoedamage == true` makes scr_damage_maxhp SKIP its targeting-and-mantle
- * block entirely (no Kris redirect, no fraction halving, NO RNG DRAW). The
- * sim models that block's outer gate as `state.roaringActive`, so pinning
- * the flag for the loop reproduces the aoe path without editing sim/.
- *
- * This is the same wrapper kaizo/attacks/quickslash.js already carries, kept
- * local for the same reason it is local there: it is one function of the
- * enemy-side batch, and duplicating it beats either module reaching into the
- * other's private helpers.
+ * What the wrapper that used to live here got wrong, for the record: it took
+ * the VENDORED VANILLA scr_damage_maxhp (sim/damage.js), which has no
+ * `progamer = false` (kaizo scr_damage_maxhp.gml:5-9), no B-Side
+ * `tdamage = ceil(tdamage * 0.8)` and no `ceil(tdamage / 4)` gloom (170-174,
+ * 245-261). The aoedamage bracket is inside the party module, and it is what
+ * makes the fraction reductions — the mantle halving AND Noelle's x0.75, both
+ * inside `aoedamage == false` AND `!i_ex(obj_knight_roaring2)`
+ * (scr_damage_maxhp.gml:60-61, 161-164) — skip for every member of this hit.
+ * Two gates, and the finale fails both: Noelle takes the full fraction here.
  *
  * NOTE the `target = 3` the caller sets first (Other_11:781): it is not a
  * target selection at all. The script opens `_temptarget = target` and closes
  * `target = _temptarget`, and the caller is the LINE MARKER, which has no
  * `target` variable — so the assignment exists only to define one before the
  * save/restore reads it. Modelled by simply not needing it.
+ *
+ * THE ROSTER SHIM, labelled. `global.maxhp[chartarget]` is read by the party
+ * module off `state.kaizo.roster` (kaizo/party/roster.js maxhpOfChar, 0 with
+ * none — GML's unset cell), and kaizo-fight.js installs a roster only for a
+ * version that declares a party: V-D does, V-C DOES NOT. Routed bare, the
+ * V-C finale would deal ceil(0 * 0.75) = 0 to everyone (measured 2026-09-08
+ * by check-roaring-final §11 the moment the import moved). So when no roster
+ * is installed, the Normal Route three — `global.char = [1, 2, 3]`, which is
+ * what the party module already assumes for slots and HP without one — are
+ * stood up on state.kaizo.roster for the length of the call and taken down
+ * again. buildRoster is pure (member records only; partyHp, the char arrays
+ * and the gloom mirrors are untouched), so nothing else in the scene sees a
+ * roster appear mid-fight. Composition, not a party edit (HANDOFF §2.3); it
+ * retires the day V-C installs its own roster.
  */
-function scrDamageAllMaxhp(state, fraction, arg1, arg2) {
-  if (state.invTimer >= 0) return 0; // if (global.inv < 0)
-  const prevRoaring = state.roaringActive;
-  state.roaringActive = true; // stands in for aoedamage == true
-  let total = 0;
-  for (let ti = 0; ti < 3; ti++) {
-    state.invTimer = -1; // global.inv = -1, per iteration
-    if (state.partyHp[ti] > 0) {
-      total += scrDamageMaxhp(state, fraction, arg1, arg2, { target: ti, aoe: true });
-    }
+function finaleDamageAllMaxhp(state, fraction, ignoreDefend, cannotFell) {
+  const k = (state.kaizo ??= {});
+  const hadRoster = !!k.roster;
+  if (!hadRoster) k.roster = buildRoster(NORMAL_ROUTE_PARTY, { sideb: !!k.sideb });
+  try {
+    return scrDamageAllMaxhp(state, fraction, ignoreDefend, cannotFell);
+  } finally {
+    if (!hadRoster) delete k.roster;
   }
-  state.roaringActive = prevRoaring;
-  state.invTimer = state.invc * 30; // global.inv = global.invc * 30
-  return total;
 }
 
 /**
@@ -2325,23 +2411,37 @@ function finalCut(e, state, heart, cvx, cvy) {
               // (arg1 = 1) and ABLE TO FELL (arg2 = 0). One line landing is
               // the whole finale's damage; the invulnerability the call
               // grants closes the door on the other 29.
-              scrDamageAllMaxhp(state, 0.75, 1, 0);
+              finaleDamageAllMaxhp(state, 0.75, 1, 0);
               state.invTimer = state.invc * 30;
             }
           }
         }
         // THE PARTY-WIPE TEST IS INSIDE THE LOOP, so it is re-evaluated
-        // after every line. `scr_havechar(4)` is Noelle, who is not in this
-        // fight — absent members pass. The comparison is `< 0`, STRICTLY: a
-        // member sitting on exactly 0 does not count, which is the
-        // difference between the mod's scripted failure and a normal wipe.
-        if (state.partyHp[0] < 0 && state.partyHp[1] < 0 && state.partyHp[2] < 0) {
+        // after every line (Other_11:786-794):
+        //
+        //     if ((!scr_havechar(1) || global.hp[1] < 0) && ... && (!scr_havechar(4) || global.hp[4] < 0)) {
+        //         final_kill = 1; global.hp[1] = 1; ... global.hp[4] = 1;
+        //         mus_volume(global.batmusic[1], 0, 0); }
+        //
+        // CHARACTER-indexed, ids 1..4, and an ABSENT member passes its clause
+        // — so it is read through the roster (2026-09-08): a two-person Weird
+        // Route party (Kris + Noelle, no id 2/3) is wiped by its two fells.
+        // The `partyHp[0] < 0 && [1] < 0 && [2] < 0` form this replaced could
+        // never fire there: its third index is undefined, and `undefined < 0`
+        // is false. The comparison is `< 0`, STRICTLY: a member sitting on
+        // exactly 0 does not count, which is the difference between the mod's
+        // scripted failure and a normal wipe.
+        let wiped = true;
+        for (let c = 1; c <= 4; c++) {
+          if (havechar(state, c) && !(hpOfChar(state, c) < 0)) wiped = false;
+        }
+        if (wiped) {
           e.final_kill = 1;
           // Everyone is restored to 1 HP: the mod does not want an ordinary
-          // Game Over here, it wants the scripted failure below.
-          state.partyHp[0] = 1;
-          state.partyHp[1] = 1;
-          state.partyHp[2] = 1;
+          // Game Over here, it wants the scripted failure below. `global.hp[c]
+          // = 1` for all four ids; an absent id's write lands nowhere, as the
+          // mod's does in a cell this fight never reads.
+          for (let c = 1; c <= 4; c++) setHpOfChar(state, c, 1);
           // mus_volume(global.batmusic[1], 0, 0) — audio.
         }
         e.image_xscale = 0.2; // ORIGINAL BUG, see above
@@ -2567,13 +2667,14 @@ function finaleDrawBookkeeping(e, state) {
  * CleanUp_0's kaizo hunks (kaizo 17-20 and 38-51): free `hp_surf`, then in
  * final mode destroy every surviving `final_lines[]` marker and `hideback`.
  *
- * THERE IS NO CleanUp HOOK IN THIS ENGINE, and there does not need to be:
- * both markers are ordinary entities and the turn loop's clearTurn sweeps
- * everything off its keep-list, which is what the GML's loop achieves.
- * `hp_surf` is a GPU surface with no sim analogue.
+ * Called from the type's `cleanUp` (above), which the engine fires on every
+ * destroy(e, state) — the turn sweep included. (This header used to claim the
+ * engine had no CleanUp hook; sim/entity.js has had one since the boxsplitter
+ * needed it, and the finale simply never declared one.) `hp_surf` is a GPU
+ * surface with no sim analogue.
  *
- * Exported anyway so a launcher that tears the controller down explicitly
- * can run the mod's own teardown instead of relying on the sweep.
+ * Exported so a launcher that tears the controller down explicitly can run
+ * the mod's own teardown instead of relying on the sweep.
  */
 export function roaringFinalCleanUp(state, e) {
   if (!e || e.roaring_type !== 1) return;
