@@ -291,7 +291,14 @@ import { dirname, basename, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { real } from '../../sim/trace.js';
 import { createState, stepFrame } from '../../sim/index.js';
-import { scrRevive, PARTY } from '../../sim/damage.js';
+import { PARTY } from '../../sim/damage.js';
+// THE KAIZO scr_revive, NOT THE ENGINE'S. kaizo/party/damage.js:133-142 is the
+// roster-bounded one (`slot >= rosterSize(state)` returns) and the one that
+// logs under KAIZO_PARTY_DEBUG=1, so a --keep-alive-mode revive run prints
+// every harness revive with its sim frame -- diffable against the recorder's
+// kaizo_oracle_revives<TAG>.csv (oracle_kaizo_fight.csx, Site B). Same three
+// globals either way (charmove, charcantarget, chardead).
+import { scrRevive } from '../party/damage.js';
 import { decodeReplay, unpackInput } from '../../sim/replay.js';
 import { buildKaizoScene, KAIZO_VERSIONS } from '../scenes/kaizo-fight.js';
 import { VC_LOOP, VC_PHASE4_DEFAULT, VC_KNIGHT } from '../versions/vc-script.js';
@@ -1497,6 +1504,19 @@ function usage(msg) {
                     recording. Ignored when a feed is given.   (default menu)
   --keep-alive      pin the party at full HP each frame (roster-aware). The
                     oracle recorder does the same. Costs every survival claim.
+  --keep-alive-mode pin | revive (default pin). What --keep-alive does to a
+                    DOWNED member: 'pin' restores HP only, the way every _tok*
+                    recording's patch did (oracle_kaizo_fight.csx HP pins at
+                    :462-465 and :665-671, never scr_revive -- a one-character
+                    fight from the first companion swoon on); 'revive' also
+                    calls scr_revive on each dead slot after the frame, the way
+                    a recording whose party receipt carries '# keepalive
+                    revive' was made (ported from oracle_fullfight.csx:860-864;
+                    THREE of the five globals -- charaction/charspecial stay 0
+                    until the next menu). The mode must match the recording
+                    or the target rerolls (while (!charcantarget[mytarget]))
+                    read a different RNG stream. regen-kaizo-fullfight.mjs
+                    picks it from the receipt.
   --no-pin-monsterhp
                     stop pinning the Knight's HP. The recorder pins it
                     unconditionally, so a run without this flag is the
@@ -1511,7 +1531,7 @@ function usage(msg) {
 }
 
 const FLAGS_WITH_VALUES = ['--inputs', '--token', '--version', '--seed', '--frames',
-  '--slots', '--out', '--tag', '--input', '--spawns', '--sync', '--oracle', '--bolts', '--grazes', '--drawprobe', '--drawlog', '--shuffle', '--cameralog'];
+  '--slots', '--out', '--tag', '--input', '--spawns', '--sync', '--oracle', '--bolts', '--grazes', '--drawprobe', '--drawlog', '--shuffle', '--cameralog', '--keep-alive-mode'];
 const FLAGS_BARE = ['--keep-alive', '--no-pin-monsterhp', '--narrow',
   '--allow-degenerate', '--help'];
 
@@ -1540,6 +1560,10 @@ function main() {
   const inputSpec = String(flag('--input', 'menu'));
   const spawnsMode = String(flag('--spawns', 'count'));
   const keepAlive = argv.includes('--keep-alive');
+  // 'pin' | 'revive' and nothing else: a typo here would silently run the
+  // recorder's OTHER keep-alive and the gate would report a real-looking front.
+  const keepAliveMode = String(flag('--keep-alive-mode', 'pin'));
+  if (!['pin', 'revive'].includes(keepAliveMode)) usage(`--keep-alive-mode must be pin or revive, not ${keepAliveMode}`);
   const pinMonsterhp = !argv.includes('--no-pin-monsterhp');
   const narrow = argv.includes('--narrow');
   const allowDegenerate = argv.includes('--allow-degenerate');
@@ -1670,7 +1694,11 @@ function main() {
           // did not pass --frames, because the real default needs the sync this
           // pass is computing. The probe only has to reach the first launch, so
           // the feed's own length is more than enough.
-          version, seed, frames: frames ?? feed.frames, slots, keepAlive, pinMonsterhp, spawnsMode,
+          // PASS ONE GETS THE SAME KEEP-ALIVE MODE AS PASS TWO. The offset it
+          // derives is applied to the real run; a probe in the other mode is a
+          // different fight from its first swoon (the roster decides the bar
+          // and the target rerolls) and the sync would come from that fight.
+          version, seed, frames: frames ?? feed.frames, slots, keepAlive, keepAliveMode, pinMonsterhp, spawnsMode,
           input: menuGatedInput(),
           // PASS ONE DELIBERATELY GETS NO SCHEDULES. It exists only to find
           // where this sim's first launch lands on the synthetic lead-in, and
@@ -1762,7 +1790,7 @@ function main() {
   if (!Number.isInteger(frames) || frames <= 0) usage('--frames must be a positive integer');
 
   const res = traceKaizo({
-    version, seed, frames, slots, keepAlive, pinMonsterhp, spawnsMode, input,
+    version, seed, frames, slots, keepAlive, keepAliveMode, pinMonsterhp, spawnsMode, input,
     boltSchedules, boltSkipBeforeFrame: syncFrames, grazeRows,
     drawProbe, drawLog, shuffleOrder, cameraLog,
   });
@@ -1788,7 +1816,7 @@ function main() {
   // THE PROVENANCE GOES TO STDERR, NEVER INTO THE FILES. A `#` comment line
   // would land in the differ's header comparison and fail every diff.
   console.error(`kaizo-trace: V-${version} seed ${seed} frames ${frames}`
-    + ` slots ${slots}${keepAlive ? ' keep-alive' : ''}`
+    + ` slots ${slots}${keepAlive ? ` keep-alive(${keepAliveMode})` : ''}`
     + `${pinMonsterhp ? ' pin-monsterhp' : ''}`);
   // A --bolts RUN MUST NOT LOOK LIKE IT REPLAYED MORE THAN IT DID. The scene
   // rejects any recorded schedule whose character set does not match the bar's

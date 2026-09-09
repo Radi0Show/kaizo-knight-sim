@@ -15,6 +15,16 @@
 //   --oracle     the recording, so --sync auto can read its first-launch frame
 //   --sync auto  the lead-in offset, derived from data on both sides
 //   --keep-alive the recorder pins party HP; the sim must too
+//   --keep-alive-mode
+//                what keep-alive does to a DOWNED member, and it FOLLOWS THE
+//                RECORDING: every _tok* patch pinned HP only, never scr_revive
+//                (a one-character fight from the first companion swoon on), so
+//                the default is 'pin'. A recording whose party receipt
+//                (kaizo_oracle_party<tag>.txt) carries `# keepalive revive`
+//                was made by a patch that also scr_revive's dead slots each
+//                frame, and gets 'revive'. The two are different fights from
+//                the first swoon (the roster decides the bar and the target
+//                rerolls), so the mode is read off the receipt, never typed.
 //   --slots 32   the recorder's bullet sheet has 32 slots
 //   --bolts      the mod's attack-bar schedules, decoded from the seq CSV.
 //                A menu phase's length is that schedule and nothing else, and
@@ -36,7 +46,7 @@
 // first-candidate names, replacing anything stale.
 
 import { spawnSync } from 'node:child_process';
-import { existsSync, copyFileSync, mkdirSync } from 'node:fs';
+import { existsSync, copyFileSync, mkdirSync, readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { homedir, tmpdir } from 'node:os';
@@ -77,6 +87,12 @@ const bolts = join(dir, `kaizo_oracle_bolts${TAG}.csv`);
 // does. The draws are the sim's own either way.
 const shuffle = join(dir, `kaizo_oracle_shuffle${TAG}.csv`);
 const grazes = join(dir, `kaizo_oracle_grazes${TAG}.csv`);   // optional: the graze feed, when the recording carries one
+// The party receipt: roster, stats, and the recorder's own keep-alive flavour.
+// `# keepalive revive` is written by the patched recorder beside its
+// `# talkskip` line; a receipt without it (every _tok*) is a pin recording.
+const party = join(dir, `kaizo_oracle_party${TAG}.txt`);
+const keepAliveMode = existsSync(party) && /^# keepalive revive\b/m.test(readFileSync(party, 'utf8'))
+  ? 'revive' : 'pin';
 for (const [what, p] of [['inputs', inputs], ['seq', seq]]) {
   if (!existsSync(p)) {
     console.error(`regen-kaizo: recording has no ${what} file: ${p}`);
@@ -100,6 +116,7 @@ function run(label, args) {
 }
 
 console.log(`regen-kaizo: recording ${TAG} from ${dir}`);
+console.log(`             keep-alive mode ${keepAliveMode} (${existsSync(party) ? `from ${party}` : 'no party receipt'})`);
 console.log(`             sim trace -> ${SIM_OUT}`);
 mkdirSync(SIM_OUT, { recursive: true });
 
@@ -114,6 +131,7 @@ run('kaizo-trace', [
   '--oracle', oracle,
   '--sync', 'auto',
   '--keep-alive',
+  ...(keepAliveMode === 'revive' ? ['--keep-alive-mode', 'revive'] : []),
   '--slots', '32',
   '--bolts', bolts,
   ...(existsSync(grazes) ? ['--grazes', grazes] : []),
