@@ -86,7 +86,10 @@ import { scrLerpvar } from '../../sim/lerpvar.js';
 import { getSwordcolor } from './kaizo-colors.js';
 import { spawn, destroy } from '../../sim/entity.js';
 import { roaringknightSlash } from '../../sim/attacks/roaringknight-slash.js';
-import { knightCircle, knightWarp, knightWarpOut } from '../../sim/fx.js';
+import { knightWarp, knightWarpOut } from '../../sim/fx.js';
+// KAIZO obj_knight_circle (Create_0:2-4 navy, Step_0:10 fades r): the aim
+// bloom is the mod's own build, not sim/fx.js knightCircle's maroon one.
+import { kaizoKnightCircle } from './knight-circle.js';
 import { cue, cueLoop, cueStop } from '../../sim/audio.js';
 import { scrApproach, gmlEq } from '../../sim/gml.js';
 import { gmlChoose, gmlIrandom, gmlRandom, gmlRandomRange, gmlU32, gmlShuffle } from '../../sim/rng.js';
@@ -874,7 +877,12 @@ export const rotatingSlash = {
             e.bul_y = hp2.y + 10;
           }
         }
-        spawn(state, knightCircle, { x: e.aim_x, y: e.aim_y });
+        // KAIZO: the bare `instance_create(aim_x, aim_y, obj_knight_circle)`
+        // (Step_0:278, no field override) lands on the MOD's circle — navy
+        // rim (0, 0, 128) that stays navy, kaizo/attacks/knight-circle.js —
+        // where the sim copy spawned sim/fx.js's maroon one. Zero RNG, not a
+        // bullet, same 10-frame life: nothing the byte gate reads can move.
+        spawn(state, kaizoKnightCircle, { x: e.aim_x, y: e.aim_y });
       } else {
         // KAIZO Step_0:282-284 — hunk 4: the marker ramps toward pure BLUE
         // (vanilla: r->255, b->0). The g line and the 64/7 constant are

@@ -63,6 +63,7 @@ import {
 } from './draw/split.js';
 import {
   drawObjKnightStream, drawObjKnightTunnelSlasher, drawObjKnightTunnelSlasher2Revised,
+  drawObjKnightDiamondswordbulletExt,
 } from './draw/stream.js';
 import {
   drawObjTrackingSwordSlash, drawObjTrackingSwordSlashExtraGraze, drawObjKnightEnemy,
@@ -96,6 +97,13 @@ export const KAIZO_DRAW_OVERRIDES = Object.freeze({
   obj_knight_stream: drawObjKnightStream,
   obj_knight_tunnel_slasher: drawObjKnightTunnelSlasher,
   obj_knight_tunnel_slasher_2_revised: drawObjKnightTunnelSlasher2Revised,
+  // THE 25TH ENTRY IS NOT A CHANGED DRAW. obj_knight_diamondswordbullet_ext's
+  // kaizo Draw_0 is byte-identical to vanilla, but render/canvas.js has no
+  // DRAW_EVENTS entry for it at all, so the generic blit ignored the r/g/b
+  // fields its Step fades and the mod's blue shake never reached the screen
+  // (Law 6: the vanilla hole is a port-back candidate; this is the kaizo
+  // fill, receipt in the drawer's header and the ledger, 2026-09-08).
+  obj_knight_diamondswordbullet_ext: drawObjKnightDiamondswordbulletExt,
   // kaizo/render/draw/tracking.js
   obj_tracking_sword_slash: drawObjTrackingSwordSlash,
   obj_tracking_sword_slash_extra_graze: drawObjTrackingSwordSlashExtraGraze,
@@ -105,5 +113,5 @@ export const KAIZO_DRAW_OVERRIDES = Object.freeze({
   obj_spell_snowgrave_snowflake: drawObjSpellSnowgraveSnowflake,
 });
 
-/** The 24 object names, in registry order — what the render smoke reports coverage over. */
+/** The 25 object names (24 changed Draws + the blade fill), in registry order — what the render smoke reports coverage over. */
 export const KAIZO_DRAW_OBJECTS = Object.freeze(Object.keys(KAIZO_DRAW_OVERRIDES));

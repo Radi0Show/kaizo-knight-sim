@@ -220,8 +220,11 @@ for (const name of KAIZO_DRAW_OBJECTS) {
     real,
   );
 }
-ok(KAIZO_DRAW_OBJECTS.length === 24,
-  `the registry names the mod's 24 changed Draw objects (${KAIZO_DRAW_OBJECTS.length})`);
+// 24 changed Draws plus ONE fill: obj_knight_diamondswordbullet_ext's Draw is
+// vanilla-identical but the engine has no drawer for it at all, so the
+// kaizo registry carries it (kaizo/render/index.js, 2026-09-08).
+ok(KAIZO_DRAW_OBJECTS.length === 25,
+  `the registry names the mod's 24 changed Draw objects + the blade fill (${KAIZO_DRAW_OBJECTS.length})`);
 ok(KAIZO_DRAW_OBJECTS.every((n) => typeof KAIZO_DRAW_OVERRIDES[n] === 'function'),
   'every registry entry is a function');
 
@@ -319,6 +322,9 @@ const EXPECTED_REACHED = [
   'obj_roaringknight_boxsplitter_attack', 'obj_roaringknight_splitslash',
   'obj_roaringknight_split_bullet', 'obj_knight_split_growtangle_effect',
   'obj_knight_stream', 'obj_knight_tunnel_slasher', 'obj_knight_tunnel_slasher_2_revised',
+  // MEASURED 2026-09-08 at the same seed and budgets: 5,999 hits (Tunnel 2
+  // and the combination's tunnel segment both field these blades).
+  'obj_knight_diamondswordbullet_ext',
   'obj_tracking_sword_slash', 'obj_knight_enemy',
 ];
 {

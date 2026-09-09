@@ -42,6 +42,13 @@
 //   Step_0:381,385  decoy band random_range(20, 70) -> random_range(30, 50),
 //                   decoy damage 206 -> 90
 //
+//   AND THE BLADE'S OWN STEP (obj_knight_diamondswordbullet_ext, diffed
+//   2026-09-08 — the first diff above covered only the slasher's three events):
+//   Step_0:4-5      the shake fade is `g -> 0, r -> 0` (vanilla `g, b`): the
+//                   wall turns BLUE, not red
+//   Step_0:14,23    both ghosts `image_blend = c_blue` (vanilla c_red)
+//   Create_0 / Draw_0 / Other_10 / Other_15 are byte-identical to vanilla.
+//
 //   Alarm_2 is NOT a delta. Its `knight = 367/672/633/1175` become
 //   366/669/630/1173 in the mod because the mod ADDS objects and the asset
 //   table shifts; they are the same four objects. The sim reaches them through
@@ -110,6 +117,15 @@ function getBox(state, which) {
 
 /** `mean(a, b)`. */
 const mean = (a, b) => (a + b) / 2;
+
+/**
+ * GameMaker's `c_blue` as this engine's [r, g, b] — the ghosts' tint
+ * (Step_0:14,23). A frozen singleton, the way sim/gml.js keeps WHITE/RED:
+ * every ghost shares one reference and none can be mutated through it.
+ * NOT get_swordcolor(): the mod writes the literal here, so the swordtype
+ * setting does not reach these ghosts.
+ */
+export const C_BLUE = Object.freeze([0, 0, 255]);
 
 /** `kaizo_sideb()` — the scene stamps the flag as state.kaizo.sideb. */
 function kaizoSideb(state) {
@@ -284,23 +300,41 @@ export const diamondSwordBullet = {
       }
     }
 
-    // THE COLOUR IS THE TELL. A blade marked `shakeme` bleeds green and blue
-    // out at 21.25 a frame — 255 to 0 in twelve — so the wall turns red just
+    // THE COLOUR IS THE TELL. A blade marked `shakeme` bleeds green and RED
+    // out at 21.25 a frame — 255 to 0 in twelve — so the wall turns BLUE just
     // before it fires. `fake` blades never do; they are born dark and stay.
+    //
+    // KAIZO obj_knight_diamondswordbullet_ext Step_0:4-5 — the mod swapped
+    // the second channel:
+    //
+    //     g = scr_approach(g, 0, 21.25);
+    //     r = scr_approach(r, 0, 21.25);        // vanilla: b
+    //
+    // b stays at its Create value of 255 (Create_0:12-14, r = g = b = 255),
+    // so the ramp lands on (0, 0, 255): pure blue. The sim copy carried
+    // vanilla's `b` here — the wall was going RED (and the header line above
+    // said so) — until the colour audit of 2026-09-08 read the two dumps
+    // side by side. Draw_0:1 `make_color_rgb(r, g, b)` is what reads these
+    // (kaizo/render/draw/stream.js drawObjKnightDiamondswordbulletExt); the
+    // Other_15 gate reads only `g`, which fades on both sides.
     if (e.shakeme && !e.fake) {
       e.g = scrApproach(e.g, 0, 21.25);
-      e.b = scrApproach(e.b, 0, 21.25);
+      e.r = scrApproach(e.r, 0, 21.25);
     }
 
+    // KAIZO Step_0:14 and :23 — both ghosts are `image_blend = c_blue`
+    // (vanilla: c_red). The engine's generic blit multiplies by image_blend
+    // (render/canvas.js drawEntity), so the ghosts need no drawer of their
+    // own; the value is what changes.
     if (e.do_afterimage === 1) {
       e.do_afterimage = 2;
       const a = scrAfterimageGrow(state, e);
-      a.image_blend = [255, 0, 0];
+      a.image_blend = C_BLUE;
     }
     if (e.do_afterimage === 2) {
       const a = scrAfterimage(state, e);
       a.fadeSpeed = 0.33; // scr_afterimageFAST
-      a.image_blend = [255, 0, 0];
+      a.image_blend = C_BLUE;
     }
 
     if (e.play_passing_sfx && state.soul

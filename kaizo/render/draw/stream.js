@@ -707,3 +707,66 @@ export function drawObjKnightTunnelSlasher2Revised(ctx, e, state, helpers) {
   }
   return true;
 }
+
+/**
+ * obj_knight_diamondswordbullet_ext — the revised tunnel's blades
+ * (atk_Tunnel2, ac 15; also the combination's tunnel segment).
+ *
+ * NOT ONE OF THE MOD'S 24 CHANGED DRAWS: the kaizo Draw_0 is byte-identical
+ * to vanilla (diffed 2026-09-08). It is here because NEITHER renderer had a
+ * drawer for it — render/canvas.js DRAW_EVENTS has no entry, so the generic
+ * blit drew the blade with `image_blend` (never set: white) and ignored the
+ * r/g/b fields the Step fades. On the kaizo page that hid the ONE visible
+ * change the mod made to this object: the wall turning blue while it shakes
+ * (kaizo/attacks/sword-tunnel-revised.js, Step_0:4-5). The vanilla page has
+ * the same hole (its wall should turn red) — a candidate port-back to
+ * knight-sim's DRAW_EVENTS, recorded in the ledger; this entry is the kaizo
+ * fill with its receipt (Law 6, CLAUDE.md).
+ *
+ * The whole event (gml_Object_obj_knight_diamondswordbullet_ext_Draw_0.gml):
+ *
+ *     1  var color = make_color_rgb(r, g, b);
+ *     2  draw_sprite_ext(sprite_index, image_index,
+ *            x + irandom_range(-shakeme, shakeme),
+ *            y + irandom_range(-shakeme, shakeme),
+ *            image_xscale, image_yscale, image_angle, color, image_alpha);
+ *
+ * THE JITTER IS THE GAME'S OWN, NOT FRAME-SEEDED. Line 2's two irandom_range
+ * are four u32 off the shared stream every frame per live blade, and the sim
+ * already consumes them in the type's draw slot (sword-tunnel-revised.js
+ * diamondSwordBullet.draw, "the extended blade draws four u32 a frame",
+ * ledger 2026-09-02) and parks them as `e.extJitter = {x, y}` — the same
+ * arrangement the split tooth uses (`drawJitterXs`). This drawer READS those;
+ * it never draws RNG of its own (STRATEGY §2 "Rules for consuming Draw-event
+ * RNG"). On an entity's creation frame the slot has not run yet and the
+ * jitter is zero, which is also what `irandom_range(-0, 0)` returns for an
+ * unshaken blade.
+ *
+ * No draw_self: returns TRUE. A missing sprite returns FALSY so the tail's
+ * mask fallback still shows the collision shape.
+ */
+export function drawObjKnightDiamondswordbulletExt(ctx, e, state, helpers) {
+  const entry = helpers.sprites.get(e.sprite_index);
+  if (!entry || !entry.frames.length) return false;
+  const jx = e.extJitter ? e.extJitter.x : 0;
+  const jy = e.extJitter ? e.extJitter.y : 0;
+  drawSpriteExt(ctx, entry, Math.floor(e.image_index ?? 0), // :2
+    e.x + jx, e.y + jy,
+    e.image_xscale ?? 1, e.image_yscale ?? 1, e.image_angle ?? 0,
+    diamondswordbulletExtColor(e), e.image_alpha ?? 1);
+  return true;
+}
+
+/**
+ * Draw_0:1 `make_color_rgb(r, g, b)` as this engine's tint. The fields are
+ * reals mid-ramp (255 - 21.25k: 233.75, 212.5, 191.25, ...), and
+ * make_color_rgb packs them to integer channels; whether the runner
+ * TRUNCATES or ROUNDS there is UNMEASURED (the same open question as
+ * merge_color's, ledger G9) — truncation is taken, the way the packed-int
+ * builders in this repo do, and the difference is at most one unit per
+ * channel on four of the twelve shake frames. Exported so
+ * kaizo/tools/checks/check-colours.mjs can pin the ramp without a canvas.
+ */
+export function diamondswordbulletExtColor(e) {
+  return [Math.trunc(e.r ?? 255), Math.trunc(e.g ?? 255), Math.trunc(e.b ?? 255)];
+}

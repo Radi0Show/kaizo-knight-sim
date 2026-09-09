@@ -50,17 +50,31 @@
 //      mod's blue; vanilla left them white), or c_white while a Stars cone
 //      is on screen. Pure lookup, zero draws.
 //
+//   6. The cone arm's other two lines (Step_0:4-5) — APPLIED 2026-09-08:
+//      sprite_index = spr_roaringknight_sword_ol_alt and
+//      depth = obj_knight_pointing_cone.depth - 1. Until then the swap was
+//      DELIBERATELY not stored, because the engine's contact path is
+//      SPRITE_MASKS[sprite_index] (sim/masks.js spriteMaskHit) and the graze
+//      path is `e.mask ?? SPRITE_MASKS[sprite_index]` (sim/index.js grazes),
+//      and no _alt mask is registered there — storing the name would have
+//      silently disarmed the sword. THE MASKS ARE THE SAME BITMAP: the
+//      extraction's mask sha1 for spr_roaringknight_sword_ol_alt is
+//      9a44b6583f4d91aac0c6364b7e438eb16f576400, identical to
+//      spr_roaringknight_sword_ol's (knight-research/kaizo-mod/sprites/
+//      sprites_kaizo.csv rows 4049 and 4998; same 75x31, origin 37,15, bbox
+//      [7,13]..[66,17]), and kaizo/data/masks.js carries the extracted rows.
+//      So the sword's mask is ALIASED here, kaizo-side, with no engine
+//      change: `e.mask = SWORDOL_MASK` at create (the graze path's hook —
+//      the very object SPRITE_MASKS.spr_roaringknight_sword_ol is, so
+//      nothing moves while the sprite is still sword_ol) and a `collides`
+//      override that runs spriteMaskHit's own test over that mask. That is
+//      GameMaker's `mask_index = -1` resolved by hand for a sprite whose
+//      bitmap the engine already owns. kaizo/tools/checks/check-colours.mjs
+//      asserts the two extracted masks are row-identical and that the
+//      swapped sword still hits and grazes. Collision cannot move (same
+//      bitmap, same test, same call); depth is draw order only.
+//
 // NOT TRANSLATED (visual only — renderer work later, NO RNG in any of it):
-//   - the cone arm's other two lines: sprite_index =
-//     spr_roaringknight_sword_ol_alt and depth = cone.depth - 1. The sprite
-//     swap is DELIBERATELY not stored — the sim's default collision path is
-//     SPRITE_MASKS[sprite_index] and no _alt mask is registered, so storing
-//     it would silently disarm the sword. (kaizo/data/masks.js DOES now
-//     carry spr_roaringknight_sword_ol_alt, extracted from the real data:
-//     75x31, origin 37,15, bbox [7,13]..[66,17] — geometrically the same
-//     blade as spr_roaringknight_sword_ol, which is what the old "assumed
-//     same geometry" note wanted. Wiring it through the collision path is a
-//     sprite-registry change, not a tint, so it stays flagged open.)
 //   - The freeze's `visible = false` on each sword IS stored: the sword's
 //     own Step keeps running image_alpha += 0.1 afterwards (GML does the
 //     same), so visibility — not alpha — is what hides it. The renderer
@@ -84,8 +98,30 @@ import {
 } from '../../sim/bullets/regularbullet.js';
 import { gmlChoose, gmlIrandom } from '../../sim/rng.js';
 import { scrLerpvar } from '../../sim/lerpvar.js';
+import { SWORDOL_MASK, HEART_MASK, masksOverlap } from '../../sim/masks.js';
 
 const HEADINGS = [0, 45, 90, 135, 180, 225, 270, 315];
+
+/** The kaizo-only blade art the cone arm swaps in (Step_0:4). */
+export const SWORD_OL_ALT = 'spr_roaringknight_sword_ol_alt';
+
+/**
+ * The sword's contact test with its mask resolved by hand — see header
+ * item 6. Byte-for-byte the body of sim/masks.js spriteMaskHit (same
+ * masksOverlap call, same argument order, no `?? 1` defaults) with
+ * `e.mask` in place of SPRITE_MASKS[e.sprite_index], so a blade wearing
+ * spr_roaringknight_sword_ol_alt collides on the sha1-identical
+ * spr_roaringknight_sword_ol bitmap the engine already carries. Returns
+ * null with no mask, as spriteMaskHit does ("unmasked", counted).
+ */
+export function swordOlAliasHit(e, heart) {
+  const m = e.mask;
+  if (!m) return null;
+  return masksOverlap(
+    heart.mask ?? HEART_MASK, heart.x, heart.y,
+    m, e.x, e.y, e.image_xscale, e.image_yscale, e.image_angle,
+  );
+}
 
 function box(state) {
   return state.entities.find((e) => e.alive && e.type.name === 'obj_growtangle');
@@ -129,6 +165,11 @@ export const swordVortex = {
     e.lenstart = e.len;
     e.sprite_index = 'spr_roaringknight_sword_ol';
     e.isBullet = true;
+    // The mask alias (header item 6): the graze path reads `e.mask` first,
+    // and this IS SPRITE_MASKS.spr_roaringknight_sword_ol — identical to
+    // the default path until the cone arm swaps the sprite, identical in
+    // bitmap after it (sha1 9a44b658… on both sprites).
+    e.mask = SWORDOL_MASK;
   },
 
   step(e, state) {
@@ -149,15 +190,25 @@ export const swordVortex = {
     // and the STABLE reference from kaizo-colors.js, so a later
     // `image_blend == get_swordcolor()` gate would still compare true.
     //
-    // The cone arm's other two lines stay out, deliberately: the
-    // spr_roaringknight_sword_ol_alt swap would silently disarm the sword
-    // (the collision path is SPRITE_MASKS[sprite_index] and no _alt mask is
-    // registered — see the header), and `depth` off the cone is draw order
-    // only. The BLEND half of that arm is applied.
-    if (state.entities.some(
+    // ALL THREE LINES OF THE CONE ARM ARE APPLIED (2026-09-08; the swap and
+    // the depth were held back until the mask alias in `create` made the
+    // swap safe — header item 6). `_alt` is the PRE-PAINTED blue-and-white
+    // blade (kaizo-only art, kaizo/assets/sprites/), drawn untinted;
+    // `depth` puts it one step above the cone. The cone's own depth is the
+    // object default 0 (objects_kaizo.csv: obj_knight_pointing_cone depth
+    // 0; no code entry of it writes `depth`), which this engine leaves
+    // undefined — hence `?? 0`. Note the mod never swaps BACK: a blade that
+    // saw a cone keeps `_alt` and its depth after the cone dies, and so
+    // does this one. `obj_knight_pointing_cone.depth` reads the FIRST live
+    // cone in GML's object-index enumeration — the oldest — and there is
+    // only ever one.
+    const cone = state.entities.find(
       (x) => x.alive && x.type.name === 'obj_knight_pointing_cone',
-    )) {
+    );
+    if (cone) {
       e.image_blend = WHITE;
+      e.sprite_index = SWORD_OL_ALT;
+      e.depth = (cone.depth ?? 0) - 1;
     } else {
       e.image_blend = getSwordcolor(state);
     }
@@ -181,6 +232,11 @@ export const swordVortex = {
     e.timer += 1;
     if (e.timer % 4 === 0) e.grazed = 0;
   },
+
+  // `mask_index = -1` resolved by hand (header item 6): the same test the
+  // engine's default path runs, over the aliased mask, so the `_alt` sprite
+  // collides exactly as spr_roaringknight_sword_ol does.
+  collides: swordOlAliasHit,
 
   other15: collidebulletOther15,
 };
@@ -507,6 +563,13 @@ export const vortexendBullet = {
     kaizoVortexendStep(e, state); // the constant script_repeat, rate 1
   },
 
+  // The freeze copies the sword's sprite_index, and a sword that has seen a
+  // Stars cone wears spr_roaringknight_sword_ol_alt — so the frozen bullet
+  // carries the same mask alias (`b.mask` below) and the same resolved test.
+  // Unreachable in the shipped schedule (attack 111 has no cone) and cheap
+  // to be right about.
+  collides: swordOlAliasHit,
+
   other15: collidebulletOther15,
 };
 
@@ -527,6 +590,7 @@ export function kaizoVortexendFreeze(state) {
     b.sndcon = 0;
     b.con = 0;
     b.sprite_index = sw.sprite_index;
+    b.mask = sw.mask; // engine plumbing, not GML: the mask alias travels with the sprite name (header item 6)
     b.active = 1;
     b.image_angle = sw.image_angle;
     b.direction = sw.direction;
