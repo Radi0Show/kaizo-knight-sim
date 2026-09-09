@@ -846,6 +846,46 @@ function bigScene(endtype, seed = 11) {
     `the handoff goes through the seam naming its own site, got [${askedSites.join(', ')}]`);
 }
 
+// ── the release lerp starts from the PRE-STEP heart ────────────────────────
+//
+// big_Step_0:77-93 at timer 42: `with (obj_heart) scr_lerpvar("y", y, _targetY, 6)`.
+// obj_roaringknight_quickslash_big is object index 664, obj_heart 1462, so in
+// the runner this Step runs BEFORE the heart moves this frame and `y` is the
+// frame-start value. MEASURED on _rev1 f5096 (the mash holds UP): the game's
+// six frames are lerp(161, 95, k/6) = 150 139 128 117 106 95 from the heart's
+// 161, not from the 157 its own Step produced that frame. The sim's step
+// phase is oldest-first here (the soul is older than the big), so reading the
+// live heart is the sabotage this section catches.
+{
+  const { st, big } = bigScene(0, 23);
+  let released = null;
+  for (let f = 0; f < 90 && !released; f++) {
+    if (st.soul && st.soul.alive) st.soul.y = BOX_Y - 8;   // hold on the cut line
+    const y0 = st.soul ? st.soul.y : null;
+    if (big.alive && big.timer === 41 && big.playerstrike === 1) {
+      // The release frame: the heart is at y0 when the big fires, and moves
+      // UP by its own 4 in the same frame.
+      stepFrame(st, { up: true });
+      const tween = st.entities.find((e) => e.alive && e.type.name === 'obj_lerpvar' && e.target === st.soul && e.varname === 'y');
+      released = { y0, tween, soulAfter: st.soul?.y };
+      break;
+    }
+    stepFrame(st, {});
+  }
+  ok(released && released.tween, "the strike at timer 42 spawns the heart's y tween (big_Step_0:90-93)");
+  if (released && released.tween) {
+    ok(released.tween.pointa === released.y0,
+      `the tween starts from the heart's PRE-STEP y (${released.y0}), the value obj_roaringknight_quickslash_big (664) reads before obj_heart (1462) steps — got ${released.tween.pointa}`);
+    ok(released.tween.pointb === BOX_Y - 75 && released.tween.maxtime === 6,
+      `and runs to y - 75 over 6 frames (the heart was above the line), got ${released.tween.pointb} / ${released.tween.maxtime}`);
+    // The tween's write is the last word each frame (obj_lerpvar 1585 steps
+    // after obj_heart): six frames later the heart sits on the target.
+    for (let f = 0; f < 6; f++) stepFrame(st, { up: true });
+    ok(st.soul && st.soul.y === BOX_Y - 75,
+      `six frames on, the heart is at the lerp's end (${BOX_Y - 75}) whatever the input did, got ${st.soul?.y}`);
+  }
+}
+
 console.log(`${checks - failures}/${checks} quickslash checks passed`);
 if (failures > 0) {
   console.error(`${failures} FAILED`);

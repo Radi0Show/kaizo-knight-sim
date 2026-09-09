@@ -629,8 +629,24 @@ export const quickslashBig = {
       e.playerstrike = 0;
       const heart = state.soul;
       if (heart) heart.image_alpha = 1;
+      // THE HEART AS IT STANDS BEFORE ITS OWN STEP. obj_roaringknight_quickslash_big
+      // is object index 664 and obj_heart is 1462, so in the runner this Step
+      // runs before the heart has moved this frame, and both reads below —
+      // the side test and `scr_lerpvar("y", y, ...)`'s start value — see the
+      // frame-start position. state.soulPrev is that snapshot (sim/index.js,
+      // the same compensation the tunnel sword and the rotating slash use).
+      //
+      // MEASURED on _rev1 f5096: the mash holds UP, the heart is at 161 when
+      // this fires and moves to 157 in its own Step the same frame; the game's
+      // six frames are lerp(161, 95, k/6) = 150 139 128 117 106 95, integers
+      // all the way. Reading the live heart here lerped from 157 and gave
+      // 147 136 126 116 105 95 — the first trace front of the three-character
+      // recording. obj_lerpvar (1585) steps AFTER the heart, so each frame the
+      // tween's write is the last word on y, and the sim's tween already lands
+      // after the soul's move; only the start value was wrong.
+      const hp = state.soulPrev ?? heart;
       let _targetY = e.y;
-      if (heart && heart.y > e.y) {
+      if (heart && hp.y > e.y) {
         _targetY += 75;
       } else {
         _targetY -= 75;
@@ -639,7 +655,7 @@ export const quickslashBig = {
         // scr_lerpvar("y", y, _targetY, 6) on obj_heart — the tween instance
         // fights the soul's own movement for 6 frames, exactly as the
         // original's lerp controller does.
-        scrLerpvar(state, spawn, heart, 'y', heart.y, _targetY, 6);
+        scrLerpvar(state, spawn, heart, 'y', hp.y, _targetY, 6);
       }
       scrDamageAllMaxhp(state, 0.5, true, false);
       // CleanUp_0: obj_heart.image_alpha = 1 (already restored above).
