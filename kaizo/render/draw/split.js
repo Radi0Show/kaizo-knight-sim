@@ -463,11 +463,48 @@ function drawHellSurfaceKaizo(ctx, state, helpers) {
     }
   }
 
-  ctx.save();
-  ctx.globalCompositeOperation = 'lighter'; // draw_set_blend_mode(bm_add)
-  ctx.globalAlpha = 1;
-  ctx.drawImage(hell.c, gt.x - 71, gt.y - 71);
-  ctx.restore();
+  // DEFERRED, not drawn inline — RENDER-CRITIC item 4a, and the same defect
+  // the quickslash review measured and fixed for quickslash alone
+  // (kaizo/render/draw/quickslash.js, `helpers.defer` at the end of its own
+  // hell_surface block).
+  //
+  // In the GAME the manager is at `obj_heart.depth + 1` = 2 (Create_0:12,
+  // obj_heart 1 in __global_object_depths) and the arena is at 5, so the
+  // 142x142 telegraph is painted OVER the box. In the SIM the box carries no
+  // depth at all (sim/battlebox.js assigns none; the sorted pass reads
+  // undefined as 0) while the manager carries the 1 its module sets
+  // (kaizo/attacks/flurry-boxsplitter-attack.js:147) — and the pass draws
+  // DEEPER FIRST, so the manager drew at 1 and the box's own frame 1, an
+  // opaque black interior (assets/sprites/spr_battlebg_0_1.png), then covered
+  // every pixel of a surface that sits entirely inside it. The telegraph was
+  // invisible on the kaizo page for the whole of every splitter turn.
+  //
+  // `helpers.defer` runs the blit after the depth pass and before the soul,
+  // inside the same -view translation — which is where the VANILLA renderer
+  // put this exact surface for this exact reason ("above the arena, below the
+  // soul", render/canvas.js). So this restores the vanilla late-pass position
+  // while keeping the port's own surface, its `ownsHellSurface` claim and its
+  // `image_alpha > 0` gate on the manager's pose.
+  //
+  // THE DEVIATION IT BUYS, stated as the quickslash fix states its own: the
+  // surface now also lands over the depth-0 objects the game draws OVER it —
+  // the cut sprites and the teeth — where a pending band crosses one. The
+  // exact fix is the box carrying the table's 5 in sim/battlebox.js, which
+  // this pass may not touch.
+  //
+  // The surface is filled ABOVE and blitted here, so the closure captures the
+  // canvas and the position and nothing else; `deferred` is emptied per frame
+  // (render/canvas.js), and the manager is a singleton, so no second fill can
+  // land between the two halves.
+  const hx = gt.x - 71;
+  const hy = gt.y - 71;
+  helpers.defer(() => {
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter'; // draw_set_blend_mode(bm_add)
+    ctx.globalAlpha = 1;
+    ctx.drawImage(hell.c, hx, hy);
+    ctx.restore();
+  });
 }
 
 /**

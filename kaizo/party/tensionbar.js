@@ -90,6 +90,45 @@ import { gmlRandomRange } from '../../sim/rng.js';
 /** The B-Side ceiling. `clamp(global.tension, 0, 125)`. */
 export const KAIZO_SIDEB_TP_CAP = 125;
 
+/**
+ * `sprite_height` on the obj_tensionbar INSTANCE — 196, the height of
+ * spr_tensionbar (and of spr_tensionbar_sliced, which is the same 25x196
+ * sheet re-drawn: assets/sprites/manifest.json and
+ * kaizo/assets/sprites/manifest.json both say `"w":25,"h":196`).
+ *
+ * The bleed loop reads it three times (`y + sprite_height`), and it is the
+ * INSTANCE's sprite, not `_bar_sprite` — the Draw's local never reaches
+ * `sprite_index`, so the number is the same on both sides of the shear.
+ *
+ * It also cross-checks against the fill: 125 TP is `196 * (1 - 125/250)` = 98
+ * from the top, which is exactly the `- 98` the loop uses for its spawn line.
+ */
+export const TENSIONBAR_SPRITE_H = 196;
+
+/**
+ * THE BAR'S OWN SCREEN POSITION IS NOT THIS MODULE'S TO KNOW.
+ *
+ * obj_tensionbar's Draw ends with `y = __view_get(YView, 0) + 40 + yoffset`
+ * (and the Create slides `x` in from `view_x - 40`), so every number the GML
+ * writes off `x`/`y` is in SCREEN coordinates. The skin this module publishes
+ * is in BAR-LOCAL coordinates instead — render/tensionbar.js owns the
+ * instance's position and translates to it once (`ctx.translate(barX(frame),
+ * 40)`), so publishing `x +`/`y +` here would apply it twice.
+ *
+ * There is deliberately no `BAR_Y` constant any more: the one that used to
+ * live here was added to the marker y and not to the marker x, which put the
+ * bleed 40px below the bar for its whole life. See the bleed loop's own note.
+ */
+
+/** GameMaker's default `gravity_direction`. Straight down. */
+const GRAVITY_DIRECTION = 270;
+/** `gravity = 0.35` — obj_tensionbar Draw_0:72. */
+const MARKER_GRAVITY = 0.35;
+/** GameMaker packs c_orange BGR (0x0080FF) — RGB(255, 128, 0). */
+const C_ORANGE = [255, 128, 0];
+/** `scr_marker(..., spr_roaringknight_finalslash_mask)` — Draw_0:65. */
+const MARKER_SPRITE = 'spr_roaringknight_finalslash_mask';
+
 /** Re-exported so callers can compare the two without importing both files. */
 export { MAX_TENSION };
 
@@ -184,6 +223,215 @@ export function kaizoTensionbarLayout(state) {
   return { yoff: kaizoTensionClampActive(state) ? 32 : 0 };
 }
 
+// ── THE BLEED, as things that exist on screen ─────────────────────────────
+//
+// `scr_marker(x, y, spr)` is `instance_create(x, y, obj_marker)` plus a
+// sprite and `image_speed = 0` (gml_GlobalScript_scr_marker.gml). obj_marker
+// HAS NO EVENTS AT ALL in the dump — only its typed subclasses do — so a
+// marker is a bare instance: the runner's built-in motion moves it, its
+// obj_lerpvars write over its variables, `draw_self()` draws it, and a
+// `scr_script_delayed(instance_destroy, N)` alarm ends it.
+//
+// TWO DELIBERATE DEVIATIONS, both from the same decision — these are PLAIN
+// RECORDS on `state.kaizo.tpMarkers`, not entities in `state.entities`:
+//
+//  1. THE SLOT. They are advanced from this module's own end-step call, not
+//     by the sim's step/motion phases, so every marker is uniformly one slot
+//     later in the frame than the game's would be. Nothing collides with
+//     them, nothing reads their position, and no trace column has ever
+//     carried one; the alternative — real entities — would put 3 to 30 extra
+//     instances into the list every graze frame, shifting `seq` for
+//     everything spawned after them and handing the end-of-turn sweep
+//     something to destroy that the game never destroys.
+//  2. THE FRAME. They are held in BAR-LOCAL coordinates (0,0 = the bar's own
+//     origin) because render/tensionbar.js draws the bar in SCREEN space,
+//     while the game's bar is a world instance that tracks the view. The two
+//     frames differ by the bar's own position, which is constant from the
+//     end of its 13-frame slide-in — and the shear that switches this whole
+//     mechanism on happens thousands of frames later.
+//
+// Everything else is the GML: the gravity chain is the one sim/index.js
+// runMotion measured (18,723 integration steps, 100%), the lerps are
+// obj_lerpvar's own "increment the clock, then write lerp(a, b, t/maxtime)",
+// and a lerp OVERWRITES what gravity did to that variable while it runs,
+// exactly as two instances writing the same field do in the original.
+
+const PI32 = Math.fround(Math.PI);
+
+/**
+ * One frame of GameMaker's built-in motion for an instance that was handed
+ * hspeed/vspeed directly and carries `gravity`. sim/index.js runMotion, facts
+ * 1 and 2: the components ARE the state, and the gravity vector is added to
+ * them through an all-f32 chain before the position add.
+ *
+ * runMotion's fact-3 recomposition of speed/direction is NOT done here, and
+ * that is not a shortcut: it exists so a later GML read of `speed` or
+ * `direction` sees what the runner would have stored, and nothing — not the
+ * mod's Draw, not this module, not the renderer — ever reads either off a
+ * bleed marker. The integer fix-up rides on that recomposition, so it has
+ * nothing to fix up either.
+ */
+function markerMotion(m) {
+  const gr = Math.fround(Math.fround(Math.fround(GRAVITY_DIRECTION) * PI32) / 180);
+  m.hspeed = Math.fround(m.hspeed
+    + Math.fround(Math.fround(m.gravity) * Math.fround(Math.cos(gr))));
+  m.vspeed = Math.fround(m.vspeed
+    + Math.fround(Math.fround(m.gravity) * -Math.fround(Math.sin(gr))));
+  m.x = Math.fround(m.x + m.hspeed);
+  m.y = Math.fround(m.y + m.vspeed);
+}
+
+/** GML `lerp(a, b, t)` — unclamped, which is what makes alpha 4.5 mean anything. */
+function lerp(a, b, t) {
+  return a + (b - a) * t;
+}
+
+/**
+ * obj_lerpvar's Step, for the tweens a marker carries (sim/lerpvar.js is the
+ * verified copy; these live on the record instead of in the entity list for
+ * the reason in the block comment above). THE CLOCK INCREMENTS BEFORE THE
+ * WRITE, so the first value written is `lerp(a, b, 1/maxtime)` and never `a`
+ * — the reason `image_alpha` starts its life at obj_marker's own default 1
+ * and not at the 1.5 or 4.5 the call names.
+ */
+function stepMarkerLerps(m) {
+  if (!m.lerps.length) return;
+  const keep = [];
+  for (const t of m.lerps) {
+    t.time += 1;
+    m[t.name] = lerp(t.a, t.b, t.time / t.maxtime);
+    if (t.time < t.maxtime) keep.push(t);
+  }
+  m.lerps = keep;
+}
+
+/**
+ * One `with (scr_marker(...))` block — Draw_0:65-93, assignment for
+ * assignment. The three `random_range` results arrive already drawn from the
+ * shared stream (the caller spends them in the loop's own order); this only
+ * arranges them.
+ *
+ *     depth = other.depth - 1;          // in front of the bar — the renderer
+ *                                       // paints these after it, see the seam
+ *     hspeed = random_range(...);        // handed in
+ *     vspeed = random_range(...);        // handed in
+ *     image_blend = c_orange;
+ *     image_xscale = random_range(0.46, 0.68);
+ *     image_yscale = image_xscale / 1.75;
+ *     gravity = 0.35;
+ *
+ * THEN THE TWO LIVES DIVERGE ON `_delay`:
+ *
+ *   delay > 0 (the slow bleed, one frame of delay per 20 TP above 125)
+ *     lerpvar("vspeed", 0, vspeed, delay)      the roll is the DESTINATION,
+ *                                              so it drifts up from a standstill
+ *     lerpvar("y", _sy, _yy, delay)            climbs off the 125 line
+ *     lerpvar("image_alpha", 1.5, 0, 25+delay) opaque for the first third
+ *     destroy at 35 + delay
+ *
+ *   delay == 0 (inside the shear cutscene, and only there)
+ *     y = _yy                                  placed, not tweened
+ *     lerpvar("image_alpha", 4.5, 0, 45)       opaque for the first 34 frames
+ *     destroy at 45
+ *
+ * `image_alpha` starts at obj_marker's own default of 1: the Create sets no
+ * alpha, and the lerp's first WRITE is a frame later (see stepMarkerLerps).
+ * The 1.5 and the 4.5 are hold times dressed as alphas — anything above 1
+ * draws as 1 — which is why the two paths fade so differently despite both
+ * ending at 0.
+ */
+function makeMarker({ x, y, hspeed, vspeed, xscale, yy, sy, delay }) {
+  const m = {
+    x,
+    y,
+    hspeed,
+    vspeed,
+    gravity: MARKER_GRAVITY,
+    image_xscale: xscale,
+    image_yscale: xscale / 1.75,
+    image_alpha: 1,
+    age: 0,
+    life: delay > 0 ? 35 + delay : 45,
+    lerps: [],
+  };
+  if (delay > 0) {
+    m.lerps.push({ name: 'vspeed', a: 0, b: vspeed, maxtime: delay, time: 0 });
+    m.lerps.push({ name: 'y', a: sy, b: yy, maxtime: delay, time: 0 });
+    m.lerps.push({ name: 'image_alpha', a: 1.5, b: 0, maxtime: 25 + delay, time: 0 });
+  } else {
+    m.y = yy;
+    m.lerps.push({ name: 'image_alpha', a: 4.5, b: 0, maxtime: 45, time: 0 });
+  }
+  return m;
+}
+
+/** The live bleed markers. Created lazily so a non-B-Side state carries none. */
+export function kaizoTpMarkers(state) {
+  const k = (state.kaizo ??= {});
+  return (k.tpMarkers ??= []);
+}
+
+/**
+ * Advance every live marker one frame and drop the expired ones.
+ *
+ * `scr_script_delayed(instance_destroy, N)` arms an alarm N frames out and
+ * GameMaker runs alarms BEFORE steps, so the instance is gone on the frame
+ * its age reaches N — it never gets that frame's motion. Modelled as the
+ * first thing in the walk.
+ */
+function stepMarkers(state) {
+  const live = kaizoTpMarkers(state);
+  if (!live.length) return;
+  const keep = [];
+  for (const m of live) {
+    m.age += 1;
+    if (m.age >= m.life) continue; // the instance_destroy alarm
+    stepMarkerLerps(m); // the obj_lerpvars, which may overwrite vspeed and y
+    markerMotion(m); // then the runner's move step
+    keep.push(m);
+  }
+  state.kaizo.tpMarkers = keep;
+}
+
+/**
+ * The bar SKIN the renderer reads — `state.tensionBar`, the seam in
+ * render/tensionbar.js (its "THE SKIN SEAM" header). Data only; the renderer
+ * imports nothing from kaizo/ (HANDOFF §2.1).
+ *
+ * `trail` hands the renderer THIS module's trailing pair rather than its own
+ * module-local one, which is the whole point of publishing it: the clamp
+ * above clamps `apparent` and `current`, and a renderer stepping a second,
+ * unclamped copy would draw a fill that disagrees with the number the sim is
+ * enforcing. The renderer reads it and writes nothing back.
+ *
+ * `markers` is the live bleed, converted to the draw calls Draw_0:65-73
+ * issues: `draw_self()` on an obj_marker is `draw_sprite_ext(sprite_index,
+ * image_index, x, y, image_xscale, image_yscale, image_angle, image_blend,
+ * image_alpha)`, and a marker never sets `image_angle` or advances
+ * `image_index` (`image_speed = 0`, one-frame sprite).
+ */
+function publishSkin(state) {
+  const sprites = kaizoTensionbarSprites(state);
+  const bar = kaizoTpbar(state);
+  state.tensionBar = {
+    bar: sprites.bar,
+    cutout: sprites.cutout,
+    tplogo: sprites.tplogo,
+    yoff: kaizoTensionbarLayout(state).yoff,
+    trail: bar,
+    markers: kaizoTpMarkers(state).map((m) => ({
+      sprite: MARKER_SPRITE,
+      subimage: 0,
+      x: m.x,
+      y: m.y,
+      xscale: m.image_xscale,
+      yscale: m.image_yscale,
+      blend: C_ORANGE,
+      alpha: m.image_alpha,
+    })),
+  };
+}
+
 /**
  * obj_tensionbar's Draw_0 — the mechanical half, translated.
  *
@@ -225,11 +473,22 @@ export function kaizoTensionbarDraw(state) {
   const bar = kaizoTpbar(state);
   const out = { clamped: false, particles: 0, draws: 0 };
 
-  if (endCutsceneVersion(state) > 0) return out;
+  // THE MARKERS ARE NOT PART OF THE BAR'S DRAW. They are their own instances,
+  // so they keep moving through every early exit this event has — including
+  // the end-cutscene one below, which removes the bar and nothing else.
+  // Stepped BEFORE the loop spawns this frame's batch, because a marker
+  // created in a Draw gets its first Step on the following frame.
+  stepMarkers(state);
+
+  if (endCutsceneVersion(state) > 0) {
+    publishSkin(state);
+    return out;
+  }
 
   if (kaizoTensionClampActive(state)) {
     const rng = state.gmlRng;
     const before = rng?.draws ?? 0;
+    const live = kaizoTpMarkers(state);
     let i = 125.1;
     let sep = 4;
     if (state.tension >= 200) sep = 7.5;
@@ -240,15 +499,61 @@ export function kaizoTensionbarDraw(state) {
       const inScene = kaizoTpscene(state) >= 10;
       const hsp = inScene ? [-3, -5] : [-1, 1];
       const vsp = inScene ? [-2, -5] : [-2, -1];
+      // `_tpnum = _i / 2.5` is the PERCENTAGE this step of TP sits at
+      // (250 maxtension, 100%), and 1.96 is the bar's 196 pixels per
+      // percentage point — so `_yy` is the height that much TP WOULD have
+      // reached and `_sy` is the 125 line it is cut off at
+      // (196 * (1 - 125/250) = 98). The marker starts on the line and bleeds
+      // up to where the TP should have been.
+      const tpnum = i / 2.5;
+      // `_delay = ceil((_i - 125) / 20)`, and the whole scene branch flattens
+      // it to 0. GML `ceil` is JS `Math.ceil`.
+      const delay = inScene ? 0 : Math.ceil((i - 125) / 20);
       for (let h = 0; h < 3; h++) {
+        // Draw_0:60-61 — BOTH recomputed inside the h loop, 1.5px apart, so
+        // the three columns are also stepped diagonally.
+        //
+        // ONE COORDINATE FRAME, AND IT IS BAR-LOCAL. The GML writes these in
+        // SCREEN coordinates, off the instance's own x/y:
+        //
+        //     _yy = ((_h * 1.5) + (y + sprite_height)) - (_tpnum * 1.96)
+        //     _sy = ((_h * 1.5) + (y + sprite_height)) - 98
+        //     scr_marker(x + 3.4 + (_h * 6.66), _sy, ...)
+        //
+        // and the renderer this publishes to (render/tensionbar.js, "THE SKIN
+        // SEAM": `markers` is "a flat list of sprite draws to paint OVER the
+        // bar, in BAR-LOCAL coordinates") does the `x +` and the `y +` itself
+        // by translating to `(barX(frame), 40)`. So BOTH halves drop the
+        // instance's own position: the x drops `x +`, and the y drops `y +`
+        // — i.e. `BAR_Y`. Keeping BAR_Y here while dropping `x +` mixed the
+        // two frames in one struct and put every marker 40px low for its
+        // whole life, spawn AND destination.
+        //
+        // The bar-local spawn line is therefore `sprite_height - 98` = 98,
+        // which is exactly where the renderer's own fill stops for 125 TP
+        // (`h - (125/250) * h`) — the equality check-tensionbar-draw asserts
+        // rather than re-typing 98 a second time.
+        const yy = (h * 1.5) + TENSIONBAR_SPRITE_H - (tpnum * 1.96);
+        const sy = (h * 1.5) + TENSIONBAR_SPRITE_H - 98;
         // scr_marker() -> instance_create + sprite_index + image_speed. No RNG
         // (checked: gml_GlobalScript_scr_marker.gml). The three draws are the
         // marker's own assignments, in source order.
-        if (rng) {
-          gmlRandomRange(rng, hsp[0], hsp[1]); // hspeed
-          gmlRandomRange(rng, vsp[0], vsp[1]); // vspeed
-          gmlRandomRange(rng, 0.46, 0.68); // image_xscale
-        }
+        const hspeed = rng ? gmlRandomRange(rng, hsp[0], hsp[1]) : 0;
+        const vspeed = rng ? gmlRandomRange(rng, vsp[0], vsp[1]) : 0;
+        const xscale = rng ? gmlRandomRange(rng, 0.46, 0.68) : 0.57;
+        live.push(makeMarker({
+          // `x + 3.4 + (_h * 6.66)` — three columns across the 25px bar,
+          // inside the fill's own x 3..w-1 span. Bar-local, so the `x +` is
+          // the origin the renderer translates to.
+          x: 3.4 + (h * 6.66),
+          y: sy,
+          hspeed,
+          vspeed,
+          xscale,
+          yy,
+          sy,
+          delay,
+        }));
         out.particles += 1;
       }
       i += sep;
@@ -296,6 +601,12 @@ export function kaizoTensionbarDraw(state) {
   // the fight.
   const tamt = Math.floor((bar.apparent / MAX_TENSION) * 100);
   bar.maxed = tamt >= 100 ? 1 : 0;
+
+  // Everything above is what the event COMPUTES; this is how it reaches the
+  // screen. Published last so the renderer sees this frame's clamp, this
+  // frame's pair and this frame's markers — the same values the Draw would
+  // have painted with, because in the game they are the same event.
+  publishSkin(state);
 
   return out;
 }

@@ -220,11 +220,21 @@ for (const name of KAIZO_DRAW_OBJECTS) {
     real,
   );
 }
-// 24 changed Draws plus ONE fill: obj_knight_diamondswordbullet_ext's Draw is
-// vanilla-identical but the engine has no drawer for it at all, so the
-// kaizo registry carries it (kaizo/render/index.js, 2026-09-08).
-ok(KAIZO_DRAW_OBJECTS.length === 25,
-  `the registry names the mod's 24 changed Draw objects + the blade fill (${KAIZO_DRAW_OBJECTS.length})`);
+// 24 changed Draws plus THREE entries that are not mod deltas:
+//   obj_knight_diamondswordbullet_ext   Draw vanilla-identical, no engine
+//                                       drawer at all (2026-09-08)
+//   obj_roaringknight_quickslash_big    likewise — RENDER-CRITIC 4b, the
+//                                       generic blit was painting its marker
+//                                       stand-in through every pending frame
+//   actor_party                         the sim's stand-in for obj_heroparent,
+//                                       whose Draw_0 IS a mod delta (the
+//                                       B-Side gloom tint and the frozen
+//                                       statue, RENDER-CRITIC 2b) — the actor
+//                                       is the only hero in the entity list,
+//                                       so it is the only place the seam can
+//                                       reach one
+ok(KAIZO_DRAW_OBJECTS.length === 27,
+  `the registry names the mod's 24 changed Draw objects + 3 engine fills (${KAIZO_DRAW_OBJECTS.length})`);
 ok(KAIZO_DRAW_OBJECTS.every((n) => typeof KAIZO_DRAW_OVERRIDES[n] === 'function'),
   'every registry entry is a function');
 
@@ -245,17 +255,16 @@ ok(typeof kaizoRenderer.draw === 'function', 'createRenderer accepted the overri
  * 10,000 frames for V-C. V-D reaches the same two at 6617 and 9563; 6000
  * frames of it covers everything V-C's run does not add.
  */
-// THE SNOWGRAVE PAIR IS NOT REACHED, and the run is kept so the day it is
-// reachable this file says so. The spell is Noelle's menu choice on the
-// B-Side, which the pulse feed never casts, so one V-D run casts it on frame
-// 0 the way check-scenes.mjs does and pins Kris as the target. MEASURED
-// (same probe): both obj_spell_snowgrave and up to 90 live snowflakes exist,
-// and every one of them keeps the `visible = false` its Create assigns
-// (kaizo/party/scenes.js snowgraveSpell / snowgraveSnowflake) for its whole
-// life; the spell dies on its 120-frame destroy timer before any turn end
-// could arm k_sgscene. An invisible instance never reaches the seam — the
-// loop's filter is GameMaker's rule — so the snowgrave family's port starts
-// with the question of where those objects' visuals are meant to come from.
+// THE SNOWGRAVE PAIR IS REACHED — and the note that used to stand here,
+// saying it was not, is STALE and is kept only as the record of why the run
+// below exists. It said both objects keep the `visible = false` their Create
+// assigns and so can never reach the seam. That was true when it was written
+// and is not true now: the last V-D run below (SnowGrave cast on frame 0, the
+// way check-scenes.mjs casts it, with Kris pinned as the target) puts
+// obj_spell_snowgrave through the seam 125 times and its snowflakes 13,377
+// times at the budgets here — the scenes work that landed since made the
+// spell visible. Both names are PINNED below now; the run that reaches them
+// is the one that was written for the day this changed.
 //
 // obj_tracking_sword_slash_extra_graze is never reached BY CONSTRUCTION: its
 // Create sets `visible = false` (kaizo/attacks/tracking-swords.js:133 — a
@@ -309,15 +318,21 @@ ok((globalThis.__drawCount ?? 0) > 0, `the stub canvas received draws (${globalT
 // at least once, and a name dropping out of the set means either a sim change
 // moved the schedule (re-measure, re-pin) or the seam stopped consulting that
 // object (the failure this exists to catch). Names NOT in the set are
-// reported, never enforced — see the note after the assertion. The three
-// absent from the pin are the two SnowGrave objects and the extra-graze bar,
-// for the reasons given above RUNS.
+// reported, never enforced — see the note after the assertion. ONE name is
+// absent from the pin now: obj_tracking_sword_slash_extra_graze, which is
+// unreachable BY CONSTRUCTION (its Create sets visible = false). The two
+// SnowGrave objects used to be absent too and are pinned as of 2026-09-10 —
+// see the note above RUNS for what changed.
 const EXPECTED_REACHED = [
   'obj_fallingsword', 'obj_knight_swordfall', 'obj_sword_tunnel_sword',
   'obj_knight_swordtunnelanim',
   'obj_knight_pointing_cone', 'obj_knight_pointing_star', 'obj_knight_pointing_starchild',
   'obj_knight_roaring2', 'obj_roaringknight_slash',
   'obj_roaringknight_quickslash', 'obj_roaringknight_quickslash_attack',
+  // MEASURED 2026-09-10 at the same seed and budgets: 104 hits — the ac-5
+  // finisher's own pending frames, which is precisely the window
+  // RENDER-CRITIC 4b says the generic blit was painting a marker across.
+  'obj_roaringknight_quickslash_big',
   'obj_knight_rotating_slash',
   'obj_roaringknight_boxsplitter_attack', 'obj_roaringknight_splitslash',
   'obj_roaringknight_split_bullet', 'obj_knight_split_growtangle_effect',
@@ -326,6 +341,13 @@ const EXPECTED_REACHED = [
   // and the combination's tunnel segment both field these blades).
   'obj_knight_diamondswordbullet_ext',
   'obj_tracking_sword_slash', 'obj_knight_enemy',
+  // MEASURED 2026-09-10, same seed and budgets: 125 and 13,377. Reached only
+  // by the last run (SnowGrave cast on frame 0) — see the note above RUNS.
+  'obj_spell_snowgrave', 'obj_spell_snowgrave_snowflake',
+  // MEASURED 2026-09-10: 65,928 — three heroes on V-A/V-C and two on V-D,
+  // every frame of every run. If this ever drops out, the party has stopped
+  // being drawn at all, which is the state RENDER-CRITIC 2b was filed in.
+  'actor_party',
 ];
 {
   const reached = KAIZO_DRAW_OBJECTS.filter((n) => hits[n] > 0);

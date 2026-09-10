@@ -270,11 +270,34 @@ export function stepKaizoHeroes(state) {
           depth: m.depth,
           image_index: 0,
           inbattle: 1,
+          // `herofrozen.image_xscale = image_xscale` (Draw_0:41-42) — the
+          // HERO's scales, and obj_heroparent's Create sets both to 2
+          // (Create_0:14-15). obj_frozennpc's own Create defaults to 2 as
+          // well, so the copy is a no-op in this fight; carried anyway,
+          // because the statue's Draw multiplies its source rect by them and
+          // a reader should not have to go and find out which 2 it is.
+          image_xscale: 2,
+          image_yscale: 2,
+          // `image_alpha = 1` — the statue's Draw assigns it on its own first
+          // frame (`fresh == 0`); its Create's 0 is never seen, because that
+          // Draw runs on the creation frame.
+          image_alpha: 1,
+          // `timer`, the ice clock: `if (timer < 1) timer += 0.05` in the
+          // statue's Draw, so it is FRAMES-ALIVE and nothing else. Held as an
+          // age here — a renderer may not write sim state, and the drawer
+          // derives `timer = min(1, age * 0.05)` from it.
+          age: 0,
         };
       }
       h.frozenHidden = true;
     } else {
       h.frozenHidden = false;
+    }
+    // The statue's clock runs whether or not its hero is still frozen: the
+    // instance outlives the freeze (cleanupKaizoHero, the CleanUp's missed
+    // destroy), so nothing stops it. It saturates at 20.
+    if (h.herofrozen && typeof h.herofrozen === 'object' && h.herofrozen.age < 20) {
+      h.herofrozen.age += 1;
     }
 
     // MOD (Draw hunk 2): `image_blend = _blend` instead of two redundant

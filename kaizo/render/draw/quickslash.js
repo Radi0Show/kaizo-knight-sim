@@ -683,3 +683,118 @@ export function drawObjKnightRotatingSlash(ctx, e, state, helpers) {
   ctx.drawImage(me, state.view.x, state.view.y); // :96-97
   return true;
 }
+
+// ── obj_roaringknight_quickslash_big ───────────────────────────────────────
+
+/**
+ * GML `remap_clamped(in_min, in_max, out_min, out_max, v)`
+ * (gml_GlobalScript_scr_remapvalue.gml): the linear remap, clamped to the
+ * output range whichever way round it is. Same function
+ * kaizo/render/draw/split.js carries for the splitslash's copy of this block;
+ * held locally rather than exported across two family files, which is the
+ * shape every other shared GML helper in kaizo/render/draw/ already has.
+ */
+function remapClamped(inMin, inMax, outMin, outMax, v) {
+  const r = outMin + ((v - inMin) * (outMax - outMin)) / (inMax - inMin);
+  const lo = Math.min(outMin, outMax);
+  const hi = Math.max(outMin, outMax);
+  return r < lo ? lo : r > hi ? hi : r;
+}
+
+/**
+ * `irandom(n)` as a pure function of the sim frame — the 30Hz Draw-random
+ * rule. The fallback only, for a state whose draw slot did not run.
+ */
+function irandomFrame(frand, frame, salt, n) {
+  return Math.floor(frand(frame, salt) * (n + 1));
+}
+
+/**
+ * obj_roaringknight_quickslash_big — RENDER-CRITIC item 4b.
+ *
+ * NOT A CHANGED DRAW. Its kaizo Draw_0 is BYTE-IDENTICAL to vanilla's (`diff
+ * gml_vanilla_v105/CodeEntries/gml_Object_obj_roaringknight_quickslash_big_
+ * Draw_0.gml gml_kaizo_dump/CodeEntries/<same>` exits 0), so this is the
+ * second entry of the kind obj_knight_diamondswordbullet_ext is — a VANILLA
+ * HOLE the kaizo registry fills, not a mod delta. render/canvas.js has no
+ * DRAW_EVENTS entry for this object at all, and the sim only reaches it
+ * through kaizo/attacks/quickslash.js, so the generic blit was the only thing
+ * drawing it:
+ *
+ *     draw_sprite_ext(sprite_index, image_index, x, y, image_xscale,
+ *                     image_yscale, image_angle, image_blend, image_alpha)
+ *
+ * ungated. The finisher carries `spr_rk_quickslash_marker` as its definition
+ * stand-in from Create (kaizo/attacks/quickslash.js:338, inherited through
+ * `quickslash.create`), so every one of its ~30 pending frames painted a
+ * marker bar across the box that the game does not show — the game shows the
+ * controller's hell-surface gradient and nothing else until the cut.
+ *
+ * The whole event, and it is nine lines:
+ *
+ *     if (slash) draw_self();                                    // :1-4
+ *     if (playerstrike == 1) {                                   // :5-14
+ *         with (obj_heart) {
+ *             var _xx = irandom(2) - 1;
+ *             var _yy = irandom(2) - 1;
+ *             var _fade = remap_clamped(45, 55, 1, 0, other.timer);
+ *             draw_sprite(sprite_index, image_index, x + _xx, y + _yy);
+ *             draw_sprite_ext(spr_rk_slash_heartslice, other.cuty,
+ *                             x + _xx, y + _yy, 1, 1, 0, c_white, _fade);
+ *         }
+ *     }
+ *
+ * THE TWO `irandom` ARE ALREADY ON THE STREAM. quickslashBig.draw (the sim's
+ * draw slot, kaizo/attacks/quickslash.js:479) spends them — four u32 a
+ * striking frame — and parks the pair on `e.strikeJitter`, exactly as the
+ * splitslash's identical block does. This reads that pair and re-rolls
+ * nothing; the frame-seeded fallback below is for a state whose draw slot
+ * never ran, and is the same stand-in split.js uses.
+ *
+ * `remap_clamped(45, 55, 1, 0, timer)` reads the module's `timer` as-is (it
+ * is not monotonic — the manager decrements it during a strike), so the slice
+ * holds at full alpha until the strike's 45th frame and is gone by its 55th.
+ *
+ * Returns true: the event's own `draw_self()` is issued here, under the
+ * `slash` gate, so the vanilla tail must not blit a second unconditional copy.
+ */
+export function drawObjRoaringknightQuickslashBig(ctx, e, state, helpers) {
+  if (e.slash) helpers.drawSelf(e, state); // :1-4
+
+  if (e.playerstrike === 1 || e.playerstrike === true) { // :5
+    const heart = state.soul;
+    if (heart && heart.alive !== false) {
+      const { sprites } = helpers;
+      const frame = state.frame ?? 0;
+      const dx = e.strikeJitter
+        ? e.strikeJitter.xx
+        : irandomFrame(helpers.frandCanvas, frame, 0x9b1e + e.seq * 2 + 1, 2) - 1;
+      const dy = e.strikeJitter
+        ? e.strikeJitter.yy
+        : irandomFrame(helpers.frandCanvas, frame, 0x9b1e + e.seq * 2 + 2, 2) - 1;
+      const fade = remapClamped(45, 55, 1, 0, e.timer ?? 0);
+      // obj_heart's `sprite_index`. The sim's soul carries none (sim/soul.js
+      // never assigns one), so this is spr_dodgeheart — the same resolution
+      // the splitslash's copy of this block makes.
+      const hs = sprites.get(heart.sprite_index) ?? sprites.get('spr_dodgeheart');
+      // `draw_sprite(sprite_index, image_index, ...)` — no scales, no angle,
+      // no blend, alpha 1. THE SUB-IMAGE IS obj_heart's OWN `image_index`, not
+      // 0: the soul animates (the blue/red/purple mode frames), and the
+      // vanilla copy of this same block passes `heart.image_index`
+      // (render/draw/swords.js `drawSplitslashStrike`). A hardcoded 0 froze it
+      // on frame 0 for the whole strike. `?? 0` only for a soul that carries
+      // no index at all.
+      if (hs) drawSpriteExt(ctx, hs, heart.image_index ?? 0, heart.x + dx, heart.y + dy, 1, 1, 0, null, 1);
+      const slice = sprites.get('spr_rk_slash_heartslice');
+      // c_white multiplies to itself — passed as "no tint" to skip the bake.
+      //
+      // `other.cuty`, and the fallback is the object's OWN Create value:
+      // obj_roaringknight_quickslash_big Create_0:12 is `cuty = 8`. The 1 that
+      // stood here was inherited from split.js's copy of the block and is not
+      // this object's default — it picked the wrong slice of
+      // spr_rk_slash_heartslice on any state whose Create had not run.
+      if (slice) drawSpriteExt(ctx, slice, e.cuty ?? 8, heart.x + dx, heart.y + dy, 1, 1, 0, null, fade);
+    }
+  }
+  return true;
+}
