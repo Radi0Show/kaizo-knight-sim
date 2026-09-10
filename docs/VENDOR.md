@@ -5,11 +5,9 @@ tools/ are a snapshot of knight-sim; never hand-edit them here (see the
 script's header and CLAUDE.md).
 
 - source: D:\ShadowCrystal\knight-sim
-- commit: 2bbae7cc6244efc113f2d2e103d20df184bc2c7c
+- commit: dd52bf2c1c052a2c450b097cb82d0cb0c66c5d85
 - vendored: 2026-09-10
-- the source tree was DIRTY inside the mirrored directories; these uncommitted files were vendored as they stood:
-     M sim/tension.js
-     M tools/fullfight-trace.mjs
+- the mirrored directories were clean in the source tree
 
 ## Pending port-backs
 
