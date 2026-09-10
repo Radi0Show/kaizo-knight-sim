@@ -274,6 +274,25 @@ export function kaizoIdlesprite(e, k, { atStep = false } = {}) {
  *             depth = other.depth + 1; vspeed = -3; friction = 0.15; }   (:141-147)
  *     }
  *
+ * ORIGINAL BUG — THE BLOCK SPARKS ARE UNREACHABLE IN THE MOD, and this is
+ * the reason there is no obj_block_vfx anywhere in this repo. Vanilla
+ * v105 Step_0:62-91 spawns them straight out of the clock:
+ *
+ *     if (blockanim == 2) {
+ *         blocktimer++;
+ *         if (blocktimer == 1)                  { two obj_block_vfx, vspeed -8 / 8 }
+ *         if (blocktimer == 3 || blocktimer == 6) { one more, vspeed choose(-8, 8) }
+ *
+ * The kaizo dump wraps both spawns in a test that cannot pass —
+ * Step_0:149-184 is `if (blockanim == 2) { blocktimer++;
+ * if (blockanim == 1) { ...the spawns... } }` — so EnderCat8's Knight blocks
+ * with the pose, the bell, the whiteflash and the two block_ol ghosts, and
+ * without a single spark. Same family as `destroy_on_hit` and `splitbox`,
+ * and marked here rather than left to inference for two reasons: a later
+ * pass "restoring" the sparks would be a divergence, and `choose(-8, 8)` is
+ * an RNG DRAW — three of them per block — so restoring them would also
+ * desync the stream and move the byte gate.
+ *
  * and Step_0:184-190, when the clock runs out:
  *
  *     if (blocktimer == 15) { hurttimer = 0; blocktimer = 0; blockanim = 0;

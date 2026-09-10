@@ -31,6 +31,20 @@
 //                                                 950-963 CHECK; 964-978 HoldBreath;
 //                                                 980-1033 X-Slash; 1252-1291 N-Action
 //   gml_Object_obj_knight_enemy_Other_23.gml    : 1-9 the CHECK strings, both sides
+//
+// UNUSED CONTENT — `acting == 4`, Step_0:1039-1090. There is a FOURTH Kris
+// ACT in the mod's knight: "* Your SOUL shined its power on Susie!", which
+// poses an obj_animation of spr_soulshining at Kris's shoulder, flashes all
+// three heroes with scr_oflash and sets charspecial[1] = 5. It is not
+// translated because the selector cannot reach it, by the same reading
+// CLAUDE.md's "THE SELECTOR decides what is real" prescribes.
+//
+// scr_actselect sets `acting = arg1 + 1`, so `acting == 4` is Kris's ACT
+// INDEX 3. The knight declares index 0 (Check) and 1 (HoldBreath) in
+// scr_monstersetup's monstertype-104 block (1843-1881, whole block read —
+// no index-3 line in it) and index 2 (X-Slash) in his own Step_0:42-48,
+// under `if (k_sideb)`. Nothing anywhere in the dump gives him a
+// `canact[myself][3]`. Four is a row the ACT menu never draws.
 //   gml_Object_obj_knight_enemy_Alarm_4.gml     : `actcon += 1`
 //   gml_GlobalScript_scr_actselect.gml          : the slot -> acting/actingnoe map
 //   gml_GlobalScript_scr_monstersetup.gml       : 1843-1881 (via kaizo/party/noelle.js)
