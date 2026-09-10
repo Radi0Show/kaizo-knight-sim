@@ -7,7 +7,8 @@ script's header and CLAUDE.md).
 - source: D:\ShadowCrystal\knight-sim
 - commit: 9297c529ca050ea5f070b8d31a9daf5ce9f8ad9c
 - vendored: 2026-09-09
-- the mirrored directories were clean in the source tree
+- the source tree was DIRTY inside the mirrored directories; these uncommitted files were vendored as they stood:
+     M sim/masks.js
 
 ## Pending port-backs
 
