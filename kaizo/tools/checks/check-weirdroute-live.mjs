@@ -32,6 +32,7 @@ import { createState, stepFrame } from '../../../sim/index.js';
 import { scrDamageSingle } from '../../../sim/damage.js';
 import { buildKaizoScene } from '../../scenes/kaizo-fight.js';
 import { sceneHijacksTurn } from '../../party/scenes.js';
+import { kaizoIdlesprite } from '../../actors/kaizo-knight-actor.js';
 import { KAIZO_CHECK_PAGES } from '../../scenes/kaizo-vc-hooks.js';
 import {
   kaizoDamageHooks, scrDamageSingle as kaizoScrDamageSingle, scrRevive,
@@ -387,6 +388,60 @@ section('gap 13 — the knight\'s B-Side turn-end messages (Step_0:566-781)');
   ok(c.kaizo.launched.length >= 3, 'V-C control reached its turn ends');
   ok(!seenC.some((s) => /used up|Can't move your body|GLOOM/.test(s)),
     'V-C control: no B-Side message on the A-Side turn end');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+section('the NO-HIT RECOLOUR reaches the sprite the Draw reads (Step_0:694)');
+{
+  // The mod's Knight CHANGES APPEARANCE once you are provably running a
+  // flawless Weird Route: `idlesprite = spr_roaringknight_idle2` at the four
+  // turn ends of the no-hit branch (Step_0:694, 714, 727, 740). It is an
+  // obj_knight_enemy instance variable, and kaizoIdlesprite — the one reader,
+  // feeding both the ghost trail and the Draw port — looks at the entity.
+  const st = build('D');
+  const inp = fightInput();
+  const knightOf = (s2) => s2.entities.find(
+    (x) => x.alive && x.type?.name === 'obj_knight_enemy',
+  );
+  const kn = knightOf(st);
+  ok(!!kn, 'V-D has a live knight');
+  eq(kaizoIdlesprite(kn, st.knight), 'spr_roaringknight_idle',
+    'he opens on the ordinary idle (Create_0:5)');
+
+  // The branch needs the RoaringDelta row just finished and `progamer` still
+  // true — no hit landed. It is reached the way the fight reaches it: the
+  // knight held under VC_GATE_FRACTION so phase 4 opens and the finale's row
+  // becomes the one `kaizo_prevatk` names (kaizo-vc-hooks.js's gateTripped
+  // branch, which is where the mod's :528/:574 pair lands). A still soul in
+  // this harness eats bullets, so `progamer` is held rather than earned:
+  // the section tests the WIRING of the reward, not the earning of it.
+  let recoloured = false;
+  for (let f = 0; f < 8000 && !recoloured; f++) {
+    st.knight.hp = Math.min(st.knight.hp, 5000);
+    st.knight.progamer = true;
+    stepFrame(st, inp(st));
+    keepAlive(st, { revive: true });
+    const k = knightOf(st);
+    if (k && k.idlesprite === 'spr_roaringknight_idle2') recoloured = true;
+  }
+  ok(recoloured, 'a B-Side no-hit turn end put idle2 on the INSTANCE');
+  const after = knightOf(st);
+  eq(kaizoIdlesprite(after, st.knight), 'spr_roaringknight_idle2',
+    'and the reader the Draw port uses now returns it');
+  eq(st.knight.didfullnohit, 1, 'didfullnohit latched (Step_0:692)');
+
+  // V-C control: the whole block is inside `if (k_sideb)`.
+  const c = build('C');
+  const inpC = fightInput();
+  for (let f = 0; f < 4000; f++) {
+    c.knight.hp = Math.min(c.knight.hp, 5000);
+    c.knight.progamer = true;
+    stepFrame(c, inpC(c));
+    keepAlive(c, { revive: true });
+  }
+  const cKn = knightOf(c);
+  eq(cKn?.idlesprite ?? 'spr_roaringknight_idle', 'spr_roaringknight_idle',
+    'V-C never recolours — the branch is inside if (k_sideb)');
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

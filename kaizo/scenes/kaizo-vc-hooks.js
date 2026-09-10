@@ -12,7 +12,9 @@ import { krisMult } from '../../sim/knight.js';
 import {
   launchVCAttack, openVCArena, vcTurnLength, vcMoveheartDest,
 } from './kaizo-mod-launcher.js';
-import { kaizoKnightActor, kaizoBlockStepTail } from '../actors/kaizo-knight-actor.js';
+import {
+  kaizoKnightActor, kaizoBlockStepTail, applyKaizoIdleRecolor,
+} from '../actors/kaizo-knight-actor.js';
 import { isUp as rosterIsUp, rosterSize, statFor as rosterStatFor } from '../party/roster.js';
 import { applyKrisPartyMultiplier } from '../party/damage.js';
 import { downMessages } from '../party/freeze.js';
@@ -96,9 +98,12 @@ export const KAIZO_CHECK_PAGES = {
  * reproduced because the B-Side branch nests inside them and the non-
  * progamer B-Side turn gets the A-Side line.
  *
- * NOT DRAWN: `idlesprite = spr_roaringknight_idle2` is recorded on the
- * knight record for the actor to pick up (kaizo-knight-actor.js
- * applyKaizoIdleRecolor); the heroes-drawing lane owns whether it shows.
+ * THE RECOLOUR LANDS ON THE INSTANCE. `idlesprite` is an obj_knight_enemy
+ * instance variable and the reader is kaizoIdlesprite, which looks at the
+ * entity; these four sites used to write `kn.idlesprite` on the knight
+ * RECORD, a different object, so the reward was computed correctly four
+ * times over and shown never. applyKaizoIdleRecolor takes the state and
+ * finds the instance, which is the only object the GML could mean.
  */
 function sidebTurnEndMessages(state, { prevatk, phase, phase4turn }) {
   const kn = state.knight;
@@ -129,7 +134,7 @@ function sidebTurnEndMessages(state, { prevatk, phase, phase4turn }) {
       kn.didfullnohit = 1;
       kn.turnsafternohit = 0;
       kn.curhp = kn.hp;
-      kn.idlesprite = 'spr_roaringknight_idle2';
+      applyKaizoIdleRecolor(state);
     }
   } else if (kn.didfullnohit) {
     if (kn.progamer === true) {
@@ -139,17 +144,17 @@ function sidebTurnEndMessages(state, { prevatk, phase, phase4turn }) {
       if (t === 1) {
         if (fell) { msg = "\\ck* Come on now...&* That surely isn't your best hit."; kn.curhp = kn.hp; }
         else msg = '\\ck* Now what are you waiting for?';
-        kn.idlesprite = 'spr_roaringknight_idle2';
+        applyKaizoIdleRecolor(state);
       }
       if (t === 2) {
         if (fell) { msg = "\\ck* After all that, you're not putting your all into it...?"; kn.curhp = kn.hp; }
         else msg = '\\ck* The guts to play with such a feat^1.&* Intriguing...';
-        kn.idlesprite = 'spr_roaringknight_idle2';
+        applyKaizoIdleRecolor(state);
       }
       if (t === 3) {
         if (fell) { msg = '\\ck* Strange..^1.&* Very strange...'; kn.curhp = kn.hp; }
         else msg = '\\ck* If you insist on wasting your chance, so be it, I suppose.';
-        kn.idlesprite = 'spr_roaringknight_idle2';
+        applyKaizoIdleRecolor(state);
       }
       if (t >= 4) msg = '\\ck* ...';
     } else if (kn.curhp > kn.hp) {

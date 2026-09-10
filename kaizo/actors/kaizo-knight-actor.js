@@ -214,7 +214,8 @@ export const kaizoKnightActor = {
  *                     so both spellings are read here;
  *   Step_0:694/714/727/740 (kaizo only) spr_roaringknight_idle2, the B-Side
  *                     no-hit reward — applyKaizoIdleRecolor below writes
- *                     `e.idlesprite`; nothing wires it yet (see its note).
+ *                     `e.idlesprite`, called from kaizo-vc-hooks.js's
+ *                     sidebTurnEndMessages at the GML's four sites.
  * NOT the hurt strobe's ball frame: that is `spr_roaringknight_ball_transition`
  * written straight at its draw sites, never into idlesprite.
  *
@@ -392,8 +393,22 @@ export function kaizoBlockStepTail(state) {
  *
  * Exported as a function rather than applied in the step above because the
  * condition belongs to the no-hit tracking the scene owns, not to the actor:
- * wiring it here would put the reward on screen for every B-Side run.
+ * wiring it here would put the reward on screen for every B-Side run. It is
+ * called from kaizo/scenes/kaizo-vc-hooks.js sidebTurnEndMessages, at each of
+ * the four sites the GML writes it.
+ *
+ * IT TAKES THE STATE AND FINDS THE INSTANCE. `idlesprite` is an
+ * obj_knight_enemy instance variable, so the entity is where the reader looks
+ * (kaizoIdlesprite above, and through it the ghost rewrite and the Draw
+ * port). The message block wrote it on state.knight — the fight-logic record,
+ * which is a different object — so all four writes landed somewhere nothing
+ * reads and the reward never appeared. Resolved by giving the writer no
+ * choice about which object it means.
  */
-export function applyKaizoIdleRecolor(e) {
-  e.idlesprite = 'spr_roaringknight_idle2';
+export function applyKaizoIdleRecolor(state) {
+  const e = state?.type ? state : state?.entities?.find(
+    (x) => x.alive && x.type?.name === 'obj_knight_enemy',
+  );
+  if (e) e.idlesprite = 'spr_roaringknight_idle2';
+  return e ?? null;
 }

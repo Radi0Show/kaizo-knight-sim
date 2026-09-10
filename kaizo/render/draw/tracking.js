@@ -282,14 +282,19 @@ export function kaizoKnightDrawCalls(state, e) {
 
   // Draw_0:93-142 — NEW in the mod, `if (state == 10)`: aetimer++ and the same
   // every-4th-frame ghost of `sprite_index`/`image_index` with the colour
-  // ladder (:95-140, state), then `draw_self();` (:141) — the Knight's own
-  // sprite, whatever it is, at his own scale/angle/blend/alpha. State 10 is
-  // the mod's scene pose (Step_0:1419 `state = 10` in the no-hit reward, the
-  // `k_scenefloat` float); the sim models those scenes on a separate record
-  // (kaizo/party/scenes.js ensureScenes(state).knight.knightState, .spriteIndex)
-  // that the knight entity does not mirror, so this branch is dormant until
-  // the scenes owner writes state.knight.animState = 10 and e.sprite_index —
-  // it is translated against the entity because that is what draw_self reads.
+  // ladder (:95-140, carried by kaizo/actors/kaizo-knight-actor.js step,
+  // beside the idle trail it shares `aetimer` with), then `draw_self();`
+  // (:141) — the Knight's own sprite, whatever it is, at his own
+  // scale/angle/blend/alpha. State 10 is the mod's scene pose (Step_0:1419
+  // in the no-hit reward, :1938 in the TP slash, the `k_scenefloat` float).
+  //
+  // THIS BRANCH IS LIVE as of 2026-09-10. It used to be dormant, because
+  // kaizo/party/scenes.js posed a shadow record of its own that the knight
+  // entity did not mirror; attachSceneKnight now binds that record to the
+  // instance and to state.knight, so `animState` really reaches 10 and
+  // `e.sprite_index` really is spr_roaringknight_attack_ol while he swings.
+  // It was always translated against the entity because that is what
+  // draw_self reads, which is why it needed no change when the bind landed.
   if (k.animState === 10) {
     out.push({
       tag: 'self10', sprite: e.sprite_index ?? idle, index: e.image_index ?? 0,
