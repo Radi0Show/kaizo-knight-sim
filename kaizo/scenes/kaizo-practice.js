@@ -64,6 +64,9 @@ import { spawnImpact, stepAttackVfx } from '../../sim/attackvfx.js';
 import { stepRudeBuster, rudeBusterBusy } from '../../sim/rudebuster.js';
 import { castSpell, resolveActPages } from '../../sim/spells.js';
 import { needsSpellphase, createSpellphase, stepSpellphase } from '../../sim/spellphase.js';
+import {
+  stepScenes, scrMnendturnScenes, sceneHijacksTurn, attachSceneKnight,
+} from '../party/scenes.js';
 import { rngNext } from '../../sim/rng.js';
 import {
   fightDamage, damageKnight, advanceTurn, stepKnightAnim, tickChargeup, phase4Reached,
@@ -218,6 +221,19 @@ const moveheart = {
 function fireTurnEndAlarm(e, state) {
   e.endAlarm = 0;
   e.clockOn = false;
+  // THE B-SIDE SCENES ARM HERE, because this IS scr_mnendturn: the mod's
+  // only addition to that script -- its whole diff from vanilla -- is the
+  // block that arms k_tpscene and k_nhscene, and it runs at a turn's end:
+  //
+  //     if (k_tpscene == 0 && kaizo_prevatk == "atk_Frenzy1" && !haveusedroaring)
+  //     if (k_nhscene == 0 && progamer && turnsafternohit == 7)
+  //         ... k_?scene = 1; special_con = 1;
+  //             myfight = 99; mnfight = 99; charturn = -1;
+  //
+  // both inside "with (obj_knight_enemy) if (k_sideb && !practicemode)".
+  // scrMnendturnScenes carries those tests; it is a no-op off the B-Side,
+  // and the A-Side byte gate never reaches this call.
+  if (state.kaizo?.sideb) scrMnendturnScenes(state);
   // The board has finished closing by now (growcon 3 over obj_growtangle's
   // own maxtimer, which is 15 — the same fifteen). Dropping `arenaOpen` here
   // rather than on the sweep frame is what lets it be drawn while it shrinks.
@@ -449,6 +465,23 @@ const director = {
     (e.hooks.stepHeroes ?? stepHeroes)(state);
     // obj_knight_enemy's reaction timers — hurt strobe, shake, block vfx.
     stepKnightAnim(state);
+    // THE SCENES STEP WITH THE KNIGHT, which is whose Step_0 they live in
+    // (obj_knight_enemy Step_0:1930-2049 is k_tpscene; its neighbours are
+    // the other two). B-Side only: the tp block sits inside
+    // "if (k_sideb || k_hpscene > 0)" and stepScenes gates the tp arm on
+    // that flag, but calling the whole driver only on the B-Side leaves
+    // V-C's scene state untouched rather than merely unchanged -- the
+    // A-Side byte gate never reaches this line.
+    if (state.kaizo?.sideb) {
+      // THE SCENES POSE THE REAL KNIGHT. Every write in kaizo/party/scenes.js
+      // is a write to obj_knight_enemy's own variables, and binding hands
+      // them to the instance this director already steps -- so the TP slash
+      // is a knight that leaps, swings spr_roaringknight_attack_ol and comes
+      // home, not a state machine ticking beside a knight that never moved.
+      // Idempotent; the bind itself is one find on the first frame.
+      attachSceneKnight(state);
+      stepScenes(state);
+    }
     // A version's per-frame knight corrections (V-C: the 0.18 opening
     // damagereduction, replacing the vanilla 0.2 stepKnightAnim just set).
     e.hooks.postAnim?.(state);
@@ -459,6 +492,15 @@ const director = {
     // rises with the arena and holds through the sweep until alarm[2] fires,
     // which is the span the controller decrements turntimer over.
     e.hooks.knightEndStep?.(state, { clockOn: e.clockOn });
+    // THE SCENE OWNS THE TURN WHILE IT RUNS. Arming one sets myfight = 99,
+    // mnfight = 99 and charturn = -1 (scr_mnendturn's block), and those three
+    // take obj_battlecontroller out of every branch that opens a menu, runs a
+    // bullet phase or ends a turn -- 99 matches none of its tests. The
+    // KNIGHT's own Step keeps running, which is the point: the scenes live
+    // inside it, and so do his poses and his state-10 trail. So this gate
+    // sits AFTER stepKnightAnim, stepScenes and his end step, and before the
+    // director's turn machinery below.
+    if (sceneHijacksTurn(state)) return;
     // obj_dmgwriter's Draw is now stepped by stepFrame itself, AFTER the
     // endStep phase — the writers' throw rolls belong to the frame's END
     // slot, after every end-step consumer of the same frame. See the header

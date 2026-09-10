@@ -81,6 +81,59 @@ export const kaizoKnightActor = {
       }
     }
 
+    // ── THE STATE-10 TRAIL, WHICH IS THE MOD'S ALONE ─────────────────────
+    //
+    // Draw_0:93-141, and vanilla's Draw has no `state == 10` block at all --
+    // vanilla's knight is only ever state 0 or 3 (two writes in the whole
+    // dump, both `state = 3`), so this is a branch EnderCat8 added for the
+    // three B-Side cutscenes:
+    //
+    //     if (state == 10) {
+    //         aetimer++;
+    //         if ((aetimer % 4) == 0) {
+    //             afterimage = instance_create_depth(x, y, depth + 1, obj_afterimage);
+    //             afterimage.sprite_index = sprite_index;
+    //             afterimage.image_index  = image_index;
+    //             afterimage.image_alpha  = 0.6;
+    //             afterimage.fadeSpeed    = 0.02;
+    //             afterimage.hspeed       = 2;
+    //             afterimage.image_speed  = 0;
+    //             afterimage.image_xscale = image_xscale;
+    //             afterimage.image_yscale = image_yscale;
+    //             if (rgbafterimages == 1) { ...the seven-colour cycle... }
+    //         }
+    //         draw_self();
+    //     }
+    //
+    // Three things separate it from the idle trail sim/actors.js carries:
+    // the ghost wears `sprite_index` and `image_index` -- the POSE, so the
+    // knight's leap and his swing smear rather than leaving idle copies of a
+    // knight who is not there; it carries his scales; and it has NO
+    // `image_alpha != 0 && chargeupcon == 0` guard, so it runs whatever else
+    // is happening. It shares `aetimer` with the idle trail, which the base
+    // step leaves alone outside state 0/3 -- so the cadence carries across
+    // the boundary in both directions, exactly as the GML's one counter does.
+    //
+    // Spawned here, between the idle-ghost rewrite above and the rainbow tint
+    // below, because the mod's own cycle is inside this same block: the loop
+    // that follows finds it and gives it the next colour, which is the
+    // ordering the GML has.
+    if ((state.knight?.animState ?? 0) === 10 && e.visible !== false) {
+      e.aetimer += 1;
+      if ((e.aetimer % 4) === 0) {
+        const a = spawn(state, afterimage, { x: e.x, y: e.y });
+        a.sprite_index = e.sprite_index;
+        a.image_index = e.image_index;
+        a.image_alpha = 0.6;
+        a.fadeSpeed = 0.02;
+        a.hspeed = 2;
+        a.image_speed = 0;
+        a.image_xscale = e.image_xscale;
+        a.image_yscale = e.image_yscale;
+        a.depth = e.depth + 1;
+      }
+    }
+
     if (!e.rgbafterimages) return;
     for (const x of state.entities) {
       if (!x.alive || x.type?.name !== 'obj_afterimage' || before.has(x)) continue;

@@ -204,6 +204,8 @@ import { spawn, destroy } from '../../sim/entity.js';
 import { gmlRandom, gmlRandomRange, gmlChoose } from '../../sim/rng.js';
 import { lerp, lengthdirX, lengthdirY, pointDirection, gmlRound } from '../../sim/gml.js';
 import { cue } from '../../sim/audio.js';
+import { scrLerpvar } from '../../sim/lerpvar.js';
+import { scrShakescreen } from '../../sim/shake.js';
 import { KNIGHT } from '../../sim/actors.js';
 import { stepSnowgraveFreeze, ensureFreezeState } from './freeze.js';
 import { kaizoTensionClampActive, kaizoTpscene } from './tensionbar.js';
@@ -366,10 +368,33 @@ function msg(state, text) {
   ensureScenes(state).msgs.push({ frame: state.frame, text });
 }
 
-/** `scr_lerpvar(name, from, to, frames, ...)`. Recorded, not animated. */
-function noteLerp(state, name, from, to, frames) {
-  ensureScenes(state).lerps.push({ frame: state.frame, name, from, to, frames });
+/**
+ * `scr_lerpvar(name, from, to, frames, easetype, easeinout)`.
+ *
+ * Always recorded — check-scenes.mjs reads the log, and a lerp is the only
+ * evidence of a move that has no other side effect. ALSO RUN, as a real
+ * obj_lerpvar on the real knight, when the call site is one the mod makes in
+ * obj_knight_enemy's own scope AND attachSceneKnight has bound an instance:
+ * pass `knight: true`. The sites inside a `with (flake)` or `with (star)`
+ * do not pass it, because `id` there is not the knight.
+ *
+ * The ease arguments are the GML's: `_l` is 2 (Step_0:1772) and the mode is
+ * whichever string that call passes; omitting both is scr_lerpvar's
+ * `argument_count < 6` arm, which leaves obj_lerpvar's Create defaults
+ * (easetype 0 — linear).
+ */
+function noteLerp(state, name, from, to, frames, opts = {}) {
+  const { easetype, easeinout, knight = false } = opts;
+  const sc = ensureScenes(state);
+  sc.lerps.push({ frame: state.frame, name, from, to, frames, easetype, easeinout });
+  if (knight && sc.live?.alive) {
+    scrLerpvar(state, spawn, sc.live, name, from, to, frames, easetype, easeinout);
+  }
 }
+
+/** The knight-scope lerp, with `_l` already filled in (Step_0:1772). */
+const L = 2;
+const kl = (easeinout) => ({ easetype: L, easeinout, knight: true });
 
 function logTransition(state, scene, from, to) {
   ensureScenes(state).log.push({ frame: state.frame, scene, from, to });
@@ -402,6 +427,94 @@ function knightAnchor(state) {
     };
   }
   return { x: sc.knight.x, y: sc.knight.y, spriteHeight: sc.knight.spriteHeight };
+}
+
+/**
+ * BIND THE SCENE TO THE REAL KNIGHT — the difference between a cutscene that
+ * is bookkept and one that is PLAYED.
+ *
+ * Every pose in this file is a write to obj_knight_enemy's own variables:
+ * `state = 10`, `sprite_index`, `image_index`, `image_speed`, `x`, `y`,
+ * `depth`, `remdepth`, `siner2`, `k_scenefloat`, `k_yoff`
+ * (Step_0:1930-2049 for k_tpscene; 1408-1541 and 1547-1770 for the other
+ * two). The module was written before it had an actor to write them to, so
+ * it kept a shadow `sc.knight` and posed that — with the consequence that
+ * the Knight went through the whole TP-slash without moving, changing sprite
+ * or leaving his bob.
+ *
+ * Binding hands those field names to the live instance and to state.knight,
+ * which is where this engine keeps obj_knight_enemy's `state`
+ * (sim/knight.js calls it `animState`; sim/actors.js gates the idle pose,
+ * the bob and the afterimage trail on `animState === 0 || === 3`, exactly as
+ * the GML gates them on `state == 0 || state == 3`). So `state = 10` stops
+ * the vanilla actor of its own accord and the scene's float takes the y —
+ * the two compose without either one knowing about the other.
+ *
+ * `k_scenefloat` / `k_yoff` / `remdepth` are instance variables of
+ * obj_knight_enemy in the mod (Create_0:115-136), so they are stored on the
+ * instance here too rather than in this module's bookkeeping.
+ *
+ * Idempotent, and re-binds if the instance is ever replaced. Unbound — the
+ * standalone drives in check-scenes.mjs, which have no entity list — every
+ * pose still lands on the shadow and nothing below changes behaviour.
+ */
+export function attachSceneKnight(state) {
+  const sc = ensureScenes(state);
+  const ent = state.entities?.find(
+    (e) => e.alive && e.type?.name === 'obj_knight_enemy',
+  );
+  if (!ent) { sc.live = null; return sc.knight; }
+  if (sc.live === ent) return sc.knight;
+
+  const shadow = sc.knight;
+  const kb = (state.knight ??= {});
+  // The knight's own scene variables, seeded from the shadow so a bind that
+  // happens mid-scene inherits the pose rather than resetting it.
+  if (ent.k_scenefloat === undefined) ent.k_scenefloat = shadow.sceneFloat ?? 0;
+  if (ent.k_yoff === undefined) ent.k_yoff = shadow.yoff ?? 0;
+  if (ent.remdepth === undefined) ent.remdepth = ent.depth;
+
+  const bind = (obj, key) => ({
+    get: () => obj[key],
+    set: (v) => { obj[key] = v; },
+    enumerable: true,
+    configurable: true,
+  });
+  const live = { spriteHeight: shadow.spriteHeight };
+  Object.defineProperties(live, {
+    x: bind(ent, 'x'),
+    y: bind(ent, 'y'),
+    xstart: bind(ent, 'xstart'),
+    ystart: bind(ent, 'ystart'),
+    siner2: bind(ent, 'siner2'),
+    depth: bind(ent, 'depth'),
+    remdepth: bind(ent, 'remdepth'),
+    spriteIndex: bind(ent, 'sprite_index'),
+    imageIndex: bind(ent, 'image_index'),
+    imageSpeed: bind(ent, 'image_speed'),
+    sceneFloat: bind(ent, 'k_scenefloat'),
+    yoff: bind(ent, 'k_yoff'),
+    // `state`, the mod's name; sim/knight.js's `animState`, this engine's.
+    knightState: bind(kb, 'animState'),
+  });
+  sc.knight = live;
+  sc.live = ent;
+  return live;
+}
+
+/**
+ * The mod's `with (obj_afterimage) if (hspeed == 2) depth = other.depth + 1`
+ * — Step_0:1967-1973 and again at 2007-2013. The knight's ghost trail drifts
+ * right at hspeed 2 (sim/actors.js's spawn block), and both times the scene
+ * moves his depth it drags the trail with it so the ghosts do not suddenly
+ * sort in front of the knight they came from.
+ */
+function reparentAfterimages(state, depth) {
+  for (const e of state.entities ?? []) {
+    if (e.alive && e.type?.name === 'obj_afterimage' && e.hspeed === 2) {
+      e.depth = depth + 1;
+    }
+  }
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -618,8 +731,8 @@ export function stepTpscene(state) {
     kt.imageSpeed = 0;
     kt.imageIndex = 0;
     scrDelayVar(state, 'tp', 2, 8);
-    noteLerp(state, 'x', kt.x, kt.x + 32, 8);
-    noteLerp(state, 'y', kt.y, kt.y - 40, 8);
+    noteLerp(state, 'x', kt.x, kt.x + 32, 8, kl('inout'));
+    noteLerp(state, 'y', kt.y, kt.y - 40, 8, kl('inout'));
   } else if (s === 2) {
     setScene(state, 'tp', 2.1);
     kt.imageIndex = 1;
@@ -627,26 +740,30 @@ export function stepTpscene(state) {
     // camerax() + 320 / cameray() + 24 — the leap to the top of the screen.
     const vx = state.view?.x ?? 0;
     const vy = state.view?.y ?? 0;
-    noteLerp(state, 'x', kt.x, vx + 320, 8);
-    noteLerp(state, 'y', kt.y, vy + 24, 8);
+    noteLerp(state, 'x', kt.x, vx + 320, 8, kl('in'));
+    noteLerp(state, 'y', kt.y, vy + 24, 8, kl('in'));
   } else if (s === 3) {
     setScene(state, 'tp', 3.1);
     kt.imageIndex = 2;
     scrDelayVar(state, 'tp', 4, 7);
     const vx = state.view?.x ?? 0;
     const vy = state.view?.y ?? 0;
-    noteLerp(state, 'x', kt.x, vx + 48, 7);
-    noteLerp(state, 'y', kt.y, vy + 64, 7);
+    noteLerp(state, 'x', kt.x, vx + 48, 7, kl('out'));
+    noteLerp(state, 'y', kt.y, vy + 64, 7, kl('out'));
   } else if (s === 4) {
-    // remdepth = depth; depth = obj_tensionbar.depth - 1; + the afterimage
-    // depth juggle. Pure draw order; recorded so it is not silently lost.
+    // remdepth = depth; depth = obj_tensionbar.depth - 1; then the
+    // afterimage depth juggle (Step_0:1967-1973). He goes IN FRONT of the TP
+    // bar for the cut and the trail follows him there.
     kt.remdepth = kt.depth;
     kt.depth = (state.kaizo.tensionbarDepth ?? 0) - 1;
+    reparentAfterimages(state, kt.depth);
     setScene(state, 'tp', 4.1);
     scrDelayVar(state, 'tp', 5, 1);
     cue(state, 'snd_knight_cut');
-    noteLerp(state, 'image_index', 3, 5, 3);
-    noteLerp(state, 'x', kt.x, kt.x - 64, 8);
+    // The SWING: three frames of spr_roaringknight_attack_ol, 3 -> 5. No
+    // easetype (scr_lerpvar's short arm), so it is linear.
+    noteLerp(state, 'image_index', 3, 5, 3, { knight: true });
+    noteLerp(state, 'x', kt.x, kt.x - 64, 8, kl('out'));
   } else if (s === 5) {
     // ── THE CUT. This assignment is what arms tensionbar.js's clamp. ──────
     setScene(state, 'tp', 10);
@@ -669,15 +786,23 @@ export function stepTpscene(state) {
       imageAngle, hspeed, vspeed, gravity: 0.25,
       spawnedFrame: state.frame,
     };
-    // instance_create(x, y, obj_shake); shakex = 8; shakespeed = 1.
+    // `inst = instance_create(x, y, obj_shake); inst.shakex = 8;
+    //  inst.shakespeed = 1;` — Step_0:1999-2004. UNGUARDED, unlike
+    // scr_damage's `if (!i_ex(obj_shake))`, and the two writes land after
+    // the Create so they override obj_shake's own 4/1 (sim/shake.js).
     sc.shake = { shakex: 8, shakespeed: 1, frame: state.frame };
+    scrShakescreen(state, { shakex: 8, shakespeed: 1 });
   } else if (s === 11) {
     kt.depth = kt.remdepth;
+    reparentAfterimages(state, kt.depth);
+    // `siner2 = 0` FIRST, and the y lerp below reads it — so the target is
+    // `ystart + cos(0) * 8` = ystart + 8, the top of the bob, not wherever
+    // the bob happened to be. Step_0:2014-2021, in that order.
     kt.siner2 = 0;
     setScene(state, 'tp', 11.1);
     scrDelayVar(state, 'tp', 11.2, 12);
-    noteLerp(state, 'x', kt.x, kt.xstart, 25);
-    noteLerp(state, 'y', kt.y, kt.ystart + Math.cos(kt.siner2 / 8) * 8, 25);
+    noteLerp(state, 'x', kt.x, kt.xstart, 25, kl('inout'));
+    noteLerp(state, 'y', kt.y, kt.ystart + Math.cos(kt.siner2 / 8) * 8, 25, kl('inout'));
   } else if (s === 11.2) {
     kt.spriteIndex = 'spr_roaringknight_idle';
     setScene(state, 'tp', 11.1);
@@ -778,7 +903,7 @@ export function stepNhscene(state) {
       kt.spriteIndex = 'spr_roaringknight_point_ol';
       kt.imageIndex = 0;
       kt.imageSpeed = 0;
-      noteLerp(state, 'image_index', 0, 4, 3);
+      noteLerp(state, 'image_index', 0, 4, 3, { knight: true });  // :1435
       setScene(state, 'nh', 3.1);
       scrDelayVar(state, 'nh', 4, 20);
     }
@@ -1380,14 +1505,15 @@ export function stepSgscene(state) {
     kt.spriteIndex = 'spr_roaringknight_point_ol';
     kt.imageIndex = 0;
     kt.imageSpeed = 0;
-    noteLerp(state, 'image_index', 0, 3, 3);
+    noteLerp(state, 'image_index', 0, 3, 3, { knight: true });    // :1579
   } else if (s === 3.1) {
     setScene(state, 'sg', 3);
     scrDelayVar(state, 'sg', 4, 75);
     // scr_lerpvar("k_sgpit", 0.7, 1.1, 75) — the rising whine. Its VALUE
     // feeds the wing pitch above, so unlike the other lerps it is stepped.
     sc.sg.pitLerp = { from: 0.7, to: 1.1, frames: 75, t: 0 };
-    noteLerp(state, 'k_sgpit', 0.7, 1.1, 75);
+    // k_sgpit is the knight's own variable, so the tween writes it there.
+    noteLerp(state, 'k_sgpit', 0.7, 1.1, 75, { knight: true });   // :1585
   } else if (s === 3) {
     // ── THE GATHER (:1587-1622) ─────────────────────────────────────────
     const snowX = 28;
@@ -1434,7 +1560,7 @@ export function stepSgscene(state) {
     const snowY = 48;
     kt.spriteIndex = 'spr_roaringknight_attack_ol';
     kt.imageIndex = 1;
-    noteLerp(state, 'image_index', 1, 2, 4);
+    noteLerp(state, 'image_index', 1, 2, 4, { knight: true });    // :1631
     // `with (obj_spell_snowgrave) timer = 89;` — cuts the spawner off (the
     // window closes at 75 anyway) and pulls its self-destruct 31 frames out.
     for (const e of state.entities ?? []) {
@@ -1473,7 +1599,7 @@ export function stepSgscene(state) {
     // ── THE THROW (:1662-1686) ──────────────────────────────────────────
     cue(state, 'snd_knight_cut');
     setScene(state, 'sg', 5.1);
-    noteLerp(state, 'image_index', 3, 5, 3);
+    noteLerp(state, 'image_index', 3, 5, 3, { knight: true });    // :1666
     const a = writerAnchor(state, sc.sg.target);
     const tarX = a.x + 16;
     const tarY = a.y;

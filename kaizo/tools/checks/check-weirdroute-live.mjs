@@ -31,6 +31,7 @@
 import { createState, stepFrame } from '../../../sim/index.js';
 import { scrDamageSingle } from '../../../sim/damage.js';
 import { buildKaizoScene } from '../../scenes/kaizo-fight.js';
+import { sceneHijacksTurn } from '../../party/scenes.js';
 import { KAIZO_CHECK_PAGES } from '../../scenes/kaizo-vc-hooks.js';
 import {
   kaizoDamageHooks, scrDamageSingle as kaizoScrDamageSingle, scrRevive,
@@ -402,6 +403,129 @@ section('determinism — V-D with the party layer live');
   const a = run(777);
   eq(a, run(777), 'same seed, byte-identical incl. HP and gloom');
   ok(a !== run(778), 'different seed, different run');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+section('the DIRECTOR arms and runs the scenes (the wiring, not the module)');
+{
+  // check-scenes.mjs drives kaizo/party/scenes.js by hand and proves every
+  // branch of it. What it cannot prove is that anything in a real fight ever
+  // CALLS that module — and until 2026-09-10 nothing did: the scenes were
+  // translated, checked, and unreachable. This section holds the wiring
+  // itself, which is the difference between "the machine works" and "the
+  // machine runs".
+  //
+  // The arm is scr_mnendturn's, inside `with (obj_knight_enemy) if (k_sideb
+  // && !practicemode)`:  k_tpscene == 0 && kaizo_prevatk == "atk_Frenzy1"
+  // && !haveusedroaring.  The director calls it from fireTurnEndAlarm, which
+  // IS scr_mnendturn's site (Alarm_2).
+  const st = build('D');
+  const e = director(st);
+  ok(!!e, 'V-D built a director');
+  eq(st.kaizo.sideb, true, 'and it is the B-Side, which is what gates the scenes');
+
+  // Run to the first turn end with the arm's precondition in place. The
+  // recorded fight reaches atk_Frenzy1 on its own; here the label is set
+  // directly so the section tests the WIRING rather than the schedule.
+  const inp = fightInput();
+  const knightOf = (st2) => st2.entities.find(
+    (x) => x.alive && x.type?.name === 'obj_knight_enemy',
+  );
+  const kn0 = knightOf(st);
+  ok(!!kn0, 'the fight has a live obj_knight_enemy to pose');
+  const homeX = kn0?.xstart;
+  let armed = false;
+  let hijackedFrames = 0;
+  let sawState10 = false;
+  let sawTpSprite = false;
+  let travel = 0;
+  let swingIndex = 0;
+  let poseGhosts = 0;
+  let sawShake = false;
+  const ghostsSeen = new Set();
+  // KEEP THE PARTY UP, as every other live section does: a still soul eats
+  // every bullet and a wiped party never reaches a turn END, which is the
+  // one moment the arm can fire.
+  for (let f = 0; f < 6000 && !armed; f++) {
+    st.kaizo.prevatk = 'atk_Frenzy1';
+    stepFrame(st, inp(st));
+    keepAlive(st, { revive: true });
+    if ((st.kaizo.tpscene ?? 0) > 0) armed = true;
+  }
+  ok(armed, 'the director armed k_tpscene at a turn end (scr_mnendturn:152-158)');
+  if (armed) {
+    const ladder = [];
+    for (let f = 0; f < 600; f++) {
+      const before = st.kaizo.tpscene;
+      stepFrame(st, inp(st));
+      keepAlive(st, { revive: true });
+      if (st.kaizo.tpscene !== before) ladder.push(st.kaizo.tpscene);
+      if (sceneHijacksTurn(st)) hijackedFrames += 1;
+      if (st.knight?.animState === 10) sawState10 = true;
+      // THE POSE IS ON THE REAL INSTANCE, which is the whole point of the
+      // bind: every one of these reads obj_knight_enemy, not the module's
+      // own bookkeeping.
+      const kn = knightOf(st);
+      if (kn) {
+        travel = Math.max(travel, Math.abs(kn.x - homeX));
+        if (kn.sprite_index === 'spr_roaringknight_attack_ol') {
+          sawTpSprite = true;
+          swingIndex = Math.max(swingIndex, kn.image_index);
+        }
+      }
+      // The state-10 trail (Draw_0:93-141). fadeSpeed 0.02 is its signature;
+      // the idle trail's is 0.04.
+      for (const g of st.entities) {
+        if (g.alive && g.type?.name === 'obj_afterimage'
+            && g.fadeSpeed === 0.02 && !ghostsSeen.has(g)) {
+          ghostsSeen.add(g);
+          if (g.sprite_index === 'spr_roaringknight_attack_ol') poseGhosts += 1;
+        }
+      }
+      if (st.entities.some((x) => x.alive && x.type?.name === 'obj_shake')) {
+        sawShake = true;
+      }
+      if ((st.kaizo.tpscene ?? 0) === 0) break;
+    }
+    ok(ladder.length > 1, `and it ADVANCED through its state ladder (${ladder.slice(0, 6).join(' -> ')})`);
+    ok(hijackedFrames > 0, 'the turn was HIJACKED while it ran (myfight/mnfight 99, charturn -1)');
+    ok(sawState10, 'the knight went to state 10 (Step_0:1938)');
+    ok(sawTpSprite,
+      'and wore spr_roaringknight_attack_ol (Step_0:1941) on the INSTANCE');
+    // He leaps to camerax() + 320, then camerax() + 48, then 64 further left:
+    // from a home of 425 that is most of the screen. Under a hundred pixels
+    // would mean the tweens are being recorded and not run.
+    ok(travel > 300,
+      `and CROSSED THE SCREEN to cut the bar (${Math.round(travel)}px from xstart)`);
+    // scr_lerpvar("image_index", 3, 5, 3) — the swing itself (Step_0:1978).
+    ok(swingIndex >= 5,
+      `the SWING played, image_index reaching ${swingIndex} of 5 (Step_0:1978)`);
+    // Draw_0:93-141, the state-10 trail: the ghosts wear his POSE, which is
+    // what makes the leap smear rather than leaving idle copies behind.
+    ok(poseGhosts > 0,
+      `and left ${poseGhosts} pose afterimages behind him (Draw_0:96-104)`);
+    ok(sawShake, 'the cut shook the screen (obj_shake, Step_0:1999-2004)');
+    // scr_lerpvar("x", x, xstart, 25, _l, "inout") — Step_0:2020.
+    const back = knightOf(st);
+    ok(back && Math.abs(back.x - homeX) < 1,
+      'and he came home to xstart when it ended (Step_0:2020)');
+    eq(st.knight.animState, 0, 'with his state handed back to 0 (Step_0:2046)');
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+section('the A-SIDE never reaches the scene driver');
+{
+  // The whole wiring is gated `if (state.kaizo?.sideb)`, and the A-Side byte
+  // gate is what that gate protects: V-C must not so much as initialise the
+  // scene state.
+  const st = build('C');
+  const inp = fightInput();
+  for (let i = 0; i < 1200; i++) stepFrame(st, inp(st));
+  eq(st.kaizo.sideb, false, 'V-C is the A-Side');
+  ok(!(st.kaizo.tpscene > 0) && !(st.kaizo.nhscene > 0) && !(st.kaizo.sgscene > 0),
+    'no scene armed on V-C after 1,200 frames');
+  ok(!sceneHijacksTurn(st), 'and nothing hijacked its turn');
 }
 
 console.log(`\ncheck-weirdroute-live: ${checks - failures}/${checks} assertions passed`);
