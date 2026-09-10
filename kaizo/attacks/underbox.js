@@ -398,6 +398,33 @@ export const weirdCircle = {
 export const weirdBottomManager = {
   name: 'obj_knight_weird_bottom_manager',
 
+  /**
+   * IT STEPS BEFORE THE SOUL, and the mask stamp below is why that matters.
+   *
+   * This manager's Step opens by shrinking the soul's hurtbox
+   * (`with (obj_heart) mask_index = spr_dodgeheart_smaller_2px_mask`,
+   * Step_0:9-12), and obj_heart's own Step then moves and wall-resolves with
+   * whichever mask it is holding. GameMaker runs Steps in OBJECT INDEX order
+   * and this manager is 1173 against obj_heart's 1462, so in the game the
+   * shrink always lands before the move — on the manager's FIRST step.
+   *
+   * This lane steps OLDEST FIRST (kaizo-fight.js declines
+   * `state.stepNewestFirst`, with its receipts), so a manager created this
+   * turn stepped AFTER the soul and the stamp arrived a frame late. MEASURED
+   * on _rev1: the manager is born at oracle f10658, the game's soul takes a
+   * full 4 px to 374 on f10659 — only the smaller mask allows that, its wall
+   * rest being 376 against the 20x20 rect's 372 — and this sim's soul stopped
+   * at 372 that frame and reached 376 on the next. Two pixels, one frame, and
+   * both sides agree again immediately after.
+   *
+   * -1 is the same knob obj_sword_vortex (sim/entity.js's phaseList note) and
+   * the cut box carry for measured handoffs of exactly this kind: the flag
+   * cannot go on globally until every oldest-first fit in this lane is
+   * undone with the GML in hand, so the one ordering the recording pins is
+   * emulated at its site.
+   */
+  stepOrder: -1,
+
   create(e, state) {
     scrBulletInit(e);
     // scr_darksize()
