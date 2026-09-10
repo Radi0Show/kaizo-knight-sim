@@ -430,6 +430,20 @@ section('the NO-HIT RECOLOUR reaches the sprite the Draw reads (Step_0:694)');
     'and the reader the Draw port uses now returns it');
   eq(st.knight.didfullnohit, 1, 'didfullnohit latched (Step_0:692)');
 
+  // AND IT COMES OFF AT THE NEXT TURN'S START — Step_0:494, in the mod's
+  // mnfight-1.5 block, outside the k_sideb branch. He wears the recolour for
+  // the length of the taunt, which is what makes it a remark rather than a
+  // costume change.
+  let reset = false;
+  for (let f = 0; f < 3000 && !reset; f++) {
+    st.knight.hp = Math.min(st.knight.hp, 5000);
+    st.knight.progamer = true;
+    stepFrame(st, inp(st));
+    keepAlive(st, { revive: true });
+    if (knightOf(st)?.idlesprite === 'spr_roaringknight_idle') reset = true;
+  }
+  ok(reset, 'and the next turn start put the ordinary idle back (Step_0:494)');
+
   // V-C control: the whole block is inside `if (k_sideb)`.
   const c = build('C');
   const inpC = fightInput();

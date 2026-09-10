@@ -241,7 +241,24 @@ export function vcHooks({ sideb = false, roster = null } = {}) {
         return n === 1 ? KAIZO_CHECK_PAGES.B.first : KAIZO_CHECK_PAGES.B.again;
       },
     } : {}),
-    openArena: (state, row) => openVCArena(state, row, { sideb }),
+    openArena: (state, row) => {
+      // Step_0:494 — `idlesprite = spr_roaringknight_idle;`, inside the
+      // mod's `if (global.mnfight == 1.5 && end_cutscene_version == 0)` block
+      // and OUTSIDE its k_sideb branch, so it runs on both versions and on
+      // every turn including the charge-up (which opens no board — hence the
+      // reset sits here, above openVCArena's own ac -1 return).
+      //
+      // IT IS THE OTHER HALF OF THE NO-HIT RECOLOUR. sidebTurnEndMessages
+      // puts spr_roaringknight_idle2 on him at a turn END; this puts the
+      // ordinary idle back at the next turn's START. So the reward is worn
+      // for the length of the taunt and no longer, which is what makes it
+      // read as a remark rather than a costume change.
+      const kn = state.entities.find(
+        (x) => x.alive && x.type?.name === 'obj_knight_enemy',
+      );
+      if (kn) kn.idlesprite = 'spr_roaringknight_idle';
+      openVCArena(state, row, { sideb });
+    },
     launch: (state, row) => launchVCAttack(state, row, { sideb }),
     turnLength: (row) => vcTurnLength(row, { sideb }),
     moveheartDest: (row, gt, view) => vcMoveheartDest(row, gt, view),
