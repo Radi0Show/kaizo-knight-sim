@@ -209,6 +209,30 @@ export function buildKaizoScene(state, { version = 'A' } = {}) {
   // first confirm after the halt and ran each talk phase two frames short.
   if (v.knight && state.textAutoMash === undefined) state.textAutoMash = true;
 
+  // THE KNIGHT NEVER STROBES FROM A PARTY HIT IN THIS MOD.
+  //
+  // scr_damage_enemy's one interesting line is the strobe arm, and EnderCat8
+  // moved its literal:
+  //
+  //     v105    if (chapter == 3 && i_ex(obj_knight_enemy) && arg1 >= 100)
+  //     kaizo   if (chapter == 3 && i_ex(obj_knight_enemy) && arg1 >= 10000)
+  //
+  // (the ONLY line that differs between the two copies of the script). No
+  // party hit in this fight comes near 10000 — X-Slash, the biggest, is
+  // ceil(ceil(((52 * 160) / 20) - df * 3) * 1.05) * 2, under 900 — so
+  // `stronghurtanim` is only ever set by the ENDING (sim/knight.js
+  // startEndCutscene, Draw_0:143-148), which is the one place the mod still
+  // wants the flicker.
+  //
+  // It gates two things, both of them the Knight's reaction animation: the
+  // strobe branch (kaizo/render/draw/tracking.js — under the mod both arms
+  // draw idlesprite anyway, so this only decides the ENDING's %3 flicker)
+  // and the delayed thud one frame in, `hurttimer == 29 && stronghurtanim`,
+  // which the sim was playing on every heavy swing.
+  //
+  // Both versions: the script is shared, and V-C is the mod too.
+  if (v.knight) state.stronghurtDamage = 10000;
+
   state.kaizo = {
     version,
     // Per version: the remix says it is the remix; the recreations carry

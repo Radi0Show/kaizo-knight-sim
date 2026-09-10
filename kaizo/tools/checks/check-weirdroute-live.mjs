@@ -33,6 +33,7 @@ import { scrDamageSingle } from '../../../sim/damage.js';
 import { buildKaizoScene } from '../../scenes/kaizo-fight.js';
 import { sceneHijacksTurn } from '../../party/scenes.js';
 import { kaizoIdlesprite } from '../../actors/kaizo-knight-actor.js';
+import { damageKnight } from '../../../sim/knight.js';
 import { KAIZO_CHECK_PAGES } from '../../scenes/kaizo-vc-hooks.js';
 import {
   kaizoDamageHooks, scrDamageSingle as kaizoScrDamageSingle, scrRevive,
@@ -388,6 +389,29 @@ section('gap 13 — the knight\'s B-Side turn-end messages (Step_0:566-781)');
   ok(c.kaizo.launched.length >= 3, 'V-C control reached its turn ends');
   ok(!seenC.some((s) => /used up|Can't move your body|GLOOM/.test(s)),
     'V-C control: no B-Side message on the A-Side turn end');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+section('the knight NEVER strobes from a party hit (scr_damage_enemy, 10000)');
+{
+  // The mod's only change to scr_damage_enemy is the strobe arm's literal:
+  // v105 `arg1 >= 100`, kaizo `arg1 >= 10000`. Nothing the party can throw
+  // reaches 10000 — X-Slash, the biggest hit in the fight, is under 900 — so
+  // `stronghurtanim` belongs to the ENDING alone. It gates the ending's %3
+  // flicker and the delayed thud at `hurttimer == 29`, which the sim was
+  // playing on every heavy swing.
+  for (const version of ['C', 'D']) {
+    const st = build(version);
+    eq(st.stronghurtDamage, 10000,
+      `V-${version} carries the mod's threshold, not the vanilla 100`);
+    st.knight.stronghurtanim = false;
+    damageKnight(st, 900);            // bigger than X-Slash, the fight's largest
+    eq(st.knight.stronghurtanim, false,
+      `V-${version}: a 900 hit does NOT strobe him`);
+    damageKnight(st, 10000);
+    eq(st.knight.stronghurtanim, true,
+      `V-${version}: and the literal itself still does, so the gate is the number`);
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
