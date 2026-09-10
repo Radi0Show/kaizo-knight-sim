@@ -63,6 +63,7 @@ import {
 import { spawnImpact, stepAttackVfx } from '../../sim/attackvfx.js';
 import { stepRudeBuster, rudeBusterBusy } from '../../sim/rudebuster.js';
 import { castSpell, resolveActPages } from '../../sim/spells.js';
+import { needsSpellphase, createSpellphase, stepSpellphase } from '../../sim/spellphase.js';
 import { rngNext } from '../../sim/rng.js';
 import {
   fightDamage, damageKnight, advanceTurn, stepKnightAnim, tickChargeup, phase4Reached,
@@ -420,7 +421,7 @@ const director = {
           + `boltx${bar.boltx}/live${bar.bolts.filter((b) => b.alive).length}`
           + `/atk${bar.attacked.map((x) => (x ? 1 : 0)).join('')}/post${bar.posttimer ?? 0}`
           + `${bar.fade ? '/FADE' + (bar.fadeamt ?? 0).toFixed(2) : ''}` : '-'}`
-        + ` md=${e.maxdelaytimer ?? '-'}/${e.maxdelay ?? '-'}`
+        + ` sp=${e.spellphase ? 'T' + e.spellphase.spelltimer + '/' + (state.spelldelay ?? '-') + (e.spellphase.writer ? 'W' : '') : (e.spellphaseDone ? 'done' : '-')}`
         + ` bal=${e.balloonDone ? 1 : 0} dlg=${state.dialogue?.text ? 1 : 0}`
         + ` sd=${e.spawnDelay} gap=${e.gap} in=${keys || '.'}`);
     }
@@ -1240,22 +1241,29 @@ const director = {
       state.menu.needsCommit = false;
     }
 
-    // ---- THE RESOLVE PHASE: obj_attackpress ---------------------------------
+    // ---- THE RESOLVE PHASE --------------------------------------------------
     //
-    // Its Create and Draw define the whole order, and this build had two parts
-    // of it wrong.
+    // WHAT THIS COMMENT USED TO SAY, and it was wrong: that obj_attackpress's
+    // Create and Draw define the order —
     //
     //     Create:  for each char with charaction 4 (item) or 2 (spell):
-    //                  if (maxdelay == 0) maxdelay = 25;
-    //                  maxdelay += 15;
+    //                  if (maxdelay == 0) maxdelay = 25;   maxdelay += 15;
     //     Draw:    maxdelaytimer += 1;
-    //              at maxdelaytimer == spelldelay[xyz] -> that character's
-    //                  state = 4 or 2, i.e. their animation STARTS
+    //              at maxdelaytimer == spelldelay[xyz] -> state = 4 or 2
     //              if (maxdelaytimer >= maxdelay) active = 1;   // bolts run
     //
-    // So the bar EXISTS from the moment the menu closes but sits inactive
-    // while the spells and items play out. Rude Buster happens first, the
-    // bolts come after — which is the order you actually see.
+    // "So the bar exists from the moment the menu closes but sits inactive
+    // while the spells and items play out." IT DOES NOT. Create_0:1-6 reads
+    // `active = 0; fastmode = 1; if (fastmode == 1) active = 1;` and :58 sets
+    // `spelluse = 0` after the very loop that would have raised it — so the
+    // Draw's `if (spelluse == 1)` block never runs, the maxdelay test is moot,
+    // and the bar is LIVE FROM ITS FIRST FRAME. The quoted lines are real;
+    // reading them as the live path was the mistake.
+    //
+    // The order a caster's turn really has belongs to obj_spellphase, and
+    // scr_attackphase decides which of the two objects a turn even creates.
+    // Both are in the vendored sim/spellphase.js; the branch is below, with
+    // this lane's cast hook on it.
     // ---- THE ACT RESOLUTION, before the bar --------------------------------
     //
     // `if (actcon == 1 && !instance_exists(obj_writer)) scr_nextact()` — the
@@ -1329,7 +1337,53 @@ const director = {
     // installKaizoMenu.
     if (state.kaizo?.hooks?.actBusy?.(state)) return;
 
-    if (state.menu.fight.some(Boolean) && !e.bar) {
+    // ---- scr_attackphase's BRANCH, the kaizo side ---------------------------
+    //
+    // Same change as the vanilla director's (sim/scenes/practice.js, and the
+    // account of the dead obj_attackpress Draw block is there): a turn with any
+    // charaction 2 or 4 creates obj_spellphase INSTEAD of the bar, and the
+    // phase creates the bar when it finishes.
+    //
+    // WHAT IS KAIZO ABOUT IT: the cast goes through this scene's own hook, so
+    // Noelle's cases, X-Slash and the frozen-target path keep their behaviour,
+    // and `global.spelldelay` — which this lane keeps on state.kaizo.spelldelay
+    // (kaizo/party/freeze.js writes 15 there when the target is frozen,
+    // scr_spell:45-52) — is mirrored onto the engine's state.spelldelay after
+    // the cast, because obj_spellphase's own gate is what reads it. One GML
+    // global, two names, and the phase is the thing that finally consumes it.
+    if (e.spellphase === undefined) {
+      e.spellphase = needsSpellphase(state) ? createSpellphase(state) : null;
+      e.spellphaseDone = !e.spellphase;
+      // AN OBJECT CREATED DURING A STEP DOES NOT RUN ITS OWN STEP OR ALARM
+      // THAT FRAME — scr_attackphase is called from obj_battlecontroller's
+      // Step, and the instance it creates first acts on the NEXT frame, so
+      // alarm[0] = 5 fires five frames after the frame of creation, not four.
+      // This is the same one-frame rule the delayed tween note in CLAUDE.md
+      // records from the other direction, and it is worth a frame of the
+      // kaizo _rev1 spell turn: with the phase stepped on its birth frame the
+      // writer landed at f8573 where the recording has f8575.
+      if (e.spellphase) return;
+    }
+    if (e.spellphase) {
+      const done = stepSpellphase(state, e.spellphase, e, {
+        castSpell: (st, c, id, target) => {
+          const r = castSpell(st, c, id, target, { alreadyPaid: true });
+          // The kaizo cases write their delay to the lane's name; hand it to
+          // the phase. Nothing to do when they did not.
+          const k = st.kaizo?.spelldelay;
+          if (typeof k === 'number' && k !== st.spelldelay) st.spelldelay = k;
+          return r;
+        },
+      });
+      if (done) {
+        e.spellphase = null;
+        e.spellphaseDone = true;
+      } else {
+        return;
+      }
+    }
+
+    if (e.spellphaseDone && state.menu.fight.some(Boolean) && !e.bar) {
       // ROSTER-AWARE. sim/damage.js's isUp tests `!state.chardead[slot]`
       // FIRST, and on a two-slot roster `chardead[2]` is undefined — so
       // `!undefined` reports a PHANTOM third member as standing. The hook
@@ -1463,45 +1517,6 @@ const director = {
       e.pendingSwing = [];
     }
 
-    // `maxdelay` — 0 with no spells or items, otherwise 25 + 15 per caster.
-    if (e.maxdelay === undefined) {
-      // `for each char with charaction 4 (ITEM) or 2 (SPELL)` — obj_attackpress's
-      // Create counts BOTH, so a turn with two items holds the bar exactly as
-      // long as a turn with two spells.
-      const casters = [0, 1, 2].filter(
-        (c) => state.pendingSpell?.[c] || state.pendingItem?.[c],
-      ).length;
-      e.maxdelay = casters ? 25 + 15 * casters : 0;
-      e.maxdelaytimer = 0;
-      // `spelldelay[xyz]` defaults to 10 for all three, so the first caster's
-      // animation starts ten frames in and the rest follow at the same offset
-      // — they overlap, which is why a two-spell turn does not take twice as
-      // long as a one-spell turn.
-      e.spellFired = [false, false, false];
-    }
-
-    if (e.maxdelaytimer < e.maxdelay) {
-      e.maxdelaytimer += 1;
-      for (let c = 0; c < 3; c++) {
-        if (e.spellFired[c] || e.maxdelaytimer < 10) continue;
-        const p = state.pendingSpell?.[c];
-        const it = state.pendingItem?.[c];
-        if (p) {
-          e.spellFired[c] = true;
-          heroAct(state, c, HERO_SPELL);
-          castSpell(state, c, p.id, p.target, { alreadyPaid: true });
-        } else if (it) {
-          // THE ITEM LANDS HERE, not when it was chosen. `state = 4` and the
-          // effect both fire at `maxdelaytimer == spelldelay[c]`, so a Revive
-          // used this turn cannot give that character a turn — by the time it
-          // resolves the command phase is over.
-          e.spellFired[c] = true;
-          heroAct(state, c, HERO_ITEM);
-          applyItem(state, it.id, it.target);
-        }
-      }
-      return;
-    }
     // Everything queued has fired; the bolt may still be flying.
     if (rudeBusterBusy(state)) return;
     if (state.pendingSpell) state.pendingSpell = [];
@@ -1657,7 +1672,7 @@ const director = {
       e.barHold = 0;
       e.bar = null;
       state.menu.fight = [false, false, false];
-      e.maxdelay = undefined;
+      e.spellphase = undefined;
       // `global.mnfight = 1` is assigned HERE, in the bar's Draw — but the
       // knight's enemy-talk branch reads it in his STEP, which runs next
       // frame. Returning gives the handoff that one-frame lag: the next call
@@ -1665,7 +1680,7 @@ const director = {
       // where the oracle's turn column moves.
       return;
     }
-    e.maxdelay = undefined;
+    e.spellphase = undefined;
 
     // ---- ENEMY TALK, and it belongs HERE, not before the menu ------------
     //

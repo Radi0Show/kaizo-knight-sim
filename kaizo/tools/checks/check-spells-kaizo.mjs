@@ -117,7 +117,16 @@ section('IceShock — the live path: menu -> attackpress delay -> seam -> obj_ic
   assertEq(s.menu.gridIndex, 2, 'cursor on IceShock');
   const before = draws(s);
   press(s, 'confirm');
-  assertEq(s.tension, 60, 'IceShock charged 20 (ThornRing) at selection — scr_spellconsumeb');
+  // ICESHOCK TARGETS AN ENEMY, so picking it off the grid does not commit it:
+  // scr_spellinfo case 9 sets spelltarget 2, and obj_battlecontroller
+  // Step_0:648-651 sends a spelltarget-2 spell to its own enemy row (bmenuno 3)
+  // BEFORE anything is charged. sim/menu.js grew that row on 2026-09-09 (it had
+  // two arms where the game has three), so the charge and the close now belong
+  // to the SECOND confirm, exactly as they do in the game.
+  assertEq(s.menu.submenu, 'spellenemy', 'IceShock opens its enemy row first (spelltarget 2)');
+  assertEq(s.tension, 80, 'and nothing is charged until that row confirms');
+  press(s, 'confirm');
+  assertEq(s.tension, 60, 'IceShock charged 20 (ThornRing) at the enemy row — scr_spellconsumeb');
   assert(!s.menu.open, 'the menu closed');
   assert(s.pendingSpell?.[1]?.id === 9, 'pendingSpell[1] = IceShock, cast deferred to obj_attackpress');
   // Step until the icespell exists (spelldelay 10 into the resolve phase).
