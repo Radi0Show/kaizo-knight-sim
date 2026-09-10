@@ -5,7 +5,7 @@ tools/ are a snapshot of knight-sim; never hand-edit them here (see the
 script's header and CLAUDE.md).
 
 - source: D:\ShadowCrystal\knight-sim
-- commit: 02c55423ee3bcdcfa7ae85dea43aa61ffeefcd0b
+- commit: 9297c529ca050ea5f070b8d31a9daf5ce9f8ad9c
 - vendored: 2026-09-09
 - the mirrored directories were clean in the source tree
 

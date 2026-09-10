@@ -71,9 +71,16 @@ const IDLE = {
   left: false, right: false, up: false, down: false, confirm: false, cancel: false,
   focus: false, button3: false,
 };
+// A PRESS RELEASES UNTIL THE INPUT BUFFER LETS THE NEXT ONE THROUGH.
+// obj_battlecontroller gates every confirm on `onebuffer < 0` and the four
+// GRID confirms set it to 2 (Step_0:636 MAGIC, :780 battlespell, :937 ITEM,
+// :1140 ACT) where every other confirm sets 1 — so after choosing a spell off
+// the grid the game ignores button1 for two frames. A fixed press-release pair
+// is one frame short of that and every later press in a script is swallowed.
 function press(s, key) {
   stepFrame(s, { ...IDLE, [key]: true });
   stepFrame(s, IDLE);
+  for (let g = 0; g < 4 && (s.menu?.onebuffer ?? -1) >= 0; g++) stepFrame(s, IDLE);
 }
 function vd(seed = 12345) {
   const s = createState({ seed, traceBulletSlots: 8 });
