@@ -840,8 +840,43 @@ export const rotatingSlash = {
       if (e.timer === Math.floor((e.slash_base + e.slash_offset) * 0.5) && e.aim_type !== 2) {
         e.image_index += 1;
       }
-      if (e.timer === e.slash_base + e.slash_offset && e.aim_type !== 2) {
-        e.image_speed = 0.5;
+      // THE SPIRAL'S WIND-UP POSE, RENDER-CRITIC 5b, and it is VANILLA — the
+      // `else` arm below is byte-identical in gml_vanilla_v105
+      // (obj_knight_rotating_slash Step_0:230-238) and in the kaizo dump
+      // (Step_0:293-301), so the sim module this file was copied from drops
+      // it too; the port-back belongs to knight-sim.
+      //
+      //     if (timer == (slash_base + slash_offset)) {
+      //         if (aim_type != 2) { image_speed = 0.5; }
+      //         else {
+      //             scr_var_delayed("sprite_index", 3329, 4);
+      //             scr_var_delayed("image_speed", 1, 4);
+      //         }
+      //     }
+      //
+      // THE NUMERIC SPRITE IDS RESOLVE (knight-research/kaizo-mod/sprites/
+      // sprites_kaizo.csv, index N = row N + 2, read 2026-09-10):
+      //   3329 -> row 3331 spr_roaringknight_flurry       (113x78, 3 frames)
+      //   2128 -> row 2130 spr_roaringknight_attack_ol    (117x115, 6 frames)
+      // so the delayed pair is "four frames from now, wear the flurry sheet
+      // and run it at full speed", and :618 below is the reset back to the
+      // attack pose.
+      //
+      // A DELAY, NOT A COUNTER. `scr_var_delayed` IS `scr_delay_var`
+      // (gml_GlobalScript_scr_var_delay.gml: both bodies are
+      // `scr_script_delayed(scr_var, arg2, arg0, arg1)`), and
+      // scr_script_delayed writes `alarm[0] = argument[1]` on a fresh
+      // obj_script_delayed — so this rides `scrDelayVar` above, the same
+      // runner the ring bullets' `scr_delay_var("active", 0, 25)` uses, with
+      // the delay passed through unchanged. HANDOFF §8: alarms are alarms
+      // here, never step counters.
+      if (e.timer === e.slash_base + e.slash_offset) {
+        if (e.aim_type !== 2) {
+          e.image_speed = 0.5;
+        } else {
+          scrDelayVar(state, e, 'sprite_index', 'spr_roaringknight_flurry', 4);
+          scrDelayVar(state, e, 'image_speed', 1, 4);
+        }
       }
 
       // Order matters: the aim spins BEFORE the frame-1 lock-on below, and
@@ -1208,6 +1243,22 @@ export const rotatingSlash = {
         if (e.final_counter === _endslashamt) {
           e.state = 'return';
           e.done = true;
+          // THE POSE COMES BACK, RENDER-CRITIC 5b's other half. Step_0:618-620
+          //     scr_var("sprite_index", 2128);
+          //     scr_var("image_index", 0);
+          //     scr_var("image_speed", 0);
+          // `scr_var` with no target is `variable_instance_set(id, ...)` —
+          // IMMEDIATE, on self, no obj_script_delayed and no alarm (contrast
+          // the delayed pair in the aim above). 2128 is
+          // spr_roaringknight_attack_ol (sprites_kaizo.csv row 2130). Without
+          // it the spiral's last `sprite_index = spr_roaringknight_flurry`
+          // (the else arm below) is the entity's final pose and the return
+          // lerp draws a stale flurry sheet all the way home. VANILLA TOO —
+          // gml_vanilla_v105 Step_0:461-463 is the same three lines, so
+          // sim/attacks/rotating-slash.js needs the same port-back.
+          e.sprite_index = 'spr_roaringknight_attack_ol';
+          e.image_index = 0;
+          e.image_speed = 0;
           // Alarm_3 is one line, `instance_destroy()` — 22 frames after the
           // last slash.
           e.alarm[3] = 22;

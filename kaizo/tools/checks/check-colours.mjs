@@ -36,8 +36,29 @@
 //   G3  obj_knight_circle (every rotating-slash aim bloom): Create_0:2-4
 //       (0,0,128) and Step_0:9-10 fade g and r — the rim stays navy for all
 //       ten frames; the kaizo rotating slash spawns THIS type (Step_0:278).
+//   G4  obj_knight_rotating_slash's SPIRAL POSE (RENDER-CRITIC 5b): the two
+//       sprite writes the translation dropped —
+//       Step_0:298-299 `scr_var_delayed("sprite_index", 3329, 4)` +
+//       `scr_var_delayed("image_speed", 1, 4)` on the aim_type-2 arm, and
+//       Step_0:618-620 `scr_var("sprite_index", 2128); ("image_index", 0);
+//       ("image_speed", 0)` at the end of the spiral. Sprite ids resolved
+//       against knight-research/kaizo-mod/sprites/sprites_kaizo.csv (index N
+//       is row N + 2): 3329 = spr_roaringknight_flurry, 2128 =
+//       spr_roaringknight_attack_ol. Both arms are byte-identical in
+//       gml_vanilla_v105 (Step_0:236-238 and :461-463), so the control here
+//       is the sim module itself — AND, BECAUSE THAT MEANS THE ENGINE IS OWED
+//       THE SAME FIX, the control is written as a TWO-STATE assertion (the
+//       engine does nothing yet, or it does exactly what the mod does) rather
+//       than as "the engine does not do this". See its own header, at the
+//       controls. Its last block reproduces the ONE thing a recording says
+//       about this object, and says it at the difficulty the recording ran.
 //
 // Zero RNG in any of it; the check is deterministic and needs no recording.
+//
+// The DRAW-SHEET counterpart is check-colours-sheet.mjs (2026-09-10), which
+// holds these same objects against the four MODE 1 colour locks frame by
+// frame. This file stays the numeric pin: it runs with no recording on the
+// machine, and it is the one that reddens when a constant moves.
 
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -61,6 +82,7 @@ import {
 } from '../../attacks/sword-vortex.js';
 import { kaizoKnightCircle } from '../../attacks/knight-circle.js';
 import { spawnRotatingSlash } from '../../attacks/rotating-slash.js';
+import { spawnRotatingSlash as simSpawnRotatingSlash } from '../../../sim/attacks/rotating-slash.js';
 import { getSwordcolor } from '../../attacks/kaizo-colors.js';
 import { KAIZO_DRAW_OVERRIDES } from '../../render/index.js';
 import {
@@ -422,6 +444,236 @@ function circleScene(type) {
   ok(!!seen && eq3([seen.r, seen.g, seen.b], CIRCLE_NAVY),
     `and it is navy on its first live frame (${seen ? [seen.r, seen.g, seen.b].join(',') : '-'})`);
   ok(!!seen && seen.type !== simKnightCircle, 'and NOT sim/fx.js\'s maroon one');
+}
+
+// ═══ G4: THE SPIRAL'S POSE ═════════════════════════════════════════════════
+console.log('G4. obj_knight_rotating_slash — the two sprite writes RENDER-CRITIC 5b named');
+
+/**
+ * The bench the G3 block above uses for the rotating slash, reused verbatim.
+ * `difficulty` defaults to 2 — the only value that reaches the spiral
+ * (kaizo/attacks/rotating-slash.js:1155, `e.difficulty === 2 && e.turn_type
+ * === 'full'`), and therefore the only one the two sprite writes below live
+ * on. The difficulty-0 block at the end of this section passes 0 on purpose.
+ */
+function slashScene(spawnFn, { difficulty = 2 } = {}) {
+  const st = createState({ seed: 4242 });
+  st.view = { x: 0, y: 0 };
+  st.invTimer = -1;
+  st.turntimer = 999999;
+  st.gmlRng = gmlCreate(4242);
+  st.damageEnabled = false;
+  st.kaizo = { sideb: false };
+  st.currentAc = 5;
+  spawn(st, { name: 'obj_knight_enemy' }, { x: 425, y: 78 });
+  settleBox(spawn(st, battlebox, { x: 320, y: 170 }));
+  st.soul = spawn(st, soul, { x: 314, y: 162 });
+  const e = spawnFn(st, 425, 78, { difficulty });
+  // The intro runs itself out; every assertion below starts from the aim.
+  for (let i = 0; i < 80 && e.state !== 'aim'; i++) stepFrame(st, NONE);
+  return { st, e };
+}
+
+/**
+ * Put the instance one step short of `timer == slash_base + slash_offset` on
+ * the SPIRAL arm (aim_type 2), wearing the prepare sheet the kaizo Step_0:260
+ * gave it, then step once so the trigger line runs.
+ */
+function armSpiralPose(st, e) {
+  e.aim_type = 2;
+  e.state = 'aim';
+  e.timer = e.slash_base + e.slash_offset - 1;
+  e.sprite_index = 'spr_roaringknight_flurry_prepare';
+  e.image_speed = 0;
+  stepFrame(st, NONE);
+}
+const delayeds = (st, target) => st.entities.filter(
+  (x) => x.alive && x.type.name === 'obj_script_delayed' && x.target === target,
+);
+
+/**
+ * One module's whole answer to the spiral-pose trigger, as comparable text:
+ * the delayed writes it arms (sorted, `name=value@alarm`), whether the trigger
+ * frame itself moved the pose, and which step after the trigger the flurry
+ * sheet lands on (null = never, within eight).
+ *
+ * It exists so the CONTROLS below can compare the two modules instead of
+ * asserting that the vendored engine still lacks something. See their header.
+ */
+function spiralPose(spawnFn) {
+  const { st, e } = slashScene(spawnFn);
+  armSpiralPose(st, e);
+  const armed = delayeds(st, e)
+    .map((x) => `${x.varname}=${JSON.stringify(x.value)}@${x.alarm[0]}`)
+    .sort();
+  const atTrigger = `${e.sprite_index}@${e.image_speed}`;
+  let landed = null;
+  for (let k = 1; k <= 8 && landed === null; k++) {
+    stepFrame(st, NONE);
+    if (e.sprite_index === 'spr_roaringknight_flurry') landed = k;
+  }
+  return { st, e, armed, atTrigger, landed, sprite: e.sprite_index, speed: e.image_speed };
+}
+
+/** The same, for the end-of-spiral reset: the pose the module ends on. */
+function spiralReset(spawnFn) {
+  const { st, e } = slashScene(spawnFn);
+  e.aim_type = 2;
+  e.difficulty = 2;
+  e.turn_type = 'full';
+  e.slashes_done = true;
+  e.do_final = false;
+  e.final_counter = 27;
+  e.state = 'cooldown';
+  e.timer = e.cooldown_time - 1;
+  e.sprite_index = 'spr_roaringknight_flurry';
+  e.image_index = 2;
+  e.image_speed = 1;
+  stepFrame(st, NONE);
+  return { st, e, pose: `${e.sprite_index}@${e.image_index}/${e.image_speed}` };
+}
+
+{
+  const { st, e } = slashScene(spawnRotatingSlash);
+  armSpiralPose(st, e);
+  const d = delayeds(st, e).map((x) => [x.varname, x.value, x.alarm[0]]);
+  const sprite = d.find((x) => x[0] === 'sprite_index');
+  const speed = d.find((x) => x[0] === 'image_speed');
+  ok(!!sprite && sprite[1] === 'spr_roaringknight_flurry' && sprite[2] === 4,
+    'Step_0:298: scr_var_delayed("sprite_index", 3329, 4) arms an obj_script_delayed'
+    + ` carrying spr_roaringknight_flurry at alarm[0] = 4 (${JSON.stringify(sprite)})`);
+  ok(!!speed && speed[1] === 1 && speed[2] === 4,
+    `Step_0:299: and its twin carries image_speed = 1 at the same delay (${JSON.stringify(speed)})`);
+  ok(e.sprite_index === 'spr_roaringknight_flurry_prepare' && e.image_speed === 0,
+    'A DELAY, NOT A WRITE: the trigger frame itself leaves the pose alone'
+    + ` (${e.sprite_index} @ ${e.image_speed})`);
+
+  // MEASURED, then pinned: the write lands on the FOURTH step after the
+  // trigger frame — an entity spawned in the step phase first sees its alarm
+  // phase next frame, so alarm[0] = 4 is four frames, not three or five.
+  const landed = [];
+  for (let k = 1; k <= 8; k++) {
+    stepFrame(st, NONE);
+    if (e.sprite_index === 'spr_roaringknight_flurry') { landed.push(k); break; }
+  }
+  ok(landed[0] === 4 && e.image_speed === 1,
+    `the pair lands on step ${landed[0] ?? 'never'} after the trigger (want 4), image_speed ${e.image_speed}`);
+  ok(delayeds(st, e).length === 0, 'and the two runners destroyed themselves (Alarm_0 ends in instance_destroy)');
+}
+// ── THE CONTROLS, WRITTEN TO SURVIVE THE PORT-BACK ────────────────────────
+//
+// BOTH ARMS ARE VANILLA (gml_vanilla_v105 Step_0:236-238 and :461-463 are
+// byte-identical to the kaizo lines), so `sim/attacks/rotating-slash.js` is
+// owed the same fix and CLAUDE.md law 6 says it lands in ../knight-sim and is
+// re-vendored. The day it does, the vendored module starts arming the pair
+// and resetting the sheet.
+//
+// A control that says "the engine does not do this yet" would go RED on that
+// day — asserting the ABSENCE of a fix somebody is about to make, inside a
+// file `npm run verify:kaizo` runs. So these pin the MOD's answer and then
+// hold the engine to ONE OF TWO states: it does nothing yet, or it does
+// EXACTLY what the mod does. A third state — the engine arming a DIFFERENT
+// pair, or landing the sheet on a different step — is what a control is for,
+// and it still fails. Which of the two states the engine is in is printed on
+// every run, so the port-back is visible the day it lands and nobody has to
+// come back and edit an assertion to notice.
+{
+  const kz = spiralPose(spawnRotatingSlash);
+  const vn = spiralPose(simSpawnRotatingSlash);
+  const WANT = ['image_speed=1@4', 'sprite_index="spr_roaringknight_flurry"@4'];
+  ok(kz.armed.join(' | ') === WANT.join(' | '),
+    `THE MOD ARMS EXACTLY: ${WANT.join(' | ')} (kaizo module: ${kz.armed.join(' | ') || 'nothing'})`);
+  const ported = vn.armed.length > 0;
+  ok(!ported || vn.armed.join(' | ') === kz.armed.join(' | '),
+    `control: the vendored engine arms ${ported ? 'THE SAME PAIR — the port-back has landed'
+      : 'nothing yet — the port-back is still owed'}`
+    + `, never a different one (${vn.armed.join(' | ') || 'nothing'})`);
+  ok(vn.landed === (ported ? kz.landed : null),
+    `control: and its sheet lands on step ${JSON.stringify(vn.landed)}`
+    + ` (want ${ported ? `the mod's ${kz.landed}` : 'never, nothing being armed'})`);
+  ok(vn.sprite === (ported ? kz.sprite : 'spr_roaringknight_flurry_prepare'),
+    `control: eight steps on it wears ${vn.sprite}`
+    + ` (want ${ported ? kz.sprite : 'the untouched spr_roaringknight_flurry_prepare'})`);
+}
+{
+  // The RESET. `scr_var` with no target is variable_instance_set(id, ...) —
+  // immediate, on self. Driven by putting the instance one step short of the
+  // cooldown's fire with final_counter at 27, so the ++ reaches the route-C
+  // _endslashamt of 28.
+  const { st, e } = slashScene(spawnRotatingSlash);
+  e.aim_type = 2;
+  e.difficulty = 2;
+  e.turn_type = 'full';
+  e.slashes_done = true;
+  e.do_final = false;
+  e.final_counter = 27;
+  e.state = 'cooldown';
+  e.timer = e.cooldown_time - 1;
+  e.sprite_index = 'spr_roaringknight_flurry';
+  e.image_index = 2;
+  e.image_speed = 1;
+  stepFrame(st, NONE);
+  ok(e.final_counter === 28 && e.state === 'return',
+    `the spiral's 28th slash ends it (final_counter ${e.final_counter}, state ${e.state})`);
+  ok(e.sprite_index === 'spr_roaringknight_attack_ol',
+    `Step_0:618: sprite_index back to 2128 = spr_roaringknight_attack_ol (${e.sprite_index})`);
+  ok(e.image_index === 0 && e.image_speed === 0,
+    `Step_0:619-620: image_index 0 and image_speed 0 with it (${e.image_index}, ${e.image_speed})`);
+  ok(e.alarm[3] === 22, 'and Alarm_3 is still armed at 22 (the write did not displace it)');
+}
+{
+  // THE CONTROL FOR THE RESET, same two-state form and the same reason.
+  const kz = spiralReset(spawnRotatingSlash);
+  const vn = spiralReset(simSpawnRotatingSlash);
+  ok(kz.pose === 'spr_roaringknight_attack_ol@0/0',
+    `THE MOD ENDS THE SPIRAL AT: spr_roaringknight_attack_ol@0/0 (kaizo module: ${kz.pose})`);
+  // The engine leaves image_speed 1 running, so its image_index has already
+  // ticked past the 2 the bench set — the SHEET is what says whether the
+  // reset happened, not the frame within it.
+  const ported = vn.e.sprite_index !== 'spr_roaringknight_flurry';
+  ok(vn.e.state === 'return' && (!ported || vn.pose === kz.pose),
+    `control: the vendored engine ends it ${ported ? `at ${vn.pose} — the port-back has landed`
+      : `still wearing the stale ${vn.pose} — the port-back is still owed`}`);
+}
+{
+  // THE ONE THING THE DRAW SHEET SAYS ABOUT THIS OBJECT, and it is a negative:
+  // over the whole atk_Multislash1 lock (468 rows, cs_multislash1-raw) the
+  // rotating slash NEVER leaves spr_roaringknight_attack_ol. That window is
+  // DIFFICULTY 0, which never reaches aim_type 2 (kaizo/attacks/
+  // rotating-slash.js:1155 forks into the spiral only on `difficulty === 2 &&
+  // turn_type === 'full'`), so the flurry arm above is unexercised by every
+  // recording on disk.
+  //
+  // SO THIS BLOCK RUNS DIFFICULTY 0, and asserts what the sheet says: the
+  // sprite VOCABULARY over the entity's whole life is that one name and
+  // nothing else. A membership test would have been satisfied by the opening
+  // pose alone and would have passed at any difficulty — the set equality is
+  // the claim, and the difficulty-2 companion below is what proves the
+  // assertion can tell the two apart.
+  const walk = (difficulty) => {
+    const { st, e } = slashScene(spawnRotatingSlash, { difficulty });
+    const seen = new Set([e.sprite_index]);
+    const aims = new Set([e.aim_type]);
+    let frames = 0;
+    for (let k = 0; k < 900; k++) {
+      stepFrame(st, NONE);
+      if (!e.alive) break;
+      frames += 1;
+      seen.add(e.sprite_index);
+      aims.add(e.aim_type);
+    }
+    return { seen: [...seen].sort(), aims: [...aims].sort(), frames };
+  };
+  const d0 = walk(0);
+  ok(d0.seen.length === 1 && d0.seen[0] === 'spr_roaringknight_attack_ol',
+    'the Multislash 1 sheet\'s negative, reproduced: over the difficulty-0 slash\'s whole'
+    + ` ${d0.frames} frames the ONLY sprite is spr_roaringknight_attack_ol (saw ${d0.seen.join(', ')})`);
+  ok(!d0.aims.includes(2),
+    `and it never reaches aim_type 2, which is why (aim_types ${d0.aims.join(',')})`);
+  const d2 = walk(2);
+  ok(d2.seen.includes('spr_roaringknight_flurry') && d2.seen.length > 1,
+    'and the assertion above discriminates: difficulty 2 DOES leave that sheet'
+    + ` (${d2.seen.join(', ')})`);
 }
 
 console.log(`\ncheck-colours: ${pass} ok, ${fail} failed`);
