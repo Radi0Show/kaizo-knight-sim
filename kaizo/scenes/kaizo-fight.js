@@ -20,6 +20,8 @@ import { kaizoAdvanceBalloon } from '../party/freeze.js';
 import { createKaizoHeroes } from '../party/heroes.js';
 import { installKaizoMenu } from '../party/spells.js';
 import { VC_TABLE, VD_TABLE, VC_KNIGHT } from '../versions/vc-script.js';
+import { tensionbarDraw } from '../party/tensionbar.js';
+import { spawn } from '../../sim/entity.js';
 
 export const KAIZO_NOTE =
   'KAIZO KNIGHT — a recreation of EnderCat8\'s "Kaizo Roaring Knight" mod '
@@ -232,6 +234,33 @@ export function buildKaizoScene(state, { version = 'A' } = {}) {
   //
   // Both versions: the script is shared, and V-C is the mod too.
   if (v.knight) state.stronghurtDamage = 10000;
+
+  // THE TP BAR'S DRAW, which is what makes the TP slash mean anything.
+  //
+  // obj_tensionbar's Draw carries `global.tension = clamp(global.tension, 0,
+  // 125)` behind `kaizo_sideb() && (k_tpscene >= 10 || k_tpscene == -1)` —
+  // so from the frame the Knight shears the bar, the party can bank at most
+  // half the TP it could before, every spell priced above 125 is gone for the
+  // rest of the run, and the readout can never pass 50%. The module was
+  // translated with its bleed particles and its nine-draw loop and nothing
+  // ran it, which made the whole k_tpscene cutscene a light show over a bar
+  // that still filled to 250.
+  //
+  // B-Side only: the gate's first term is kaizo_sideb(), so V-C would carry
+  // an entity that can never clamp, and the A-Side byte gate would step it
+  // for 13,000 frames to no purpose.
+  //
+  // AND IT HAS TO SURVIVE THE TURN. The end-of-turn sweep is a stand-in for
+  // `with (obj_bulletparent) instance_destroy()` working off a list of
+  // vanilla names, so anything this scene installs is swept unless it says
+  // otherwise (knight-sim v1.0.31). Both of this lane's battle-long
+  // instances were dying at the first turn end, at frame 359 of every fight:
+  // obj_tensionbar and the spell controller both live for the whole battle
+  // in the game.
+  (state.survivesTurn ??= new Set())
+    .add('kaizo_tensionbar_draw')
+    .add('kaizo_spell_controller');
+  if (version === 'D') spawn(state, tensionbarDraw, { x: 0, y: 0 });
 
   state.kaizo = {
     version,

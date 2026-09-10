@@ -32,6 +32,7 @@ import { createState, stepFrame } from '../../../sim/index.js';
 import { scrDamageSingle } from '../../../sim/damage.js';
 import { buildKaizoScene } from '../../scenes/kaizo-fight.js';
 import { sceneHijacksTurn } from '../../party/scenes.js';
+import { kaizoTensionClampActive } from '../../party/tensionbar.js';
 import { kaizoIdlesprite, kaizoMonsterXY } from '../../actors/kaizo-knight-actor.js';
 import { damageKnight } from '../../../sim/knight.js';
 import { KAIZO_CHECK_PAGES } from '../../scenes/kaizo-vc-hooks.js';
@@ -624,6 +625,24 @@ section('the DIRECTOR arms and runs the scenes (the wiring, not the module)');
     ok(back && Math.abs(back.x - homeX) < 1,
       'and he came home to xstart when it ended (Step_0:2020)');
     eq(st.knight.animState, 0, 'with his state handed back to 0 (Step_0:2046)');
+
+    // ── AND THE CUT IS WORTH SOMETHING ────────────────────────────────────
+    // The whole scene exists for one line, run from obj_tensionbar's Draw
+    // from the shear on: `global.tension = clamp(global.tension, 0, 125)`.
+    // maxtension stays 250, spell costs are untouched, so this is the mod
+    // taking the top half of the party's options away for the rest of the
+    // run. Until the bar's Draw was wired the cutscene was a light show over
+    // a bar that still filled to 250.
+    eq(st.kaizo.tpscene, -1, 'k_tpscene rests at -1, the post-scene value');
+    ok(kaizoTensionClampActive(st), 'and that opens the clamp (>= 10 or -1)');
+    st.tension = 240;
+    stepFrame(st, inp(st));
+    keepAlive(st, { revive: true });
+    eq(st.tension, 125, 'THE CUT: 240 TP is 125 the next frame');
+    ok(st.entities.some((x) => x.alive && x.type?.name === 'kaizo_tensionbar_draw'),
+      'the bar survived its turn ends (state.survivesTurn)');
+    ok(st.entities.some((x) => x.alive && x.type?.name === 'kaizo_spell_controller'),
+      'and so did the spell controller, which used to die at the first');
   }
 }
 

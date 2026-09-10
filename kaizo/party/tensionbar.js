@@ -307,9 +307,19 @@ export function kaizoTensionbarDraw(state) {
  * placement the Draw's ordering requires. It is NOT named `obj_tensionbar`:
  * the sim's `i_ex` checks are name scans and nothing should start answering
  * them for a bar the sim does not otherwise instantiate.
+ *
+ * `stepOrder` PUTS IT LAST, and that is the point rather than a detail. The
+ * game runs this in a Draw, so every Step and End Step of the frame has
+ * already happened when the clamp lands; sim/entity.js sorts the End Step
+ * phase by `stepOrder` and then creation order, and this entity is built
+ * with the scene — near the FRONT of creation order, which would clamp
+ * before the knight, the director and the menu had run. A large stepOrder
+ * moves it behind all of them. That trailing frame is the mechanic: a graze
+ * that pushes past 125 can still be spent on the frame it lands.
  */
 export const tensionbarDraw = {
   name: 'kaizo_tensionbar_draw',
+  stepOrder: 1000,
   create(e) {
     e.visible = false;
     e.depth = 0;
