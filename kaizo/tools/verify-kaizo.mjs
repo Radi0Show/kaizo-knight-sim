@@ -746,7 +746,7 @@ if (KV.C) {
       }
       console.log(`  ${rdPassed ? '--  ' : 'WIP '} check-oracle-roaringdelta: `
         + `${rdPassed ? 'skipping or passing' : 'FAILING'} (not enforced — the `
-        + "finale runs one frame late from the roar's C+214; see the ledger)");
+        + "three named cells remain: the C+214 clock write, chargeuptimer's missing same-frame tick, one star x at 6e-5; see the ledger)");
 
       let rdSab = true;
       try {

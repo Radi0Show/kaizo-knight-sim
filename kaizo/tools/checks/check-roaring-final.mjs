@@ -467,8 +467,20 @@ console.log('5. final_con 1 — the spiral, and the RNG budget');
 
   // THE HAND-OVERS, in order and at their measured frames.
   assert(rec.phase['1.1'] > rec.phase['1.0'], 'attack_con 0 -> 1 (attack_grav reaches 12.5)');
-  assertEq(rec.phase['1.1'] - rec.phase['1.0'], 243, 'attack_con 0 lasts 243 frames');
-  assert((rec.phase['1.1.5'] ?? -1) > rec.phase['1.1'],
+  // 242, AND THE NUMBER IS THE MOD'S NOW, NOT THIS SIM'S. It read 243 from
+  // 2026-08 until 2026-09-09, measured off the translation itself — which is
+  // all this file's numbers ever were (see the header). The RoaringDelta locks
+  // of 2026-09-09 settle it: final_con 0 -> 1 at C+120 and attack_con 0 -> 1 at
+  // C+362 on all four 2,400-frame launches, A-Side and B-Side, so the span is
+  // 242. The sim printed 243 because the "attack_grav >= 12.5" gate was an
+  // exact JS comparison where the runner's is epsilon-tolerant, and
+  // scr_approach's ramp sits at 12.499999999999904 on the frame the game fires
+  // (roaring-final.js at that gate carries the arithmetic). Fixing the
+  // comparison moved this to 242 and turned a green assertion RED, which is the
+  // right way round: a self-measured expectation should fail the moment a
+  // recording disagrees with it. check-oracle-roaringdelta owns this claim now.
+  assertEq(rec.phase['1.1'] - rec.phase['1.0'], 242,
+    "attack_con 0 lasts 242 frames (C+120 -> C+362, the locks' number)");  assert((rec.phase['1.1.5'] ?? -1) > rec.phase['1.1'],
     'attack_grav reaching 18 starts the lerped attack_con 1.5 -> 2 -> 2.5 -> 3');
   assert((rec.phase['1.2'] ?? -1) > (rec.phase['1.1.5'] ?? -1),
     'the lerp lands on attack_con 2 exactly (gmlEq, not ===)');
