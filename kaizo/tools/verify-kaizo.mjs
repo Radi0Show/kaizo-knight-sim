@@ -554,6 +554,67 @@ if (KV.C) {
     // a constant sabotage (alarm 14 -> 13, divisor 9.5 -> 9, the X-Slash
     // row dropped). Deterministic, no recording, seconds.
     'check-noelle-menu', 'check-spells-kaizo',
+    // WIRED 2026-09-10, the round that landed them. Eight checks were written,
+    // passed, and left unenforced — which in this launcher means they RUN and
+    // are REPORTED and `npm run verify:kaizo` exits 0 with any of them red.
+    // That is the same shape as the four idlesprite writes and the vertical
+    // splitter: work that exists and guards nothing. Two reviewers and the
+    // round's critic all raised it independently, so it is closed here rather
+    // than carried again.
+    //
+    // What each one stands over, and why it is safe to enforce (all are
+    // deterministic, need no recording, and run in seconds):
+    //   check-heroes-draw          the party is DRAWN at all — obj_heroparent's
+    //                              Draw deltas, the gloom tint and the frozen
+    //                              statue, against a stub canvas.
+    //   check-tensionbar-draw      the B-Side sliced bar, its +32 readout drop
+    //                              and the shard bleed, asserted against the
+    //                              renderer's own fill expression rather than a
+    //                              typed constant (that equality is what caught
+    //                              the 40px frame error this round).
+    //   check-render-depth-kaizo   the two measured depth defects: the
+    //                              boxsplitter's hell surface deferred, and
+    //                              quickslash_big's registry entry.
+    //   check-render-manifest-kaizo the ports run against the REAL manifest and
+    //                              PNGs — every other render gate stubs every
+    //                              sprite to a 32x32 placeholder.
+    //   check-quickslash-draw      the finisher's Draw: the soul's sub-image
+    //                              and the Create's own cuty.
+    //   check-scenes               the four scene state machines by hand,
+    //                              including k_nhscene's down-latch fix, which
+    //                              had no enforced guard at all.
+    //   check-split-growtangle-vertical  the B-Side vertical tear.
+    //   check-hpscene              the max-HP shear (see its own note above).
+    'check-heroes-draw', 'check-tensionbar-draw', 'check-render-depth-kaizo',
+    'check-render-manifest-kaizo', 'check-quickslash-draw', 'check-scenes',
+    'check-split-growtangle-vertical',
+    // WIRED 2026-09-10 with k_hpscene, the MAX-HP SHEAR — the fourth
+    // turn-hijacking scene (obj_knight_enemy Step_0:54-63 arms it,
+    // :1771-1929 plays it) and THE ONLY ONE THAT IS NOT B-SIDE GATED. Its
+    // arm rides V-C's `knightFirstStep` hook, so it is wired on the page's
+    // default version rather than behind the B-Side flag: a party carrying
+    // more than 200 / 230 / 180 / 180 gets its max HP cut on the fight's
+    // opening frames, on BOTH routes.
+    //
+    // NO PLAYER CAN REACH IT TODAY, and that is worth saying plainly rather
+    // than leaving the reader to infer it. The shipped app has no save import
+    // and no path that builds an over-ceiling party — every roster it can make
+    // comes from scr_gamestart's 160 / 190 / 140, which is under every
+    // ceiling. The scene is translated against the day one exists, and the
+    // check below is the only thing standing over it until then.
+    //
+    // It is enforced although the byte gate cannot see it, and that is the
+    // point of wiring it: the arm needs `global.maxhp` or `global.hp` ABOVE
+    // 200 / 230 / 180 / 180 and both recordings run scr_gamestart's default
+    // 160 / 190 / 140, so nothing in fullfight/ can ever exercise this branch.
+    // The check is the only gate on it. It drives real fights through
+    // buildKaizoScene and the real director (156+ assertions, no recording,
+    // seconds), asserts the cut lands on the frame state 6 runs and not
+    // before, asserts the opening menu is HELD for the whole scene against a
+    // control that opens it on frame 1, and pins the mod's own
+    // `hp_scene = 5.1` typo (Step_0:1849) by its consequence: states 5
+    // through 8 each run exactly twice.
+    'check-hpscene',
     // THE ONLY CHECK HERE THAT IS NOT POSITIVE-ONLY. Everything above asserts
     // that our own modules do what we believe; this one holds the generated
     // V-C schedule against a RECORDING OF ENDERCAT8'S MOD
@@ -664,7 +725,7 @@ if (KV.C) {
     // and the generic line below ("not wired into the launcher yet") is the
     // wrong reason for them anyway — they are unenforced because they are
     // RED against the mod, which is a different and louder fact.
-    const REPORTED_BELOW = new Set(['check-oracle-roaringdelta']);
+    const REPORTED_BELOW = new Set(['check-oracle-roaringdelta', 'check-colours-sheet']);
 
     for (const file of checks) {
       const name = file.replace(/\.mjs$/, '');
@@ -759,6 +820,70 @@ if (KV.C) {
         + 'the real divergences mask the injected ones; see the note above)');
     } else {
       ok(false, 'check-oracle-roaringdelta.mjs is missing — the roar is held against nothing');
+    }
+
+    // ── check-colours-sheet — REPORTED, NOT ENFORCED, and RED ──────────────
+    //
+    // The four MODE 1 colour LOCK recordings of 2026-09-09 (kaizo-mod/locks/
+    // cs_tunnel2-raw, cs_starstorm4-raw, cs_multislash1-raw, cs_splitter1-raw)
+    // carry a per-frame DRAW-FIELD sheet, and this check is the first thing
+    // that reads them: it replays each locked attack through the launcher and
+    // diffs sprite_index, image_blend, visible and the mod's own r/g/b/outline/
+    // coltimer, object by object.
+    //
+    // It is NOT in WIRED because it FAILS, and the failure is the whole point.
+    // What it settles is in the ledger's 2026-09-10 section; what it still
+    // finds is real and unfixed — obj_particle_generic (3,774 recorded rows,
+    // the slash-mark debris, colour gap G6) and obj_fake_gt are MISSING
+    // entirely, four objects leave sprite_index unset, and
+    // every merge_color ramp on the sheet parts from the sim on exactly the
+    // rows whose exact value is a .5 (colour gap G9: the game narrows the
+    // amount to float32 and ROUNDS HALF TO EVEN; sim/gml.js:407-413 rounds
+    // half UP). Wiring it would redden the gate for defects the gate cannot
+    // fix; hiding it would lose the only measurement of the mod's paint there
+    // is. So it prints, like the two gates above.
+    //
+    // ITS SABOTAGE IS ENFORCED, and that is the difference from the roar's:
+    // the four corruptions land in their OWN GROUP (an object's blend, its
+    // sprite name, one r cell, one `visible`) rather than at a named cell, so
+    // a real divergence elsewhere cannot mask them.
+    //
+    // RETRACTED 2026-09-10, and left here rather than deleted because the
+    // claim was banked as a measured fact and acting on it would have DELETED
+    // A CORRECT TINT. This block used to read "obj_knight_pointing_star is
+    // tinted where the mod paints it c_white on all 1,637 rows" and called it
+    // the largest colour divergence on any sheet. It is an INSTRUMENT
+    // ARTEFACT: that object never writes `image_blend` at all, so the sheet's
+    // column reads c_white for a star the mod really does tint — it passes the
+    // colour as draw_sprite_ext's own blend argument. The sim is right. A
+    // column an object never writes is now set aside explicitly in the check
+    // (NEVER_WRITTEN), the way check-oracle-roaringdelta sets aside its
+    // cosmetic columns, so this class of claim cannot be made again.
+    //
+    // Flip the first line to ok(...) in the same commit that makes the check
+    // green against the mod.
+    const colourSheet = join(checkDir, 'check-colours-sheet.mjs');
+    if (existsSync(colourSheet)) {
+      let csPassed = true;
+      try {
+        execFileSync(process.execPath, [colourSheet, '--quiet'], { stdio: 'pipe' });
+      } catch {
+        csPassed = false;
+      }
+      console.log(`  ${csPassed ? '--  ' : 'WIP '} check-colours-sheet: `
+        + `${csPassed ? 'skipping or passing' : 'FAILING'} (not enforced — obj_particle_generic`
+        + ' and obj_fake_gt unmodelled, four objects with sprite_index unset, and merge_color'
+        + " rounds half-UP where the game rounds half-to-EVEN; see the ledger's 2026-09-10 section)");
+
+      let csSab = true;
+      try {
+        execFileSync(process.execPath, [colourSheet, '--sabotage'], { stdio: 'pipe' });
+      } catch {
+        csSab = false;
+      }
+      ok(csSab, 'check-colours-sheet --sabotage (the draw-sheet differ can actually fail)');
+    } else {
+      ok(false, 'check-colours-sheet.mjs is missing — nothing the mod PAINTS is held against it');
     }
 
     // THE OTHER TEN. sabotage-oracle-schedule guards one of the wired oracle
