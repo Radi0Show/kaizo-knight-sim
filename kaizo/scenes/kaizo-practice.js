@@ -66,6 +66,7 @@ import { castSpell, resolveActPages } from '../../sim/spells.js';
 import { needsSpellphase, createSpellphase, stepSpellphase } from '../../sim/spellphase.js';
 import {
   stepScenes, scrMnendturnScenes, sceneHijacksTurn, attachSceneKnight,
+  applySceneHandbackCharturn,
 } from '../party/scenes.js';
 import { rngNext } from '../../sim/rng.js';
 import {
@@ -465,15 +466,29 @@ const director = {
     // a chosen DEFEND stays visibly held for the whole enemy turn.
     (e.hooks.stepHeroes ?? stepHeroes)(state);
     // obj_knight_enemy's reaction timers — hurt strobe, shake, block vfx.
+    // Its LAST line is `damagereductiontimer++; if (== 1) {...}`, which is
+    // Step_0:31-32 -- the top of the knight's Step, twenty-odd lines above
+    // everything below.
     stepKnightAnim(state);
+    // THE KNIGHT'S FIRST STEP -- Step_0:54-63, still inside
+    // `if (damagereductiontimer == 1)`. The mod's max-HP shear (k_hpscene) is
+    // armed HERE and nowhere else: not at a turn end like the other three, and
+    // not behind k_sideb. It has to run BEFORE the scene block below, because
+    // in the GML the arm is at :56 and the scene's own state 1 is at :1777 --
+    // the same frame. Putting it in `postAnim` (which runs after the scenes)
+    // would cost the scene its opening frame.
+    e.hooks.knightFirstStep?.(state);
     // THE SCENES STEP WITH THE KNIGHT, which is whose Step_0 they live in
-    // (obj_knight_enemy Step_0:1930-2049 is k_tpscene; its neighbours are
-    // the other two). B-Side only: the tp block sits inside
-    // "if (k_sideb || k_hpscene > 0)" and stepScenes gates the tp arm on
-    // that flag, but calling the whole driver only on the B-Side leaves
-    // V-C's scene state untouched rather than merely unchanged -- the
-    // A-Side byte gate never reaches this line.
-    if (state.kaizo?.sideb) {
+    // (obj_knight_enemy Step_0:1774-1929 is k_hpscene and :1930-2049 is
+    // k_tpscene, both inside one `if (k_sideb || k_hpscene > 0)`; the other
+    // two are its neighbours above). THE GATE IS THAT GML LINE, LITERALLY --
+    // an A-Side run that armed the shear must still step, which is the whole
+    // reason the mod wrote `k_sideb || k_hpscene > 0` instead of `k_sideb`.
+    // With neither true, V-C's scene state is left UNTOUCHED rather than
+    // merely unchanged (ensureScenes is never called), and the A-Side byte
+    // gate never reaches this line -- the party the recordings run is the
+    // default 160/190/140, under every ceiling in HP_CEILINGS.
+    if (state.kaizo?.sideb || (state.kaizo?.hpscene ?? 0) > 0) {
       // THE SCENES POSE THE REAL KNIGHT. Every write in kaizo/party/scenes.js
       // is a write to obj_knight_enemy's own variables, and binding hands
       // them to the instance this director already steps -- so the TP slash
@@ -493,6 +508,25 @@ const director = {
     // rises with the arena and holds through the sweep until alarm[2] fires,
     // which is the span the controller decrements turntimer over.
     e.hooks.knightEndStep?.(state, { clockOn: e.clockOn });
+    // THE MUSIC IS A **CREATE** EVENT AND MUST NOT BE BEHIND THE SCENE GATE.
+    // `global.batmusic[1] = mus_loop_ext(global.batmusic[0], ...)` is in
+    // obj_battlecontroller's CREATE (`knight.ogg`, set as batmusic[0] by the
+    // room), so it has already fired before any instance exists to set
+    // special_con -- and `special_con > 0` only makes the controller's STEP
+    // exit (gml_Object_obj_battlecontroller_Step_0.gml:23). This lived below
+    // the gate, which was harmless while every scene armed at a turn end and
+    // wrong the moment k_hpscene could arm on the knight's FIRST STEP: an
+    // overlevelled party started the fight to 106 FRAMES OF SILENCE.
+    // MEASURED, not estimated: k_hpscene's hand-back (state 8) lands on frame
+    // 107 of a V-C fight built with the party over every ceiling — the ladder
+    // is alarm-driven and carries no RNG, so it is 107 for every seed — and
+    // the music's first cue moved with it, frames 1 through 106 playing
+    // nothing. check-hpscene's `the fight music started ... on frame 1, not
+    // after the scene` is the assertion that holds this line down.
+    if (!e.musicStarted) {
+      e.musicStarted = true;
+      cueLoop(state, 'mus_knight');
+    }
     // THE SCENE OWNS THE TURN WHILE IT RUNS. Arming one sets myfight = 99,
     // mnfight = 99 and charturn = -1 (scr_mnendturn's block), and those three
     // take obj_battlecontroller out of every branch that opens a menu, runs a
@@ -502,6 +536,32 @@ const director = {
     // sits AFTER stepKnightAnim, stepScenes and his end step, and before the
     // director's turn machinery below.
     if (sceneHijacksTurn(state)) return;
+    // ...AND THE CONTROLLER TAKES `global.mnfight` BACK THE FRAME IT RESUMES.
+    //
+    // A scene's last act writes mnfight by hand (k_hpscene state 8's
+    // `global.mnfight = 0` at Step_0:1909, k_tpscene's and k_nhscene's the
+    // same), and until this line existed NOTHING wrote the key again for the
+    // rest of the fight — a sticky value on a variable the game sequences
+    // itself, which CLAUDE.md law 2 forbids. The one reader in this repo is
+    // gloom.js's `scrIsphaseBullets` (vanilla scr_isphase("bullets") is
+    // `global.mnfight == 2`); its live caller passes `clockOn` explicitly, so
+    // the stale value was latent rather than live, and a fallback caller after
+    // a scene got "never the bullet phase" forever — gloom that glows and
+    // never drains.
+    //
+    // `clockOn` IS this director's mnfight == 2 (see fireTurnEndAlarm, where
+    // `mnfight = 0` is the only thing the trace can see and clockOn is what
+    // the harness reads it off), and it is the same value handed to
+    // kaizoGloomStep four lines above, so the mirror cannot disagree with what
+    // gloom was actually told this frame.
+    //
+    // ONLY WHEN THE KEY ALREADY EXISTS. A V-C fight whose party is under every
+    // ceiling never stands the scene state up at all, and this must not be the
+    // thing that creates it: `typeof` keeps the A-Side byte gate's runs
+    // byte-identical, and gloom's documented default (no key -> treat every
+    // frame as the bullet phase, since a dodge-only scene simulates nothing
+    // else) is left alone.
+    if (typeof state.kaizo?.mnfight === 'number') state.kaizo.mnfight = e.clockOn ? 2 : 0;
     // obj_dmgwriter's Draw is now stepped by stepFrame itself, AFTER the
     // endStep phase — the writers' throw rolls belong to the frame's END
     // slot, after every end-step consumer of the same frame. See the header
@@ -525,13 +585,7 @@ const director = {
     // then. `end_cutscene_version > 0` makes obj_battlecontroller's Draw, the
     // tension bar's and obj_attackpress's all exit on their first line, so the
     // whole battle UI goes at once.
-    // `global.batmusic[1] = mus_loop_ext(global.batmusic[0], ...)` in
-    // obj_battlecontroller's Create — the fight's track LOOPS for the whole
-    // battle. `knight.ogg`, set as batmusic[0] by the room.
-    if (!e.musicStarted) {
-      e.musicStarted = true;
-      cueLoop(state, 'mus_knight');
-    }
+    // (the `mus_knight` loop moved ABOVE the scene gate — see the note there.)
 
     // SWING DAMAGE LANDS BEFORE THE END-CUTSCENE CHECK AND BEFORE THE BAR
     // TICKS — the game's phase order: obj_heroparent's Other_10 resolves
@@ -1262,6 +1316,20 @@ const director = {
       // clears the stack so each turn's numbers start at the bottom again.
       resetDmgStack(state);
       openMenu(state);
+      // THE MAX-HP SHEAR HANDS THE FIRST TURN TO A CHARACTER OF ITS OWN
+      // CHOOSING, and this is the one menu open in the whole fight that the
+      // game does NOT reach through scr_mnendturn.
+      //
+      // k_hpscene state 8 (Step_0:1911-1922) sets `global.charturn` to the
+      // first living member and then releases special_con in the same Step, so
+      // obj_battlecontroller's next Step opens the command phase ON that
+      // character. `openMenu` above is scr_mnendturn's reset as well as the
+      // open — including its `charturn = 0` — which is right for every LATER
+      // turn and wrong for this one, so the scene's pick is re-applied here.
+      // One-shot (the receipt carries `applied`), and a no-op on every fight
+      // where no scene ever armed: applySceneHandbackCharturn reads
+      // `state.kaizo.scenes` directly and never stands it up.
+      applySceneHandbackCharturn(state);
       // PROCESS THIS FRAME'S INPUT TOO. `stepMenu` runs earlier in the same
       // endStep (see above), when the menu was still closed and it did
       // nothing — so without this the menu opens at the end of frame N and

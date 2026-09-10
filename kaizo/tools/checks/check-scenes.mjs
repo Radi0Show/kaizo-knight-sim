@@ -54,6 +54,9 @@ import {
   kaizoTensionClampActive, kaizoTensionbarDraw, kaizoEffectiveTpCeiling,
   KAIZO_SIDEB_TP_CAP, MAX_TENSION,
 } from '../../party/tensionbar.js';
+// The no-hit scene's four `*downmessage = true` latches (Step_0:1520-1523)
+// live in freeze.js — its `downLatch` is what `downMessages` reads.
+import { downMessages, ensureFreezeState } from '../../party/freeze.js';
 
 let failures = 0;
 let checks = 0;
@@ -353,8 +356,24 @@ console.log('k_nhscene — the reward that kills you');
   assertEq(w[0].damage, NH_DAMAGE_TEXT, 'D the headline number is the 18-digit STRING');
   assert(w.slice(1).every((r) => r.type === 12), 'D the other four are type 12');
   assertEq(st.kaizo.specialCon, 0, 'D special_con released at state 8');
-  assert(st.kaizo.krisdownmessage && st.kaizo.noelledownmessage,
-    'D every down-message is suppressed — the Knight said it instead');
+
+  // ── THE SUPPRESSION, ASSERTED AT ITS EFFECT (Step_0:1520-1523) ──────────
+  // This block used to read `st.kaizo.krisdownmessage`, which is the mod's
+  // variable name and NOT an address anything in this repo reads — so it went
+  // green while the suppression did nothing and the fall line printed on the
+  // next turn anyway. The latch `downMessages` actually consults is
+  // freeze.js's `downLatch`, and the honest assertion is what the reader does
+  // with it.
+  const dl = ensureFreezeState(st).downLatch;
+  assert(!!dl && dl.kris && dl.susie && dl.ralsei && dl.noelle,
+    'D all four down-message latches are set');
+  assertEq(downMessages(st).battlemsg, null,
+    'D ...and downMessages prints NOTHING for the slot the Knight one-shot');
+  // NON-VACUOUS: the identical state WITHOUT the scene does print a line.
+  const ctl = mk();
+  ctl.partyHp[0] = 0;
+  assert(/Kris|move your body/.test(downMessages(ctl).battlemsg ?? ''),
+    'D control: an unsuppressed down really does print one');
 }
 {
   // The nohitmode fork: it ABORTS at state 5, spends nothing, kills nobody.
@@ -584,8 +603,15 @@ console.log('determinism');
   // stepScenes is callable directly — the "per-frame step the scene owner can
   // drive" the work item asks for.
   const ran = stepScenes(st);
-  assertJson(ran, { nh: false, sg: false, tp: false },
-    'I stepScenes is a no-op with nothing armed');
+  // FOUR keys since 2026-09-10: `hp` is k_hpscene, the max-HP shear
+  // (Step_0:1774-1928), which is NOT B-Side gated and has its own check —
+  // kaizo/tools/checks/check-hpscene.mjs. It reports false here for the same
+  // reason the other three do: nothing armed it.
+  assertJson(ran, {
+    nh: false, sg: false, hp: false, tp: false,
+  }, 'I stepScenes is a no-op with nothing armed');
+  assertEq(r.hpscene, 0, 'I report reads k_hpscene too');
+  assertEq(sceneDraws(st).hp, 0, 'I ...and its draw budget starts at 0');
 }
 
 console.log('');

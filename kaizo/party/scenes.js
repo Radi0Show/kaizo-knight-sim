@@ -1,4 +1,5 @@
-// KAIZO V-D (B-Side) — THE THREE TURN-HIJACKING SCENES.
+// KAIZO — THE FOUR TURN-HIJACKING SCENES. Three are the B-Side's (V-D);
+// k_hpscene is BOTH ROUTES'.
 //
 // V-C/V-D recreation of EnderCat8's Kaizo Roaring Knight — DO NOT PUBLISH
 // WITHOUT PERMISSION (kaizo/HANDOFF.md §5-C). Everything below describes
@@ -9,12 +10,19 @@
 // line numbers that dump's:
 //
 //   gml_Object_obj_knight_enemy_Create_0.gml       115-136  the scene vars
-//   gml_Object_obj_knight_enemy_Step_0.gml         1408-1541 k_nhscene
+//   gml_Object_obj_knight_enemy_Step_0.gml         54-63     the k_hpscene ARM
+//                                                  1408-1541 k_nhscene
 //                                                  1543-1545 the k_sgscene arm
 //                                                  1547-1770 k_sgscene
+//                                                  1771-1929 k_hpscene
 //                                                  1930-2049 k_tpscene
+//                                                  2050-2052 the shared float
 //                                                  679-756   turnsafternohit
-//   gml_GlobalScript_scr_mnendturn.gml             148-169   BOTH arms
+//   gml_GlobalScript_scr_mnendturn.gml             148-169   BOTH B-Side arms
+//   gml_GlobalScript_scr_marker.gml                scr_marker (obj_marker)
+//   gml_GlobalScript_scr_minishakeobj.gml          scr_minishakeobj
+//   gml_Object_obj_shakeobj_*.gml                  what it spawns
+//   gml_GlobalScript_scr_complete_save_file.gml:269 get_swordcolor
 //   gml_Object_obj_spell_snowgrave_Draw_0.gml      the snowflake spawner, and
 //                                                  the NEUTERING at line 165
 //   gml_Object_obj_spell_snowgrave_snowflake_*.gml the commandeered flakes
@@ -25,11 +33,23 @@
 //   gml_Object_obj_battlecontroller_Step_0.gml:23  what special_con DOES
 //   gml_Object_obj_spellphase_Step_0.gml:8         what spelldelay DOES
 //
-// ═══ WHAT THESE THREE ARE ═══════════════════════════════════════════════════
+// ═══ WHAT THESE FOUR ARE ════════════════════════════════════════════════════
 //
 // Each one takes a WHOLE TURN away from the player and plays a cutscene the
-// A-Side fight has no equivalent of. Together they are the third of the Weird
-// Route that the sim was missing (WEIRD-ROUTE.md §6.C item 6).
+// vanilla fight has no equivalent of. Three of them are the third of the Weird
+// Route that the sim was missing (WEIRD-ROUTE.md §6.C item 6); the fourth,
+// k_hpscene, is NOT B-Side gated and is the only one an A-Side run can see.
+//
+//   k_hpscene  the Knight CUTS THE PARTY'S MAX HP DOWN — 200 / 230 / 180 / 180
+//              for Kris / Susie / Ralsei / Noelle. Armed on his FIRST STEP
+//              (Step_0:54-63, inside `if (damagereductiontimer == 1)`), NOT at
+//              a turn end and NOT behind `k_sideb`: the guard is
+//              `!practicemode && !nohitmode` and four threshold tests on
+//              global.maxhp and global.hp. The thresholds are EXACTLY
+//              scr_gamestart's chapter-3 values plus a margin, so a default
+//              save (160/190/140) never trips it and an IMPORTED OVERLEVELLED
+//              SAVE always does. That is the whole point of the scene: it is
+//              the mod's answer to bringing a maxed file to the fight.
 //
 //   k_tpscene  the Knight SLICES THE TP BAR. Armed by scr_mnendturn at the end
 //              of the turn after atk_Frenzy1. Its state 5 is what sets
@@ -50,8 +70,17 @@
 // WEIRD-ROUTE.md §6.C item 6 says all three hijack via
 // `special_con = 1; global.myfight = 99; global.mnfight = 99; charturn = -1`.
 // **That is right for two of the three and wrong for k_sgscene.** Read the
-// three sites:
+// four sites:
 //
+//   k_hpscene  NOTHING at the arm (Step_0:56-62 assigns `k_hpscene = 1` and
+//              nothing else). The hijack is in the SCENE: :1776 re-asserts
+//              `special_con = 1` on every frame `k_hpscene > 0`, the way
+//              k_nhscene does, and state 1 (:1780-1782) writes charturn -1 /
+//              mnfight 99 / myfight 99. Cleared at :1924 — and state 8 is the
+//              only one of the four that HANDS THE TURN BACK by hand:
+//              `mnfight = 0; myfight = 0; charturn = <first living>` (:1909-
+//              1922), because it fires on the fight's opening frames, before
+//              any turn machinery has ever run.
 //   k_tpscene  scr_mnendturn:154-158 sets k_tpscene/special_con/myfight/
 //              mnfight/charturn. Step_0:1935-1938 sets them AGAIN (charturn
 //              -1, mnfight 99, myfight 99, state 10). Cleared at :2042.
@@ -94,6 +123,16 @@
 // `state.kaizo.scenes.draws`, split per scene, and check-scenes asserts the
 // exact budgets.
 //
+//   k_hpscene   state 3 only: ONE `choose(20, -20)` — the slash mark's opening
+//               tilt (Step_0:1817). `scr_marker` itself draws nothing
+//               (gml_GlobalScript_scr_marker.gml is three lines and no
+//               randoms), `get_swordcolor()` is a switch over a settings
+//               value, `scr_minishakeobj` spawns a deterministic obj_shakeobj,
+//               and every other state is sounds, lerps and the min() cut.
+//               Total for a whole hp scene: 1. The doubling described under
+//               THE PRESERVED BUG below starts at state 5, AFTER the only
+//               draw, so it does not multiply this number — which is exactly
+//               the kind of claim a check has to pin rather than assume.
 //   k_tpscene   state 5 only: THREE random_range, spawning the sheared bar top
 //               (Step_0:1994-1996 — image_angle, hspeed, vspeed, in that
 //               order). Every other state is sound + lerps: ZERO draws. Total
@@ -126,6 +165,39 @@
 //                              reaches a NOELLE target -> 3 [vspeed's
 //                              random_range, then its choose, then the graze
 //                              pitch]
+//
+// ═══ THE PRESERVED BUG — k_hpscene state 5 ══════════════════════════════════
+//
+// Step_0:1849 is
+//
+//     hp_scene = 5.1;
+//
+// with NO `k_`. `hp_scene` occurs exactly ONCE in the whole kaizo dump — that
+// write — and has no reader anywhere (whole-dump grep, which is the only kind
+// CLAUDE.md trusts). So it is a typo for `k_hpscene = 5.1`, it creates a dead
+// instance variable, and `k_hpscene` STAYS 5.
+//
+// The consequence is not cosmetic and is not a one-frame wobble. The scene
+// advances only on `scr_delay_var("k_hpscene", 6, 2)`, an ALARM two frames
+// out, so the `k_hpscene == 5` branch runs on BOTH of those frames:
+//
+//   f+0  state 5 runs: two snd_knight_cut, image_index 3, an image_index
+//        lerp, an obj_shake at shakex 10, the mark's flash-out, and delay->6
+//   f+1  `k_hpscene` is STILL 5 — all of it again, and a SECOND delay->6
+//   f+2  the first alarm lands: state 6 (the max-HP cut), delay->7
+//   f+3  the second alarm lands and drives `k_hpscene` back to 6: the cut
+//        runs a second time (min() makes it idempotent), and a second delay->7
+//   ...  every state from 6 on therefore runs EXACTLY TWICE, in lockstep one
+//        frame apart, all the way to state 8's hand-back. It does not compound
+//        past two: 6, 7, 7.2 and 8 each park on a wait value, so each run arms
+//        exactly one successor.
+//
+// NOT FIXED, and marked here and at the site (CLAUDE.md law 4 / "Never pin a
+// value the game sequences itself with"). The double sounds, the double
+// screen shake and the doubled hand-back are what the mod does. The one thing
+// this module does NOT reproduce is a phantom variable nothing reads: the
+// write is recorded as `sc.hp.hpSceneTypo` so a check can assert it happened
+// and assert that `k_hpscene` did not move because of it.
 //
 // ═══ WHAT IS NOT HERE ═══════════════════════════════════════════════════════
 //
@@ -179,6 +251,13 @@
 // from), and — through the modules that own them — `state.partyHp`,
 // `state.chardead` and `state.kaizo.freeze`.
 //
+// ONE EXCEPTION, and it is deliberate: k_hpscene's hand-back (Step_0:1911-
+// 1922) also writes `state.menu.charturn`, because that — not
+// `state.kaizo.charturn` — is where this engine keeps `global.charturn`, and
+// a scene that picks whose turn it is and writes only its own mirror has
+// computed the right answer into an address nothing reads. See
+// applySceneHandbackCharturn.
+//
 // It does NOT edit freeze / gloom / tensionbar / roster / damage / heroes. It
 // imports them and states its requirements:
 //
@@ -203,18 +282,37 @@
 import { spawn, destroy } from '../../sim/entity.js';
 import { gmlRandom, gmlRandomRange, gmlChoose } from '../../sim/rng.js';
 import { lerp, lengthdirX, lengthdirY, pointDirection, gmlRound } from '../../sim/gml.js';
-import { cue } from '../../sim/audio.js';
+import { cue, cueStop } from '../../sim/audio.js';
 import { scrLerpvar } from '../../sim/lerpvar.js';
 import { scrShakescreen } from '../../sim/shake.js';
 import { KNIGHT } from '../../sim/actors.js';
+import { PARTY as SIM_PARTY } from '../../sim/damage.js';
+import { getSwordcolor } from '../attacks/kaizo-colors.js';
 import { stepSnowgraveFreeze, ensureFreezeState } from './freeze.js';
 import { kaizoTensionClampActive, kaizoTpscene } from './tensionbar.js';
-import { writerAnchor, charIdOf, rosterSize, slotDepth } from './roster.js';
+import {
+  writerAnchor, charIdOf, rosterSize, slotDepth, havechar, slotOf, memberAt,
+} from './roster.js';
 import { scrPicktargetWeighted, scrDead } from './damage.js';
 
 // ───────────────────────────────────────────────────────────────────────────
 // Constants, all cited
 // ───────────────────────────────────────────────────────────────────────────
+
+/**
+ * THE FOUR CEILINGS, CHARACTER-INDEXED (index 0 unused, as `global.maxhp[0]`
+ * is in the mod). One table, because the mod uses the same four numbers twice:
+ *
+ *   Step_0:56   `global.maxhp[1] > 200 && scr_havechar(1)` ... the ARM test
+ *   Step_0:60   `global.hp[1] > 200 && scr_havechar(1)`    ... the ARM test
+ *   Step_0:1871 `global.maxhp[1] = min(global.maxhp[1], 200)` ... the CUT
+ *
+ * They sit just above scr_gamestart's chapter-3 values (Kris 160, Susie 190,
+ * Ralsei 140 — sim/damage.js PARTY; Noelle's own 120, kaizo/party/noelle.js),
+ * which is why a default save cannot arm this scene and an imported
+ * overlevelled one always can.
+ */
+export const HP_CEILINGS = [0, 200, 230, 180, 180];
 
 /** `kaizo_prevatk == "atk_Frenzy1"` — scr_mnendturn:152. Phase 1's last node. */
 export const TP_ARM_PREVATK = 'atk_Frenzy1';
@@ -275,6 +373,10 @@ export function ensureScenes(state) {
   if (typeof k.tpscene !== 'number') k.tpscene = 0;
   if (typeof k.sgscene !== 'number') k.sgscene = 0;
   if (typeof k.nhscene !== 'number') k.nhscene = 0;
+  // Create_0:124. NOT re-zeroed on the A-Side: Step_0:50's `k_hpscene = 0` is
+  // inside the `if (k_sideb)` block at :42, so a Normal Route run carries
+  // Create's 0 into the arm test eleven lines later.
+  if (typeof k.hpscene !== 'number') k.hpscene = 0;
   if (typeof k.specialCon !== 'number') k.specialCon = 0;
   if (k.scenes) return k.scenes;
 
@@ -299,6 +401,17 @@ export function ensureScenes(state) {
       remdepth: 88,
     },
     // ── per-scene bookkeeping ────────────────────────────────────────────
+    // k_hpscene. `mark` is the live hpslash_mark instance (Step_0:1813);
+    // `cut` records what the max-HP shear actually did, per CHARACTER id,
+    // because "the scene ran" and "the scene cut nothing" are otherwise the
+    // same observation once the numbers are already under the ceiling.
+    // `armedBy` names WHICH of the two arm tests fired (:56 maxhp, :60 hp) —
+    // they are separate `if`s and either can arm alone. `hpSceneTypo` is the
+    // dead `hp_scene = 5.1` write (see THE PRESERVED BUG in the header).
+    hp: {
+      mark: null, cut: null, armedBy: null, hpSceneTypo: 0,
+      runs: Object.create(null), minishakes: 0, handback: null,
+    },
     tp: { deadtp: null, nospellsaw: 0 },
     // k_sgtarget / k_sgnum / k_sgvol / k_sgpit / k_sgcyc / k_sgdmg /
     // k_sgcaster — Step_0:1562-1566, 1670-1671, and scr_spell:274.
@@ -318,7 +431,9 @@ export function ensureScenes(state) {
     writers: [],
     // ── the audit trail the check reads ──────────────────────────────────
     log: [],
-    draws: { tp: 0, sg: 0, nh: 0, flakes: 0 },
+    draws: {
+      hp: 0, tp: 0, sg: 0, nh: 0, flakes: 0,
+    },
     // scr_mnendturn, injectable. The default is the `with (obj_knight_enemy)`
     // block ONLY — the rest of scr_mnendturn (the turn reset, the menu, the
     // revive heal that this fight deletes) belongs to the turn system.
@@ -349,10 +464,11 @@ export function sceneStallsSpellphase(state) {
   return (state.kaizo?.spelldelay ?? 0) >= SG_SPELLDELAY_STALL;
 }
 
-/** True while ANY of the three is running. */
+/** True while ANY of the four is running. */
 export function sceneActive(state) {
   const k = state.kaizo ?? {};
-  return (k.tpscene ?? 0) > 0 || (k.sgscene ?? 0) > 0 || (k.nhscene ?? 0) > 0;
+  return (k.hpscene ?? 0) > 0 || (k.tpscene ?? 0) > 0
+    || (k.sgscene ?? 0) > 0 || (k.nhscene ?? 0) > 0;
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -687,6 +803,657 @@ export function scrMnendturnScenes(state) {
 }
 
 // ───────────────────────────────────────────────────────────────────────────
+// k_hpscene — Step_0:54-63 (THE ARM) and 1771-1929 (THE SCENE).
+// THE MAX-HP SHEAR: the fourth scene, and the only one an A-Side run reaches.
+// ───────────────────────────────────────────────────────────────────────────
+
+/**
+ * `obj_marker` — the game's generic one-shot sprite stamp.
+ *
+ * IT HAS NO CODE ENTRIES ANYWHERE IN THE DUMP (a whole-dump listing of
+ * `gml_Object_obj_marker_*` returns only the derived `_jitter` / `_wobble` /
+ * `_animateOnce` / `_blendmode` / `_palette` variants), so it is inert: nothing
+ * steps it, nothing draws itself with RNG in it, and creating one consumes no
+ * draws. sim/attacks/splitslash.js reached the same conclusion for the slash's
+ * marker and its `slashMarker` says so at length; this is the same object,
+ * declared here because a scene must not import an attack's internals.
+ */
+export const sceneMarker = { name: 'obj_marker' };
+
+/**
+ * `scr_marker(x, y, sprite)` — gml_GlobalScript_scr_marker.gml, whole:
+ *
+ *     thismarker = instance_create(arg0, arg1, obj_marker);
+ *     with (thismarker) { sprite_index = arg2; image_speed = 0; }
+ *     return thismarker;
+ *
+ * NOT `scr_dark_marker`, which is the same script plus `image_xscale = 2;
+ * image_yscale = 2` (sim/attacks/splitslash.js's scrDarkMarker). k_hpscene
+ * sets its own scales, so taking the doubling one would put the slash mark at
+ * 240 x 22 instead of 120 x 11.
+ */
+export function scrMarker(state, x, y, sprite) {
+  const m = spawn(state, sceneMarker, { x, y });
+  m.sprite_index = sprite;
+  m.image_speed = 0;
+  return m;
+}
+
+/**
+ * `obj_shakeobj` — gml_Object_obj_shakeobj_{Create_0,Other_10,Step_0}.gml.
+ *
+ * NOT obj_shake. obj_shake moves the CAMERA; this one grabs a single instance
+ * by `target` and walks its `x` back and forth around the position it held when
+ * the shake started, decaying by `shakereduct` per Step and destroying itself
+ * when the amplitude reaches zero. With scr_minishakeobj's 4/1 that is exactly
+ * four Steps: -3, +2, -1, 0.
+ *
+ * Create's `if (global.darkzone == 0) { shakeamt = 5; shakereduct = 1; }` is
+ * the light-world softening and is dead here twice over — the fight is in the
+ * dark world, and scr_minishakeobj overwrites both fields immediately after
+ * the create either way. The Create defaults are kept anyway so a future
+ * caller that does NOT overwrite them gets the right ones.
+ *
+ * `shakespeed` is set by scr_minishakeobj and read by NOTHING in this object
+ * (obj_shakeobj_ext and obj_shakeobj_susiezilla are the ones with a `timer`).
+ * Carried, not used — recording it is cheaper than re-reading three files to
+ * find out it does nothing.
+ */
+export const shakeObjTarget = {
+  name: 'obj_shakeobj',
+  create(e) {
+    e.visible = false;
+    e.active = 0;
+    e.target = null;
+    e.shakeamt = 10;
+    e.shakereduct = 2;
+    e.shakespeed = 1;
+    e.nowx = 0;
+    e.nowy = 0;
+    e.on = 1;
+    e.timer = 0;
+  },
+  step(e, state) {
+    // Step_0:1-4. Two separate `if`s in the original, not an else — but the
+    // destroy in the first makes the second's `active == 1` false anyway.
+    if (e.active === 0) { destroy(e); return; }
+    if (e.active === 1) {
+      if (!e.target || !e.target.alive) { destroy(e); return; }
+      e.shakeamt -= e.shakereduct;
+      e.on *= -1;
+      e.target.x = e.nowx + (e.shakeamt * e.on);
+      if (e.shakeamt <= 0) destroy(e);
+    }
+  },
+};
+
+/**
+ * `scr_minishakeobj()` — gml_GlobalScript_scr_minishakeobj.gml, whole:
+ *
+ *     shakeobj = instance_create(x, y, obj_shakeobj);
+ *     shakeobj.target = id;  shakeobj.shakeamt = 4;  shakeobj.shakereduct = 1;
+ *     with (shakeobj) { event_user(0); }
+ *
+ * `event_user(0)` is Other_10 and it runs IMMEDIATELY, inside the caller's
+ * Step — it latches `nowx = target.x` and flips `active` to 1. So the anchor
+ * is wherever the target stands at the call, which for k_hpscene state 2 is
+ * AFTER the `x += 26` two lines above it (Step_0:1791 then :1796).
+ *
+ * Shared, not private: any kaizo site that hits scr_minishakeobj can import it
+ * from here. It lives in this module because k_hpscene is its only caller in
+ * the knight's own code today; if a second family of callers appears it should
+ * move to a shared kaizo module rather than be copied.
+ *
+ * @returns {object|null} the shakeobj, or null when the target is gone.
+ */
+export function scrMinishakeobj(state, target) {
+  if (!target || !target.alive) return null;
+  const sh = spawn(state, shakeObjTarget, { x: target.x, y: target.y });
+  sh.target = target;
+  sh.shakeamt = 4;
+  sh.shakereduct = 1;
+  // event_user(0) — Other_10, right here in the caller's frame.
+  sh.active = 1;
+  sh.nowx = target.x;
+  sh.nowy = target.y;
+  ensureScenes(state).hp.minishakes += 1;
+  return sh;
+}
+
+/**
+ * `global.maxhp[charId]` for the shear — a READ that has to work on both
+ * routes, which is why it is not simply roster.js's maxhpOfChar.
+ *
+ * The mod keeps one array; this engine keeps the same number in up to three
+ * places and roster.js's reader only knows one of them:
+ *   - `state.partyMaxhp` — the SLOT-indexed mirror kaizo/scenes/kaizo-fight.js
+ *     builds for a roster version, and the array sim/damage.js's hpaverage and
+ *     render/menu.js's charbox already read;
+ *   - the roster member's own `maxhp`, which kaizo/party/damage.js reads
+ *     through maxhpOfChar for every ratio in the targeting tree;
+ *   - sim/damage.js's PARTY constants, which are all a NON-roster version
+ *     (V-C, the Normal Route) has.
+ * Preferring partyMaxhp first is what makes the cut visible on V-C at all:
+ * maxhpOfChar returns 0 there, because V-C installs no roster.
+ */
+function hpsceneMaxhp(state, charId) {
+  const slot = slotOf(state, charId);
+  if (slot < 0) return 0;
+  const arr = state.partyMaxhp;
+  if (Array.isArray(arr) && typeof arr[slot] === 'number') return arr[slot];
+  const m = memberAt(state, slot);
+  if (m && typeof m.maxhp === 'number') return m.maxhp;
+  return SIM_PARTY[slot]?.maxhp ?? 0;
+}
+
+/** `global.hp[charId]`, same two-route read. `state.partyHp` is slot-indexed. */
+function hpsceneHp(state, charId) {
+  const slot = slotOf(state, charId);
+  if (slot < 0) return 0;
+  return state.partyHp?.[slot] ?? 0;
+}
+
+/**
+ * `global.maxhp[charId] = value` — Step_0:1871-1874.
+ *
+ * Writes every mirror named above that IS a variable, because a cut that lands
+ * in one of them and not the others is the same defect as the four
+ * `idlesprite` writes that landed on the wrong object: computed correctly,
+ * read never. A V-C run has no `state.partyMaxhp` until this materialises one
+ * from the values the fight is actually using, which is the honest shape —
+ * `global.maxhp` exists in the game before the Knight ever touches it.
+ *
+ * THE THIRD MIRROR IS A CONSTANT AND THIS CANNOT REACH IT — recorded here
+ * rather than claimed away, because an earlier note in this lane said the
+ * shear "reaches every mirror this engine keeps the number in" and that is
+ * false. sim/damage.js's `PARTY` table is a frozen transcription of
+ * scr_gamestart's chapter-3 block (Kris 160 / Susie 190 / Ralsei 140), and
+ * three sites read `PARTY[target].maxhp` DIRECTLY rather than through
+ * `state.partyMaxhp`: scr_damage_maxhp's `ceil(maxhp * fraction)`
+ * (sim/damage.js:732 — Flurry's 0.66 slash), scr_damage's defence step ladder
+ * (:161) and Kris's `round(-maxhp / 2)` down value (:572, :788).
+ *
+ * WHY IT IS NOT PATCHED HERE. `PARTY` is a module-level `const` array shared
+ * by every state in the process; writing through it from a scene would poison
+ * the vanilla suites and every other fight built in the same run, and sim/ is
+ * vendored (CLAUDE.md law 6) so the read sites cannot be changed from this
+ * repo either.
+ *
+ * WHY IT DOES NOT CHANGE WHAT THIS SCENE DOES. The disagreement is owned by
+ * the OVERLEVELLED-IMPORT path, not by the shear: a party at 300 already
+ * disagrees with `PARTY`'s 160 before the Knight's first Step, and the shear
+ * moves `state.partyMaxhp` back TOWARD those constants (300 -> 200), never
+ * away. Every number this scene's own check measures — the cut, the hp clamp,
+ * maxhpOfChar, the slot mirror — comes from the two mirrors written here.
+ * What a live V-C fight would still get wrong afterwards is scr_damage_maxhp
+ * choosing 0.66 * 160 where the mod would take 0.66 * 200, and that is an
+ * import-path fault to fix where the import lands, with its own gate.
+ */
+function hpsceneSetMaxhp(state, charId, value) {
+  const slot = slotOf(state, charId);
+  if (slot < 0) return;
+  if (!Array.isArray(state.partyMaxhp)) {
+    state.partyMaxhp = [0, 1, 2].map((s) => hpsceneMaxhp(state, charIdOf(state, s)));
+  }
+  state.partyMaxhp[slot] = value;
+  const m = memberAt(state, slot);
+  if (m) m.maxhp = value;
+}
+
+/** `global.hp[charId] = value`. */
+function hpsceneSetHp(state, charId, value) {
+  const slot = slotOf(state, charId);
+  if (slot < 0 || !state.partyHp) return;
+  state.partyHp[slot] = value;
+}
+
+/**
+ * THE ARM — obj_knight_enemy Step_0:54-63, inside `if (damagereductiontimer
+ * == 1)`, i.e. THE KNIGHT'S FIRST STEP OF THE FIGHT:
+ *
+ *     if (!practicemode && !nohitmode)
+ *     {
+ *         if ((global.maxhp[1] > 200 && scr_havechar(1)) || (global.maxhp[2] > 230 && scr_havechar(2))
+ *          || (global.maxhp[3] > 180 && scr_havechar(3)) || (global.maxhp[4] > 180 && scr_havechar(4)))
+ *             k_hpscene = 1;
+ *         if ((global.hp[1] > 200 && scr_havechar(1)) || ... )
+ *             k_hpscene = 1;
+ *     }
+ *
+ * THREE THINGS THIS IS NOT:
+ *   1. NOT `k_sideb` gated. The two `if`s sit at :54, outside the `if (k_sideb)`
+ *      block that closes at :53 — so this fires on the Normal Route too, and
+ *      k_hpscene is the reason the scene block's own gate at :1771 reads
+ *      `k_sideb || k_hpscene > 0` rather than `k_sideb`.
+ *   2. NOT at a turn end. scr_mnendturn arms the other two; this one arms on
+ *      the knight's first Step, before the opening menu has ever been drawn.
+ *   3. NOT one test. They are two separate `if`s over two different arrays and
+ *      either can arm alone — an overlevelled save whose CURRENT hp has been
+ *      spent below the ceilings still trips the first, and a save whose maxhp
+ *      is legal but whose hp was pushed past it by an item trips only the
+ *      second. Both are evaluated (`sc.hp.armedBy` records which fired).
+ *
+ * `scr_havechar(c)` is roster.js's havechar: it walks `global.char[0..2]`, so
+ * a character who is not in this fight cannot arm the scene with a stale save
+ * value.
+ *
+ * @returns {boolean} whether the scene armed.
+ */
+export function armHpscene(state) {
+  const kn = state.knight ?? {};
+  // :54 — practice and no-hit mode both suppress it whole.
+  if (kn.practicemode || kn.nohitmode) return false;
+
+  const over = (read) => {
+    for (let c = 1; c <= 4; c++) {
+      if (read(state, c) > HP_CEILINGS[c] && havechar(state, c)) return c;
+    }
+    return 0;
+  };
+  // Source order: the maxhp test at :56, then the hp test at :60. Both run.
+  const byMaxhp = over(hpsceneMaxhp);
+  const byHp = over(hpsceneHp);
+  if (!byMaxhp && !byHp) return false;
+
+  // Only NOW does the scene state exist. A Normal Route fight whose party is
+  // under every ceiling must leave `state.kaizo.scenes` untouched — the same
+  // discipline kaizo-practice.js applies to the B-Side driver, and what keeps
+  // the A-Side byte gate from seeing this lane at all.
+  const sc = ensureScenes(state);
+  setScene(state, 'hp', 1);
+  sc.hp.armedBy = { maxhp: byMaxhp || null, hp: byHp || null };
+  return true;
+}
+
+/**
+ * The state table, as data. `wait` is the value the branch parks on; `delay`
+ * is the `scr_delay_var(value, frames)` it arms.
+ *
+ * STATE 5 IS THE ODD ONE OUT AND IT IS THE MOD'S BUG, NOT A TYPO HERE: its
+ * `wait` is 5, because Step_0:1849 writes `hp_scene = 5.1` — a variable with
+ * no `k_` and no reader in the whole dump. See THE PRESERVED BUG in this
+ * file's header for what that does to the rest of the ladder.
+ */
+export const HP_SCENE_STATES = [
+  { at: 1, wait: 1.1, delay: [2, 20], draws: 0 },
+  { at: 2, wait: 2.1, delay: [3, 16], draws: 0 },
+  { at: 3, wait: 3.1, delay: [4, 13], draws: 1 },
+  { at: 4, wait: 4.1, delay: [5, 9], draws: 0 },
+  { at: 5, wait: 5, delay: [6, 2], draws: 0, bug: 'hp_scene = 5.1' },
+  { at: 6, wait: 6.1, delay: [7, 20], draws: 0 },
+  { at: 7, wait: 7.1, delay: [7.2, 12], draws: 0 },
+  { at: 7.2, wait: 7.1, delay: [8, 14], draws: 0 },
+  { at: 8, wait: -1, delay: null, draws: 0 },
+];
+
+/** The state that actually shears the party's max HP — Step_0:1869-1881. */
+export const HP_CUT_AT = 6;
+
+/**
+ * `obj_battlecontroller.depth`, which NO GREP OF THE CODE DUMP CAN FIND.
+ *
+ * The runtime depth lives in the OBJECT DEFINITION (`__global_object_depths`),
+ * not in any event, and the dumped object CSV
+ * (knight-research/kaizo-mod/sprites/objects_kaizo.csv:1395) carries a stale 0
+ * for it — the same hole RENDER-CRITIC §4 records for obj_growtangle and
+ * obj_heart, whose CSV zeroes are really 5 and 1. sim/attacks/splitslash.js's
+ * `boxDepth()` set the precedent: fall back to 0, which keeps the RELATIVE
+ * order the code states (`- 10` in front of the controller, the mark `+ 5`
+ * behind the knight) — the part the dump does give us — and label it.
+ *
+ * Overridable on `state.kaizo.battlecontrollerDepth` for the day a recording
+ * measures it, exactly as `state.kaizo.tensionbarDepth` is for k_tpscene.
+ */
+function battlecontrollerDepth(state) {
+  return state.kaizo?.battlecontrollerDepth ?? 0;
+}
+
+/** GameMaker's `c_white`, as this engine's RGB triple. */
+const C_WHITE = [255, 255, 255];
+
+/**
+ * One frame of the max-HP shear. Everything below is Step_0:1771-1929 in
+ * order; `var _l = 2` (:1773) is the ease curve for every knight-scope lerp,
+ * the same constant k_tpscene uses.
+ */
+export function stepHpscene(state) {
+  const k = state.kaizo;
+  const s = k.hpscene ?? 0;
+  if (s <= 0) return false;
+  const sc = ensureScenes(state);
+  const kt = sc.knight;
+  const vx = state.view?.x ?? 0;
+  const vy = state.view?.y ?? 0;
+
+  // :1776 — re-asserted on EVERY frame the scene is up, the way k_nhscene does
+  // at :1412. Not a one-shot at the arm: nothing else in the fight can clear it
+  // while this is running.
+  k.specialCon = 1;
+  // POSITIVE EXECUTION (CLAUDE.md rule 5): without a per-state run count, "the
+  // ladder advanced" and "the ladder advanced and state 6 ran twice" are the
+  // same observation from outside — and here they are the difference between
+  // the mod's behaviour and a silently fixed bug.
+  sc.hp.runs[s] = (sc.hp.runs[s] ?? 0) + 1;
+
+  if (s === 1) {
+    // :1777-1788.
+    kt.sceneFloat = 1;
+    k.charturn = -1;
+    k.mnfight = 99;
+    k.myfight = 99;
+    kt.knightState = 10;
+    // `sprite_index = idlesprite` — the knight's CURRENT idle, not the
+    // literal: after the B-Side full-no-hit reward that is
+    // spr_roaringknight_idle2 (kaizo/actors/kaizo-knight-actor.js's
+    // kaizoIdlesprite is the one reader, and it looks at the instance).
+    kt.spriteIndex = sc.live?.idlesprite ?? 'spr_roaringknight_idle';
+    kt.y = kt.ystart + Math.cos(kt.siner2 / 8) * 8;
+    setScene(state, 'hp', 1.1);
+    scrDelayVar(state, 'hp', 2, 20);
+  } else if (s === 2) {
+    // :1789-1798. THE PUFF: he hops up and right and shudders in place.
+    kt.x += 26;
+    // `y += -44` (:1792) IS DEAD, IN THE MOD TOO, and is kept only so a reader
+    // diffing this against the dump does not go looking for the line. State 1
+    // set `k_scenefloat = 1` and `state = 10`, so the float tail at :2050-2052
+    // — floatKnight(), the last thing this function does every frame —
+    // recomputes `y` from `ystart + k_yoff + cos(siner2 / 8) * 8` before
+    // anything can read it. MEASURED, not assumed: with this line deleted the
+    // knight's y is identical on every frame of the scene, which is why
+    // check-hpscene's kinematic block asserts `k_yoff` and the float FORMULA
+    // rather than this assignment. It is `k_yoff` on the next line that
+    // actually lifts him 44 pixels.
+    kt.y += -44;
+    kt.yoff = -44;
+    kt.spriteIndex = 'spr_roaringknight_flurry_prepare';
+    cue(state, 'snd_knight_puff');
+    // scr_minishakeobj() AFTER the `x += 26`, so the shake anchors on the new
+    // position — see scrMinishakeobj's header.
+    if (sc.live?.alive) scrMinishakeobj(state, sc.live);
+    setScene(state, 'hp', 2.1);
+    scrDelayVar(state, 'hp', 3, 16);
+  } else if (s === 3) {
+    // :1800-1837. THE WIND-UP, and the scene's one RNG draw.
+    kt.sceneFloat = 0;
+    // snd_play(snd, VOLUME, PITCH) — gml_GlobalScript_snd_play.gml:1
+    // `function snd_play(arg0, arg1 = 1, arg2 = 1)` with arg1 -> snd_volume
+    // and arg2 -> snd_pitch. cue()'s order is (pitch, gain), so the two swap.
+    cue(state, 'snd_knight_beam', 0.1, 0.75);
+    kt.remdepth = kt.depth;
+    kt.depth = battlecontrollerDepth(state) - 10;
+    reparentAfterimages(state, kt.depth);
+
+    // hpslash_mark = scr_marker(camerax() + 320, cameray() + 339,
+    //                           spr_roaringknight_finalslash_mask);
+    // A 120 x 11 sliver across the middle of the screen, tilted, that widens
+    // into the cut. THE ORDER OF THE SIX FIELD WRITES IS THE GML'S, because
+    // the image_angle lerp two lines later reads image_angle back.
+    const mark = state.entities ? scrMarker(
+      state, vx + 320, vy + 339, 'spr_roaringknight_finalslash_mask',
+    ) : null;
+    // choose(20, -20) — ONE u32 (sim/rng.js: choose = 1 draw). It is a real
+    // RNG draw inside a Step, so it moves the stream and is counted.
+    // THE LIST ORDER IS THE GML'S, and it is load-bearing: `choose` picks
+    // `values[u32 % argc]`, so [-20, 20] would draw the same u32 and hand back
+    // the other answer — invisibly to any count audit (CLAUDE.md, "Measured
+    // facts you will need").
+    const angle = state.gmlRng ? gmlChoose(state.gmlRng, [20, -20]) : 20;
+    draw(state, 'hp', 1);
+    if (mark) {
+      mark.image_xscale = 120;
+      mark.image_yscale = 11;
+      mark.image_alpha = 0;
+      mark.image_angle = angle;
+      // get_swordcolor() — kaizo/attacks/kaizo-colors.js, the ONE copy of the
+      // mod's palette. Reads global.kaizo_swordtype off state.kaizo.swordtype.
+      mark.image_blend = getSwordcolor(state);
+      mark.depth = kt.depth + 5;
+      // with (hpslash_mark) { four scr_lerpvar } — the target is the MARK, not
+      // the knight, so these do not go through noteLerp's `knight: true` arm.
+      // The third takes scr_lerpvar's four-argument form (argument_count < 6),
+      // which leaves obj_lerpvar's Create defaults: easetype 0, linear.
+      scrLerpvar(state, spawn, mark, 'y', vy + 350, vy + 339, 19, L, 'inout');
+      scrLerpvar(state, spawn, mark, 'image_angle', mark.image_angle, 0, 21, L, 'inout');
+      scrLerpvar(state, spawn, mark, 'image_alpha', -0.15, 0.75, 19);
+      scrLerpvar(state, spawn, mark, 'image_yscale', 11, 0.5, 21, L, 'inout');
+    }
+    sc.hp.mark = mark;
+    // :1827 repeats `depth = obj_battlecontroller.depth - 10` verbatim, after
+    // the `with`. Redundant in the original (nothing between the two writes
+    // touches the knight's depth) and kept so a reader diffing this against
+    // the dump does not go looking for the line.
+    kt.depth = battlecontrollerDepth(state) - 10;
+    kt.x -= 12;
+    kt.y += 44;
+    kt.spriteIndex = 'spr_roaringknight_attack_ol';
+    kt.imageSpeed = 0;
+    kt.imageIndex = 1;
+    setScene(state, 'hp', 3.1);
+    scrDelayVar(state, 'hp', 4, 13);
+    // The dive: 30 right and 120 DOWN over 19 frames, curve 2 in-out.
+    noteLerp(state, 'x', kt.x, kt.x + 30, 19, kl('inout'));
+    noteLerp(state, 'y', kt.y, kt.y + 120, 19, kl('inout'));
+  } else if (s === 4) {
+    // :1838-1843.
+    kt.imageIndex = 2;
+    setScene(state, 'hp', 4.1);
+    scrDelayVar(state, 'hp', 5, 9);
+  } else if (s === 5) {
+    // :1844-1868. THE CUT ITSELF — and THE BUG (see the file header).
+    cueStop(state, 'snd_knight_beam');
+    // snd_play(snd_knight_cut, 0.8)      -> volume 0.8, pitch 1 (default)
+    // snd_play(snd_knight_cut, 0.6, 0.5) -> volume 0.6, pitch 0.5
+    cue(state, 'snd_knight_cut', 1, 0.8);
+    cue(state, 'snd_knight_cut', 0.5, 0.6);
+    // ── Step_0:1849: `hp_scene = 5.1;` — NO `k_`. ────────────────────────
+    // Preserved, not fixed. `hp_scene` appears exactly once in the whole kaizo
+    // dump (that write) and has no reader anywhere, so it creates a dead
+    // instance variable and `k_hpscene` STAYS 5 — which is why this branch
+    // runs on both frames of the two-frame delay below, and why every state
+    // from 6 on runs twice. CLAUDE.md law 4: nothing invented ships
+    // unlabelled, and a bug quietly repaired is invention.
+    sc.hp.hpSceneTypo += 1;
+    kt.imageIndex = 3;
+    // Four arguments -> linear (obj_lerpvar's easetype 0 default).
+    noteLerp(state, 'image_index', 3, 5, 2, { knight: true });
+    scrDelayVar(state, 'hp', 6, 2);
+    // `inst = instance_create(x, y, obj_shake); shakex = 10; shakespeed = 1`
+    // — TEN, where k_tpscene's is 8 (:2003).
+    //
+    // It is unguarded, unlike scr_damage's `if (!i_ex(obj_shake))`, so the
+    // `hp_scene` typo above really does run this line on two consecutive
+    // frames — but the SECOND SHAKE NEVER STARTS. obj_shake's own Create
+    // carries `instance_number(object_index) >= 2` counting itself, so the
+    // newcomer sets `active = -1` and destroys itself while the running shake
+    // continues undisturbed (sim/shake.js:74-80). The screen shakes once, at
+    // 10, for its normal length. An earlier draft of this comment said the two
+    // frames stack two shakes; they do not, and the guard is in the object
+    // rather than at the call site, which is why the call reads as if they
+    // would.
+    scrShakescreen(state, { shakex: 10, shakespeed: 1 });
+    // with (hpslash_mark) — the flash-out: white, opaque, unrotated, then
+    // faded from 1.5 (past opaque, so it holds solid for a third of the ramp)
+    // while it stretches from 1 to 10 tall over 8 frames.
+    const mark = sc.hp.mark;
+    if (mark?.alive) {
+      mark.image_blend = C_WHITE;
+      mark.image_alpha = 1;
+      mark.image_yscale = 1;
+      mark.image_angle = 0;
+      scrLerpvar(state, spawn, mark, 'image_alpha', 1.5, 0, 8);
+      scrLerpvar(state, spawn, mark, 'image_yscale', 1, 10, 8);
+    }
+  } else if (s === 6) {
+    // :1869-1881. THE MECHANIC, and the whole reason the scene exists.
+    //
+    //     global.maxhp[1] = min(global.maxhp[1], 200);   ... 2/230, 3/180, 4/180
+    //     global.hp[1]    = min(global.hp[1], global.maxhp[1]);   ... and 2, 3, 4
+    //
+    // CHARACTER-indexed, all four. THE GML HAS NO havechar GUARD and writes
+    // all four cells; THIS CODE SKIPS THE ONES WITH NO SLOT, and the two agree
+    // on every observable — which is the only reason the difference is
+    // allowed to stand. `global.maxhp` is a four-cell array in the mod, so an
+    // absent character's cell is a real address there; this engine keeps the
+    // number SLOT-indexed (state.partyMaxhp, and the roster member's own
+    // `maxhp`), so a character outside `global.char` has no cell to write —
+    // hpsceneSetMaxhp/hpsceneSetHp would return early on `slot < 0` even
+    // without the guard. The guard is here so `sc.hp.cut` records only the
+    // characters that were really in the fight, which is what makes
+    // "Susie and Ralsei, absent from global.char, are not written" assertable
+    // on V-D. An earlier version of this comment claimed the code wrote every
+    // cell "as the GML has it"; it never did.
+    //
+    // The hp clamp reads the max BACK, so it uses the value just written.
+    const cut = { maxhp: {}, hp: {} };
+    for (let c = 1; c <= 4; c++) {
+      const before = hpsceneMaxhp(state, c);
+      const after = Math.min(before, HP_CEILINGS[c]);
+      if (slotOf(state, c) >= 0) {
+        hpsceneSetMaxhp(state, c, after);
+        cut.maxhp[c] = { before, after };
+      }
+    }
+    for (let c = 1; c <= 4; c++) {
+      if (slotOf(state, c) < 0) continue;
+      const before = hpsceneHp(state, c);
+      const after = Math.min(before, hpsceneMaxhp(state, c));
+      hpsceneSetHp(state, c, after);
+      cut.hp[c] = { before, after };
+    }
+    // The SECOND run (the bug) must not overwrite the receipt of the first —
+    // by then every `before` already equals its `after` and the record would
+    // read as "the scene cut nothing".
+    if (!sc.hp.cut) sc.hp.cut = cut;
+    setScene(state, 'hp', 6.1);
+    scrDelayVar(state, 'hp', 7, 20);
+  } else if (s === 7) {
+    // :1882-1889. The glide home. `siner2 = 0` FIRST and the y target reads it
+    // back, so he aims at the TOP of the bob (`ystart + cos(0) * 8`) rather
+    // than wherever the bob happened to be — the same ordering k_tpscene's
+    // state 11 has at :2017-2021.
+    kt.siner2 = 0;
+    setScene(state, 'hp', 7.1);
+    scrDelayVar(state, 'hp', 7.2, 12);
+    noteLerp(state, 'x', kt.x, kt.xstart, 25, kl('inout'));
+    noteLerp(state, 'y', kt.y, kt.ystart + Math.cos(kt.siner2 / 8) * 8, 25, kl('inout'));
+  } else if (s === 7.2) {
+    // :1890-1903. Back to his own depth, trail with him, idle pose.
+    kt.depth = kt.remdepth;
+    reparentAfterimages(state, kt.depth);
+    kt.spriteIndex = 'spr_roaringknight_idle';
+    setScene(state, 'hp', 7.1);
+    scrDelayVar(state, 'hp', 8, 14);
+  } else if (s === 8) {
+    // :1904-1928. THE HAND-BACK — the only one of the four scenes that has to
+    // build a turn rather than return to one, because it fires before the
+    // opening menu has ever existed.
+    kt.sceneFloat = 1;
+    msg(state, '\\ck* Not so fast.');
+    kt.siner2 = 0;
+    // `global.mnfight = 0` (:1909) — the command phase. THIS IS NOT A PIN
+    // (CLAUDE.md law 2): it is the mod's own write, and the ONLY reader of
+    // `state.kaizo.mnfight` in this repo is gloom.js's scrIsphaseBullets
+    // (`global.mnfight == 2`), whose live callers all pass their own `bullets`
+    // instead. What WAS wrong is that nothing ever wrote the key again, so a
+    // fallback reader was left with a stale 0 for the rest of the fight —
+    // gloom that glows and never drains. The turn loop now owns the mirror
+    // from the frame special_con drops (kaizo/scenes/kaizo-practice.js, the
+    // `state.kaizo.mnfight` refresh directly under the scene gate; the gate is
+    // obj_battlecontroller's own `special_con > 0 -> exit`, so the controller
+    // cannot touch mnfight while a scene runs, exactly as here). This write is
+    // the last word for one frame only, which is what the GML does too.
+    k.mnfight = 0;
+    k.myfight = 0;
+    // THE INDEX BASE IS THE TRAP, and it is the mod's, not this translation's:
+    //
+    //     if (global.hp[1] > 0)      global.charturn = 0;
+    //     else if (global.hp[2] > 0) global.charturn = 1;
+    //     else                       global.charturn = 2;
+    //
+    // `global.hp` is CHARACTER-indexed (1 Kris, 2 Susie, 3 Ralsei, 4 Noelle)
+    // and `global.charturn` is SLOT-indexed. The two agree only for the
+    // vanilla trio [1, 2, 3]. On the Weird Route `global.char` is [1, 4, 0], so
+    // the second test reads SUSIE's hp for a Susie who is not in the fight —
+    // a save value, not a battle one — and the final `else` hands the turn to
+    // slot 2, which on that route is nobody. Faithful, and flagged: the same
+    // wire-crossing roster.js's header records for scr_charbox's k_gloom.
+    //
+    // WHERE IT GOES. `state.kaizo.charturn` is this module's mirror of the
+    // five hijack globals (SCENE_HIJACK_KEYS) and HAS NO READER — writing only
+    // there is the same defect this lane found and fixed for k_nhscene's four
+    // down-message latches: computed correctly, read never. This engine keeps
+    // `global.charturn` on `state.menu.charturn`: sim/menu.js is its writer
+    // (openMenu, scrNexthero, scrPrevhero, skipFallen), render/menu.js raises
+    // that character's panel, and sim/actors.js aims the ACT/target picker
+    // through `bmenucoord[...][charturn]`. So the pick is written THERE as
+    // well, and `sc.hp.handback` carries it for the turn loop.
+    if (hpsceneHp(state, 1) > 0) k.charturn = 0;
+    else if (hpsceneHp(state, 2) > 0) k.charturn = 1;
+    else k.charturn = 2;
+    if (state.menu) state.menu.charturn = k.charturn;
+    // `applied` is for the turn loop, not the mod: this scene runs INSIDE the
+    // knight's Step, and this engine's director opens the fight's first menu
+    // later in the SAME frame — openMenu re-seeds `charturn` to 0 the way
+    // scr_mnendturn does at a turn end. The hand-back is the one menu the game
+    // does NOT reach through scr_mnendturn (nothing has ended a turn yet), so
+    // the director re-applies this pick once, right after openMenu, through
+    // applySceneHandbackCharturn below. The bug's second run re-arms it and
+    // rewrites `state.menu.charturn` a frame later, which is what the mod does.
+    sc.hp.handback = { frame: state.frame, charturn: k.charturn, applied: false };
+    setScene(state, 'hp', -1);
+    k.specialCon = 0;
+    kt.knightState = 0;
+    kt.yoff = 0;
+    // instance_destroy(hpslash_mark) — a no-op on the bug's second run.
+    if (sc.hp.mark?.alive) destroy(sc.hp.mark);
+    sc.hp.mark = null;
+  }
+
+  // `if (state == 10 && k_scenefloat) y = ystart + k_yoff + cos(siner2/8)*8`
+  // — Step_0:2050-2052, the tail of the whole `k_sideb || k_hpscene > 0`
+  // block. It sits after the k_tpscene block in the original, so on the one
+  // arrangement where both scenes could be up at once the tp branch would win;
+  // they cannot be (this one arms on the knight's first Step and is finished
+  // long before atk_Frenzy1 ends a turn), and the write is an idempotent
+  // recompute from siner2/k_yoff either way, so calling it from both is the
+  // same value twice.
+  floatKnight(state);
+  return true;
+}
+
+/**
+ * THE HAND-BACK'S `global.charturn`, APPLIED WHERE THE TURN CAN SEE IT.
+ *
+ * k_hpscene state 8 (:1911-1922) picks the first living member and assigns
+ * `global.charturn`. In the mod that is the whole job: the fight's first menu
+ * has never been opened, so obj_battlecontroller reads the value the Knight
+ * just wrote. In THIS engine the director opens that menu through
+ * sim/menu.js's `openMenu`, which is scr_mnendturn's reset as well as the
+ * open, and its `menu.charturn = 0` runs later in the same frame — so the
+ * scene's pick has to be re-applied once, after the open. That is this.
+ *
+ * ONE-SHOT, and the receipt says so: `handback.applied` flips on the first
+ * call, so a later turn's openMenu (which the game really does reach through
+ * scr_mnendturn, and which really does start at slot 0) is left alone. It is
+ * not a pin — nothing re-asserts it per frame.
+ *
+ * Reads `state.kaizo.scenes` DIRECTLY and never calls ensureScenes: a V-C run
+ * whose party is under every ceiling must not have the scene state stood up
+ * behind its back, which is what keeps the A-Side byte gate from seeing this
+ * lane at all.
+ *
+ * @returns {number|null} the slot applied, or null when there was nothing to
+ *   apply (no scene, no hand-back yet, or already applied).
+ */
+export function applySceneHandbackCharturn(state) {
+  const hb = state.kaizo?.scenes?.hp?.handback;
+  if (!hb || hb.applied) return null;
+  hb.applied = true;
+  if (state.menu) state.menu.charturn = hb.charturn;
+  return hb.charturn;
+}
+
+// ───────────────────────────────────────────────────────────────────────────
 // k_tpscene — Step_0:1930-2049. THE BAR SLICE.
 // ───────────────────────────────────────────────────────────────────────────
 
@@ -975,13 +1742,26 @@ export function stepNhscene(state) {
     sc.writerOpen = true;
   } else if (s === 8) {
     if (!writerExists(state, sc)) {
-      // All four down-messages suppressed at once: the Knight has already
-      // said it, so the party's own fall lines never print.
-      const kk = state.kaizo;
-      kk.krisdownmessage = true;
-      kk.susiedownmessage = true;
-      kk.ralseidownmessage = true;
-      kk.noelledownmessage = true;
+      // Step_0:1520-1523 — all four down-messages suppressed at once: the
+      // Knight has already said it, so the party's own fall lines never
+      // print. `krisdownmessage` and its three siblings are the mod's own
+      // LATCH names, and the sim's latch for the same four booleans is
+      // kaizo/party/freeze.js's `downLatch` — the thing `downMessages` reads
+      // (its `!latch[DOWN_LATCH_KEYS[charId]]` guard). This used to write
+      // `state.kaizo.krisdownmessage` and the other three, which NOTHING IN
+      // THE REPO READS (whole-tree grep): the suppression was computed
+      // correctly and had no effect, so the fall line printed anyway on the
+      // turn after the Knight's one-shot. Same class as the four `idlesprite`
+      // writes that landed on the knight record instead of the instance.
+      // Written through the module that owns the latch, and the mod's own
+      // names kept beside them so a reader can find the GML line.
+      const dl = (ensureFreezeState(state).downLatch ??= {
+        kris: false, susie: false, ralsei: false, noelle: false,
+      });
+      dl.kris = true;      // krisdownmessage   = true;   (:1520)
+      dl.susie = true;     // susiedownmessage  = true;   (:1521)
+      dl.ralsei = true;    // ralseidownmessage = true;   (:1522)
+      dl.noelle = true;    // noelledownmessage = true;   (:1523)
       const who = nhVictimName(state);
       msg(state, `* ${who} was..^3. uh..^3.&* Yeah^1, I've got nothing.`);
       sc.musicPaused = false;
@@ -1720,24 +2500,33 @@ export function stepSgscene(state) {
 // ───────────────────────────────────────────────────────────────────────────
 
 /**
- * One frame of all three scenes, IN THE ORDER obj_knight_enemy's Step_0 runs
- * them: k_nhscene (1408), the k_sgscene arm (1543), k_sgscene (1547), then
- * k_tpscene (1930, inside the `if (k_sideb || k_hpscene > 0)` block).
+ * One frame of all four scenes, IN THE ORDER obj_knight_enemy's Step_0 runs
+ * them: k_nhscene (1408), the k_sgscene arm (1543), k_sgscene (1547), then the
+ * `if (k_sideb || k_hpscene > 0)` block, which holds k_hpscene (1774) and
+ * k_tpscene (1930) in that order.
+ *
+ * THE OUTER GATE IS THE GML'S, LITERALLY. `k_sideb || k_hpscene > 0` — so an
+ * A-SIDE run with the max-HP shear armed still steps this block, which is the
+ * whole reason the mod wrote the gate that way instead of `if (k_sideb)`. The
+ * two branch bodies each re-test their own scene number, so the tp branch is a
+ * no-op on the A-Side rather than something this function has to guard.
  *
  * Call this from the knight's step — the flakes must step AFTER it (they are
  * spawned later, so this engine's phaseList already orders them that way).
  *
- * @returns {{nh:boolean, sg:boolean, tp:boolean}} which scenes ran.
+ * @returns {{nh:boolean, sg:boolean, hp:boolean, tp:boolean}} which scenes ran.
  */
 export function stepScenes(state) {
   ensureScenes(state);
   const nh = stepNhscene(state);
   armSgsceneIfSpell(state);
   const sg = stepSgscene(state);
-  // The tp block sits inside `if (k_sideb || k_hpscene > 0)`. k_hpscene is
-  // the max-HP-cheater scene and is not this module's; the k_sideb half is.
-  const tp = state.kaizo.sideb ? stepTpscene(state) : false;
-  return { nh, sg, tp };
+  const blockOpen = !!state.kaizo.sideb || (state.kaizo.hpscene ?? 0) > 0;
+  const hp = blockOpen ? stepHpscene(state) : false;
+  const tp = blockOpen ? stepTpscene(state) : false;
+  return {
+    nh, sg, hp, tp,
+  };
 }
 
 /**
@@ -1769,6 +2558,8 @@ export function sceneReport(state) {
   const sc = ensureScenes(state);
   const k = state.kaizo;
   return {
+    hpscene: k.hpscene ?? 0,
+    hpcut: sc.hp.cut,
     tpscene: kaizoTpscene(state),
     sgscene: k.sgscene ?? 0,
     nhscene: k.nhscene ?? 0,

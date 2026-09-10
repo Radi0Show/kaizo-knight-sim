@@ -18,6 +18,7 @@ import {
 import { isUp as rosterIsUp, rosterSize, statFor as rosterStatFor } from '../party/roster.js';
 import { applyKrisPartyMultiplier } from '../party/damage.js';
 import { downMessages } from '../party/freeze.js';
+import { armHpscene } from '../party/scenes.js';
 import { kaizoGloomStep, kaizoGloomMessages } from '../party/gloom.js';
 import { createKaizoHeroes, stepKaizoHeroes } from '../party/heroes.js';
 import { VC_KNIGHT, VC_GATE_FRACTION, VC_LOOP, VC_PHASE4_DEFAULT } from '../versions/vc-script.js';
@@ -299,6 +300,32 @@ export function vcHooks({ sideb = false, roster = null } = {}) {
       } else if (k.damagereduction >= 0.1 && k.damagereduction < 0.3) {
         k.damagereduction += 0.004;
       }
+    },
+
+    // THE KNIGHT'S FIRST STEP — obj_knight_enemy Step_0:54-63, the second half
+    // of the `if (damagereductiontimer == 1)` block whose first half `postAnim`
+    // below carries. It arms k_hpscene, the max-HP shear, off `global.maxhp` /
+    // `global.hp` against 200 / 230 / 180 / 180.
+    //
+    // NOT `sideb`-GATED, and that is the point of the whole scene: the two
+    // `if`s sit at :54, outside the `if (k_sideb)` block that closes at :53, so
+    // the Normal Route recreation (V-C) arms it too. On the default chapter-3
+    // party (160 / 190 / 140) neither test can pass, which is why the A-Side
+    // byte-gate recordings never see this branch — kaizo/party/scenes.js's
+    // armHpscene does not even stand up the scene state unless it fires.
+    //
+    // It gets its OWN hook rather than riding postAnim because the director
+    // runs postAnim AFTER the scene block, and the GML runs this arm (:56)
+    // before the scene's own state 1 (:1777) in the same Step.
+    // The `damagereductiontimer == 1` guard is HERE, not inside armHpscene,
+    // because it is the enclosing block's and not the arm's: `== 1` is an
+    // EQUALITY (stepKnightAnim's own note says so), so it holds for exactly
+    // one frame of the fight. Without it the arm re-fires every Step and
+    // stamps `k_hpscene = 1` back over whatever state the scene had reached —
+    // the scene would replay its first frame forever.
+    knightFirstStep: (state) => {
+      if (state.knight?.damagereductiontimer !== 1) return;
+      armHpscene(state);
     },
 
     // `damagereductiontimer == 1` sets 0.18 under the mod (vanilla 0.2 —
