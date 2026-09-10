@@ -32,7 +32,7 @@ import { createState, stepFrame } from '../../../sim/index.js';
 import { scrDamageSingle } from '../../../sim/damage.js';
 import { buildKaizoScene } from '../../scenes/kaizo-fight.js';
 import { sceneHijacksTurn } from '../../party/scenes.js';
-import { kaizoIdlesprite } from '../../actors/kaizo-knight-actor.js';
+import { kaizoIdlesprite, kaizoMonsterXY } from '../../actors/kaizo-knight-actor.js';
 import { damageKnight } from '../../../sim/knight.js';
 import { KAIZO_CHECK_PAGES } from '../../scenes/kaizo-vc-hooks.js';
 import {
@@ -389,6 +389,27 @@ section('gap 13 — the knight\'s B-Side turn-end messages (Step_0:566-781)');
   ok(c.kaizo.launched.length >= 3, 'V-C control reached its turn ends');
   ok(!seenC.some((s) => /used up|Can't move your body|GLOOM/.test(s)),
     'V-C control: no B-Side message on the A-Side turn end');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+section('the damage numbers are born at monsterx/monstery (Other_22)');
+{
+  // Other_22 computes them ONCE, from the sprite and the mod's -14 / -44,
+  // and scr_monstersetup between the two halves touches neither. So they are
+  // constants: they do not follow the knight, which matters now that a scene
+  // carries him across the screen.
+  const st = build('D');
+  const a = kaizoMonsterXY(st);
+  eq(a.x, 528, 'monsterx = 425 + 234 / 2 - 14');
+  eq(a.y, 149, 'monstery = 78 + 230 / 2 - 44');
+
+  const kn = st.entities.find((x) => x.alive && x.type?.name === 'obj_knight_enemy');
+  ok(!!kn, 'the knight is live');
+  kn.x = 40;
+  kn.y = 200;
+  const b = kaizoMonsterXY(st);
+  eq(b.x, a.x, 'and moving him does NOT move them — Other_22 runs once');
+  eq(b.y, a.y, 'on both axes');
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

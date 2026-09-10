@@ -75,6 +75,7 @@ import {
 import { scrTensionheal } from '../../sim/tension.js';
 import { cueLoop, cue, cueStop } from '../../sim/audio.js';
 import { knightActor, partyActor, PARTY, KNIGHT, BOX, SOUL_START } from '../../sim/actors.js';
+import { kaizoMonsterXY } from '../actors/kaizo-knight-actor.js';
 
 
 // The player-facing labelling (KAIZO_NOTE) lives in kaizo-fight.js, which is
@@ -542,13 +543,17 @@ const director = {
     // swings were QUEUED by the bar's block below on earlier frames (+11
     // delay), so resolving here needs nothing from this frame's bar step.
     if (e.pendingSwing) {
+      // `global.monsterx` / `global.monstery` — obj_knight_enemy Other_22,
+      // with the mod's -14 / -44. The writer and the impact are both born
+      // there (kaizo/actors/kaizo-knight-actor.js kaizoMonsterXY).
+      const mxy = kaizoMonsterXY(state);
       for (const s of e.pendingSwing) {
         if (s.done || state.frame < s.at) continue;
         s.done = true;
         if (s.points <= 0) {
           // A missed bolt still writes a number — `scr_damage_enemy` creates
           // the writer before the `arg1 > 0` test, and a zero draws MISS.
-          spawnDmgNumber(state, KNIGHT.x, KNIGHT.ystart + 40, 0, s.c);
+          spawnDmgNumber(state, mxy.x, mxy.y, 0, s.c);
           continue;
         }
         const dealt = (e.hooks.fightDamage ?? fightDamage)(state, s.c, s.points);
@@ -571,11 +576,11 @@ const director = {
           // the sim runs the whole +4, -4, +3, -2 sequence. Both are Susie
           // swings landing on a raised guard.
           if (!state.kaizo?.lastHitBlocked) {
-            spawnImpact(state, KNIGHT.x, KNIGHT.ystart + 40, s.c, s.points === 150,
+            spawnImpact(state, mxy.x, mxy.y, s.c, s.points === 150,
               () => rngNext(state.rng));
           }
         }
-        spawnDmgNumber(state, KNIGHT.x, KNIGHT.ystart + 40, dealt, s.c);
+        spawnDmgNumber(state, mxy.x, mxy.y, dealt, s.c);
       }
     }
 

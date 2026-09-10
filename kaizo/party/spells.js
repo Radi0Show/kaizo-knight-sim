@@ -90,6 +90,7 @@ import { THORN_RING, NOELLE_SPELL_SNOWGRAVE } from './noelle.js';
 import { scrSpellFreezeGate } from './freeze.js';
 import { scrRevive } from './damage.js';
 import { castSnowgrave, armSgsceneIfSpell } from './scenes.js';
+import { kaizoMonsterXY } from '../actors/kaizo-knight-actor.js';
 
 // ───────────────────────────────────────────────────────────────────────────
 // The spell lists — `global.spell[char]`, scr_gamestart:197-204
@@ -279,9 +280,12 @@ const healAmountModifyByEquipment = (amount, ribbons) =>
 export function kaizoScrDamageEnemy(state, damage, casterSlot) {
   const charId = charIdOf(state, casterSlot);
   const type = charId === CHAR_NOELLE ? 6 : charId - 1;
-  const k = state.entities.find((en) => en.alive && en.type.name === 'obj_knight_enemy');
-  const x = k?.x ?? 425;
-  const y = k?.y ?? 78;
+  // `instance_create(monsterx, monstery + 20 - hittarget * 20, ...)` — and
+  // monsterx/monstery are Other_22's CONSTANTS, not the knight's live x/y
+  // (kaizoMonsterXY carries the derivation and the mod's -14 / -44). Reading
+  // the instance put every X-Slash number at his left edge, and would have
+  // dragged them across the screen with him during the TP-slash scene.
+  const { x, y } = kaizoMonsterXY(state);
   // The writer is created BEFORE the `arg1 > 0` test — a zero draws MISS.
   spawnDmgNumber(state, x, y, damage, type);
   if (damage > 0) {

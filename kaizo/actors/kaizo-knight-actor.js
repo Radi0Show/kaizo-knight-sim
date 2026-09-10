@@ -25,7 +25,7 @@
 // creates the ghost, so tinting the just-created ghost immediately after the
 // base step is the same ordering, not an approximation.
 
-import { knightActor } from '../../sim/actors.js';
+import { knightActor, KNIGHT } from '../../sim/actors.js';
 import { spawn } from '../../sim/entity.js';
 import { afterimage } from '../../sim/fx.js';
 import { nextAfterimageColor } from '../attacks/kaizo-colors.js';
@@ -424,6 +424,64 @@ export function kaizoBlockStepTail(state) {
  * reads and the reward never appeared. Resolved by giving the writer no
  * choice about which object it means.
  */
+/**
+ * `global.monsterx` / `global.monstery` FOR THIS KNIGHT — where every damage
+ * number over him is born, and where obj_basicattack's impact lands.
+ *
+ * obj_knight_enemy Other_22, whole event, both versions in one:
+ *
+ *     global.monsterx[myself] = x + (sprite_width / 2);
+ *     global.monstery[myself] = y + (sprite_height / 2);
+ *     scr_monstersetup();
+ *     global.monsterx[myself] -= 14;      // MOD ONLY
+ *     global.monstery[myself] -= 44;      // MOD ONLY
+ *
+ * The last two lines are EnderCat8's whole change to that event, and
+ * scr_monstersetup does not touch either global (whole-file grep), so they
+ * land on the computed value. Other_22 is the monster-init event and runs
+ * ONCE, after the Create that sets the scales and before the first Draw that
+ * bobs him — so these are constants, not a live read of a moving knight, and
+ * the TP-slash scene carrying him across the screen does not drag the damage
+ * numbers with it.
+ *
+ * The arithmetic, with `sprite_width` = sprite width x image_xscale:
+ *
+ *     spr_roaringknight_idle   117 x 115   (assets/sprites/manifest.json)
+ *     image_xscale/yscale      2 x 2       (Create; sim/actors.js knightActor)
+ *     x, y                     425, 78     (sim/actors.js KNIGHT)
+ *
+ *     monsterx = 425 + 234 / 2 - 14 = 528
+ *     monstery =  78 + 230 / 2 - 44 = 149
+ *
+ * DERIVED, NOT MEASURED, and flagged as such: no recording on disk carries
+ * obj_dmgwriter (the seq sheet's watch list has no row for it), so this is
+ * the formula evaluated rather than a number read off the game. A draw-sheet
+ * lock that watches the writer would settle it in one run.
+ *
+ * NOTE FOR THE VANILLA SIDE, not acted on here: sim/scenes/practice.js spawns
+ * its writers at `(KNIGHT.x, KNIGHT.ystart + 40)` = (425, 118), which the
+ * same formula puts at (542, 193) — his left edge rather than his middle.
+ * That is knight-sim's to settle against its own oracle; this repo does not
+ * change a vanilla value on a reading.
+ */
+export function kaizoMonsterXY(state) {
+  const e = state.entities?.find(
+    (x) => x.alive && x.type?.name === 'obj_knight_enemy',
+  );
+  const sx = e?.image_xscale ?? 2;
+  const sy = e?.image_yscale ?? 2;
+  return {
+    x: KNIGHT_X + (KNIGHT_SPRITE_W * sx) / 2 - 14,
+    y: KNIGHT_YSTART + (KNIGHT_SPRITE_H * sy) / 2 - 44,
+  };
+}
+
+/** spr_roaringknight_idle, from assets/sprites/manifest.json. */
+const KNIGHT_SPRITE_W = 117;
+const KNIGHT_SPRITE_H = 115;
+const KNIGHT_X = KNIGHT.x;
+const KNIGHT_YSTART = KNIGHT.ystart;
+
 export function applyKaizoIdleRecolor(state) {
   const e = state?.type ? state : state?.entities?.find(
     (x) => x.alive && x.type?.name === 'obj_knight_enemy',
