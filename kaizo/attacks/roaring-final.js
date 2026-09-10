@@ -143,7 +143,7 @@
 import { spawn, destroy } from '../../sim/entity.js';
 import {
   lengthdirX, lengthdirY, pointDirection, pointDistance, scrApproach, gmlEq,
-  lerp, sign,
+  gmlLte, lerp, sign,
 } from '../../sim/gml.js';
 import {
   gmlChoose, gmlIrandom, gmlIrandomRange, gmlRandom, gmlRandomRange,
@@ -1993,7 +1993,30 @@ function roaringFinal(e, state) {
           );
         }
       }
-      if ((e.attack_ind % 3) === 0 && e.attack_grav >= 12.5 && e.attack_timer <= 0) {
+      // `attack_grav >= 12.5` THROUGH GML'S EPSILON, and the recording is
+      // unambiguous about why. attack_grav climbs by scr_approach(..., 12.5,
+      // 0.02) from 8, and scr_approach only CLAMPS to the target when the step
+      // overshoots, so the sum carries its f64 error the whole way: step 225
+      // lands on 12.499999999999904 and step 226 on exactly 12.5. The game
+      // fires on step 225 — the roar probe of both 2026-09-09 locks has
+      // attack_con 0 -> 1 on the frame attack_grav first prints 12.5000000000
+      // (A-Side f831 = C+362 and f2181, B-Side the same offset) — because the
+      // runner compares reals with an epsilon and 12.4999999999999 IS >= 12.5
+      // to it. An exact JS `>=` waits for the clamp, i.e. ONE FRAME LATER,
+      // which is exactly where this module fired (C+363) and what made the
+      // whole rest of the finale a frame late: the ring at C+387, the
+      // 75%-max-HP catch at C+470, the slash lines at C+1018. attack_timer
+      // itself was exact throughout, which is what pointed here rather than
+      // at a clock.
+      //
+      // `gmlLte(threshold, value)` IS the epsilon-tolerant `>=`, the spelling
+      // knightlines.js:864 and quickslash.js:1293 already use, and sim/gml.js
+      // carries the measurement that the runner applies the same epsilon to
+      // ordering comparisons as to `==`.
+      //
+      // `attack_timer <= 0` is left exact on purpose: its values near the gate
+      // are -0.12 and coarser, nowhere near GML_EPSILON of the threshold.
+      if ((e.attack_ind % 3) === 0 && gmlLte(12.5, e.attack_grav) && e.attack_timer <= 0) {
         // attack_grav needs 225 frames to climb 8 -> 12.5, so this gate sets
         // the length of the spiral's first half.
         e.attack_mult = 1;

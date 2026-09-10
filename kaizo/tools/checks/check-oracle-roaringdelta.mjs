@@ -273,6 +273,18 @@ const COSMETIC = new Map([
     + ' no entity is made (roaring-final.js header, "VISUAL DELTAS NOT DRAWN")'],
   ['obj_particle_generic', 'the in-rush streaks: both irandoms are taken, the'
     + ' particle is not made (same header)'],
+  // THE DIRECTOR'S, NOT THE ROAR'S. The recorder's watch list gained obj_writer
+  // and obj_battleblcon in the 2026-09-09 revision, and the one the roar window
+  // contains is the TURN-END message box: the A-Side lock's f1629 row is three
+  // frames after the hand-back at C+1145, the B-Side's f1829 likewise. This
+  // replay drives ONE attack through the launcher and has no director to end a
+  // turn, speak a line or raise a balloon — the same reason nine trace columns
+  // are SKIPPED above — so its absence is a fact about the harness. It was the
+  // seq's last reported divergence on both long launches, standing in front of
+  // anything real that might follow it.
+  ['obj_writer', 'the turn-end message box, born AFTER the hand-back; this replay'
+    + ' drives one attack and has no director to end the turn (cf. the SKIPPED columns)'],
+  ['obj_battleblcon', "the balloon frame, the director's too and for the same reason"],
 ]);
 
 // ── the trace's groups, in the order a fault propagates ───────────────────
