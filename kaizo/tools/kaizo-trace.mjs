@@ -1602,7 +1602,16 @@ function main() {
       if (r.length < 11) continue;
       const fight = Number(r[0]) + 1;
       if (!Number.isFinite(fight)) continue;
-      rows.push({ fight, type: r[2], x: Number(r[4]), y: Number(r[5]), active: Number(r[8]), inv: Number(r[10]) });
+      // `grazed` (r[3]) is the GAME'S flag for the instance this row belongs
+      // to — 0 a FIRST TOUCH (a burst, a whole timepoint off the turn clock)
+      // and 1 a continuing graze (a thirtieth). stepGraze uses it to break a
+      // tie no position can: two instances of one type can sit on the same
+      // point on the same frame. _rev1 f9915 is exactly that — a NEW
+      // obj_roaringknight_slash first-touches at (388.9733276367, 184) while
+      // the previous one is still there at grazed 1 — and pairing the row to
+      // the older instance paid a trickle where the game paid a burst.
+      rows.push({ fight, type: r[2], x: Number(r[4]), y: Number(r[5]),
+        grazed: Number(r[3]), active: Number(r[8]), inv: Number(r[10]) });
     }
     return rows;
   })();
