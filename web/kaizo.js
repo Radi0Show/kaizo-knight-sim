@@ -46,7 +46,11 @@ import { drain } from '../sim/clock.js';
 import { buildKaizoScene, KAIZO_NOTE, KAIZO_VERSIONS } from '../kaizo/scenes/kaizo-fight.js';
 import { getSwordcolor } from '../kaizo/attacks/kaizo-colors.js';
 import { decodeReplay } from '../sim/replay.js';
-import { createTitle, stepTitle, MODES, CREDITS, creditLink } from '../sim/modes.js';
+import { createTitle, stepTitle, MODES, CREDITS, creditLink, armUnused } from '../sim/modes.js';
+import {
+  loadProceed, saveProceed, weirdRouteTabs, weirdRouteGear,
+  gearOverrideFromTabs, padLoadout, PROCEED_VERSION, PROCEED_SHATTER_SPRITE,
+} from '../kaizo/ui/proceed.js';
 import { encodeConfig, decodeConfig, NONE } from '../sim/share.js';
 import { WEAPONS, ARMOR, canEquip } from '../sim/equipment.js';
 import { ITEMS } from '../sim/items.js';
@@ -71,6 +75,13 @@ import { resetTensionBar } from '../render/tensionbar.js';
 // (render/canvas.js, createRenderer's header). Same direction as every other
 // import here: this page reaches into kaizo/, render/ never does.
 import { KAIZO_DRAW_OVERRIDES } from '../kaizo/render/index.js';
+// AND ONE MORE ROW, WHICH IS NOT A CHANGED DRAW BUT A MISSING ONE. The roar
+// finale's 31 screen-shatter pieces have been simulated since 2026-09-08 and
+// painted by nothing — ledger G-38. `kaizo/ui/shatter-draw.js` is the drawer;
+// it is spread here rather than into `KAIZO_DRAW_OVERRIDES` because that map is
+// frozen, is the registry of the mod's CHANGED Draw events, and is another
+// lane's file. The same `render/shatter.js` paints the UNUSED row's break.
+import { KAIZO_SHATTER_OVERRIDE } from '../kaizo/ui/shatter-draw.js';
 
 // The label reaches the console too, for anyone reading a bug report's log.
 // The page note; the running version's own note follows once it is known (below).
@@ -96,7 +107,9 @@ function boot(msg) {
 }
 boot('loading sprites…');
 
-const renderer = await createRenderer(canvas, { overrides: KAIZO_DRAW_OVERRIDES });
+const renderer = await createRenderer(canvas, {
+  overrides: { ...KAIZO_DRAW_OVERRIDES, ...KAIZO_SHATTER_OVERRIDE },
+});
 const ctx = renderer.ctx;
 
 /**
@@ -303,16 +316,55 @@ const params = new URLSearchParams(location.search);
 //   D = its B-Side (the Weird Route, Kris & Noelle); A = the old remix.
 // `?mode=` still skips the title the way main.js's does (below); `practice`
 // is refused, for the reason the title loop gives at SINGLE.
-const versionId = KAIZO_VERSIONS[(params.get('v') ?? 'C').toUpperCase()]
-  ? (params.get('v') ?? 'C').toUpperCase()
+//
+// ── AND THE UNUSED ROW CAN NOW CHOOSE IT ──────────────────────────────────
+//
+// `?v=D` used to be the ONLY way onto the Weird Route: a URL parameter, which
+// is a developer's door. The settings hub's UNUSED row is the player's —
+// press it until it breaks and it becomes PROCEED, and taking that switches
+// this whole build to V-D, the menus with it. kaizo/ui/proceed.js carries the
+// provenance (what is EnderCat8's and what is ours) and owns the persistence;
+// sim/modes.js counts the presses and knows nothing about any of this.
+//
+// `let`, not `const`: `enterWeirdRoute()` below moves it at runtime, which is
+// what "the whole build switches" means. An EXPLICIT `?v=` still wins, so a
+// link to `?v=C` shows the A-Side even to a player who has proceeded — a
+// deliberate escape hatch for bug reports, and the only one: the row itself
+// is one-way.
+const explicitVersion = params.get('v');
+let versionId = KAIZO_VERSIONS[(explicitVersion ?? 'C').toUpperCase()]
+  ? (explicitVersion ?? 'C').toUpperCase()
   : 'C';
-// The log names the running version, so a bug report's console is
-// self-identifying (the page banner that used to carry it is gone).
-boot(`version ${versionId} — ${KAIZO_VERSIONS[versionId].name}`);
-if (KAIZO_VERSIONS[versionId].note) console.log(KAIZO_VERSIONS[versionId].note);
+
+// THE EQUIP SCREEN'S ROSTER travels with the version. `title.party` null is
+// the vanilla three (sim/modes.js `partyTabs`); on the Weird Route it is Kris
+// and Noelle, and Susie and Ralsei are simply not there — which is
+// `scr_fixparty([1, 4]) == [1, 4, 0]` and not a decision made here.
+let weirdRoute = false;
+function enterWeirdRoute() {
+  weirdRoute = true;
+  versionId = PROCEED_VERSION;
+  title.party = weirdRouteTabs();
+  title.gear = savedProceed.gear ?? weirdRouteGear();
+}
 
 function build(st) {
-  buildKaizoScene(st, { version: versionId });
+  // THE GEAR OVERRIDE IS THE WIRE FROM THE MENU TO THE FIGHT. Without it the
+  // equip page edits `title.gear` and `installRoster` goes on handing out its
+  // own defaults — the menu would look like it worked and change nothing.
+  // CHARACTER-indexed, because that is what `gearOfChar` reads.
+  buildKaizoScene(st, {
+    version: versionId,
+    gear: weirdRoute ? gearOverrideFromTabs(title.party, title.gear) : undefined,
+  });
+}
+
+/** The loadout `sim/damage.js`'s vanilla-shaped consumers walk, always three
+ *  long — see padLoadout's note on why a two-entry array throws. */
+function loadoutGear() {
+  return weirdRoute
+    ? padLoadout(title.gear)
+    : title.gear.map((g) => ({ weapon: g.weapon, armor: [...g.armor] }));
 }
 
 // ?replay=<token> REPLAYS A RUN in the browser, input and all.
@@ -401,6 +453,33 @@ try {
   if (typeof saved?.swapZX === 'boolean') title.swapZX = saved.swapZX;
 } catch { /* a corrupt entry falls back to the defaults */ }
 
+// ── ARM THE UNUSED ROW, AND RESUME THE ROUTE IF IT WAS ALREADY TAKEN ──────
+//
+// `armUnused` is the opt-in: without this call `title.unused` stays null and
+// the row is the dim, refusing, reserved one the vanilla build has — which is
+// exactly what knight-sim's own driver leaves it as. Its own storage key, not
+// the settings entry (kaizo/ui/proceed.js says why).
+//
+// A TAKEN ROUTE COMES BACK TAKEN, and a half-pressed one comes back
+// half-pressed. The point of persisting is that the player is not doing the
+// same twenty presses every load, and that the fight they chose is the fight
+// the page opens on.
+//
+// THE SHEET IS HANDED OVER HERE, and this is the only place in the program
+// where the two halves meet: `sim/` counts and `render/` paints, and neither
+// may know the name of a sprite that only this build ships (the vanilla asset
+// pack has no shatter sheet at all). `PROCEED_SHATTER_SPRITE` is
+// EnderCat8's `spr_roaringknight_finalshatter` — see kaizo/ui/proceed.js.
+const savedProceed = loadProceed();
+armUnused(title, { ...savedProceed, sprite: PROCEED_SHATTER_SPRITE });
+if (title.unused.taken && !explicitVersion) enterWeirdRoute();
+
+// The log names the running version, so a bug report's console is
+// self-identifying (the page banner that used to carry it is gone). AFTER the
+// arming, or it would name the version the page was about to leave.
+boot(`version ${versionId} — ${KAIZO_VERSIONS[versionId].name}`);
+if (KAIZO_VERSIONS[versionId].note) console.log(KAIZO_VERSIONS[versionId].note);
+
 // ?cfg=<token> — A SHARED SETUP, and it WINS over the saved settings.
 //
 // Following someone's link is an explicit act: it should show you their fight,
@@ -421,7 +500,14 @@ const sharedCfg = decodeConfig(params.get('cfg'), {
   attackCount: ATTACK_MENU.length,
 });
 if (sharedCfg) {
-  if (sharedCfg.gear) title.gear = sharedCfg.gear;
+  // A SHARED LOADOUT IS A THREE-PERSON LOADOUT, always: encodeConfig writes
+  // three slots and decodeConfig refuses anything with a gap ("all nine or
+  // none", sim/share.js). On the Weird Route there are TWO tabs, so applying
+  // one would put Susie's build on Noelle and leave Ralsei's in an array
+  // position no tab addresses — the sharer's setup wearing the wrong
+  // character's name, which is the exact thing the decoder's all-or-nothing
+  // rule exists to prevent. Refused here for the same reason, one level up.
+  if (sharedCfg.gear && !weirdRoute) title.gear = sharedCfg.gear;
   if (sharedCfg.bag) title.bag = sharedCfg.bag;
   // The roster picker's cursor, kept so the link round-trips through SHARE
   // SETUP unchanged. SINGLE is refused on this page (the title loop), so
@@ -459,7 +545,7 @@ state.spriteRate = renderer.spriteRate;
 // never passes through reset(), which is where every later run copies it.
 // knight-sim's driver still runs those links on the default loadout — the one
 // deliberate line here that main.js lacks, and a candidate port-back.
-state.loadout.gear = title.gear.map((g) => ({ weapon: g.weapon, armor: [...g.armor] }));
+state.loadout.gear = loadoutGear();
 build(state);
 
 // ?frames=N fast-forwards the sim before the first paint. Deterministic —
@@ -542,7 +628,7 @@ function reset() {
   state.vistaFsBase = vistaFs;
   // THE LOADOUT COMES FROM SETTINGS. The title's equip menu edits title.gear;
   // every fresh fight is built with a copy of it (sim/damage.js gearOf).
-  state.loadout.gear = title.gear.map((g) => ({ weapon: g.weapon, armor: [...g.armor] }));
+  state.loadout.gear = loadoutGear();
   // …and so does the shake switch. A fresh state starts with flag 12 clear, so
   // without this an R-restart silently turned the camera shake back on.
   state.flag12 = title.shake ? 0 : 1;
@@ -632,10 +718,25 @@ function persistSettings() {
   try {
     localStorage.setItem(KAIZO_SETTINGS_KEY, JSON.stringify({
       v: 1, // see the load above: pre-`v` entries hold the old 100 default
-      gear: title.gear, bag: title.bag, volumes: title.volumes,
-      shake: title.shake, scaling: title.scaling, swapZX: title.swapZX,
+      // THE WEIRD ROUTE'S LOADOUT DOES NOT GO IN HERE, and the A-Side's must
+      // not be destroyed by it. `title.gear` is TWO entries on that route, and
+      // the loader above only accepts a saved loadout at `length === 3` — so
+      // writing it would drop the player's three-person build on the way out
+      // and then refuse to read the two-person one back in. Omitting the key
+      // leaves the A-Side entry exactly as it was; the Weird Route's build
+      // rides in the proceed entry instead (kaizo/ui/proceed.js).
+      ...(weirdRoute ? {} : { gear: title.gear }),
+      bag: title.bag,
+      volumes: title.volumes,
+      shake: title.shake,
+      scaling: title.scaling,
+      swapZX: title.swapZX,
     }));
   } catch { /* private mode etc. — the session still works, unsaved */ }
+  // The row's own state, and on the Weird Route its loadout with it. Cheap,
+  // and it means a press cannot be lost to a reload that happened to come
+  // between two of them.
+  saveProceed(title.unused, weirdRoute ? title.gear : (savedProceed.gear ?? null));
   applySettings();
 }
 
@@ -811,6 +912,57 @@ function frame(now) {
       }
       // SHARE SETUP — build the link and put it on the clipboard.
       if (r.share) shareSetup();
+      // THE UNUSED ROW HEATING UP. `r.press` is the count the press reached,
+      // 1..UNUSED_PRESSES. The refusal sound has already played above for every
+      // press but the last (the row is still refusing — it is going redder
+      // WHILE it refuses), and the last one played `snd_select` instead, which
+      // is the one press the row accepts. Persisted every time, so a reload
+      // never costs a press.
+      if (r.press) saveProceed(title.unused, weirdRoute ? title.gear : (savedProceed.gear ?? null));
+      // THE BREAK. `r.shatter` is the frame the glass is created on, and it is
+      // the frame the sound plays.
+      //
+      // CHAPTER 4 PLAYS ITS BREAK TWICE, at two pitches:
+      //     snd_play_delay(break_noise, _delay_sound_time, 0.5, 0.5);
+      //     snd_play_delay(break_noise, _delay_sound_time, 0.5, 0.44);
+      // `gml_Object_obj_intro_ch4_Step_0.gml:177-178`. The DOUBLING and the two
+      // PITCHES are transcribed. Two things are not, and both are stated rather
+      // than quietly dropped:
+      //   * `break_noise` is `snd_init("ch4_first_intro_breaking.ogg")`
+      //     (`_Create_0.gml:50`) — a chapter 4 stream this pack does not have
+      //     and has no licence to add. `snd_glassbreak` stands in; it is the
+      //     sound sim/victory-scene.js already uses for breaking glass, at the
+      //     same doubled-and-detuned shape.
+      //   * The `_delay_sound_time` of 20 is not modelled — it exists so the
+      //     sound lands ON the break, twenty frames after the call, and this
+      //     driver's audio has no delay channel. Fired here, it lands with the
+      //     PRESS instead of with the flight. A break that makes no sound at
+      //     all would be worse.
+      if (r.shatter) {
+        audio.play([
+          { name: 'snd_glassbreak', pitch: 0.5, gain: 1 },
+          { name: 'snd_glassbreak', pitch: 0.44, gain: 1 },
+        ]);
+      }
+      // ...AND THEN PROCEED. The point of no return: the build switches to the
+      // Weird Route, menus included, and the fight in front of the player is
+      // rebuilt on the spot rather than after a reload.
+      //
+      // ONE-WAY. `title.unused.taken` is written by sim/modes.js and never
+      // cleared, and `enterWeirdRoute` is idempotent, so a second press is a
+      // no-op rather than a toggle — which is the mod's own shape: on the
+      // B-Side game over BOTH answers are PROCEED and neither leaves
+      // (DEVICE_FAILURE_Step_0:384-385, :430-437).
+      if (r.proceed && !weirdRoute) {
+        enterWeirdRoute();
+        saveProceed(title.unused, title.gear);
+        console.log(`[kaizo] PROCEED — version ${versionId}: `
+          + `${KAIZO_VERSIONS[versionId].name}`);
+        // The fight under the menu is the OLD version until this runs; reset()
+        // rebuilds it through `build()`, which now reads the new versionId and
+        // hands the Weird Route its gear override.
+        reset();
+      }
       if (title.dirty) {
         title.dirty = false;
         persistSettings();

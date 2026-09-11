@@ -14,7 +14,10 @@
 import { buildKaizoTurnLoop } from './kaizo-practice.js';
 import { vcHooks } from './kaizo-vc-hooks.js';
 import { kaizoVortexendFreeze } from '../attacks/sword-vortex.js';
-import { installRoster, WEIRD_ROUTE_PARTY } from '../party/roster.js';
+import {
+  installRoster, WEIRD_ROUTE_PARTY, NORMAL_ROUTE_PARTY, maxhpOfChar, charIdOf,
+  CHAR_NONE, CHAR_KRIS, CHAR_NOELLE,
+} from '../party/roster.js';
 import { scrKaizoTarget, kaizoKnightTarget, kaizoDamageHooks } from '../party/damage.js';
 import { kaizoAdvanceBalloon } from '../party/freeze.js';
 import { createKaizoHeroes } from '../party/heroes.js';
@@ -22,6 +25,7 @@ import { installKaizoMenu } from '../party/spells.js';
 import { VC_TABLE, VD_TABLE, VC_KNIGHT } from '../versions/vc-script.js';
 import { tensionbarDraw } from '../party/tensionbar.js';
 import { spawn } from '../../sim/entity.js';
+import { PARTY } from '../../sim/damage.js';
 
 export const KAIZO_NOTE =
   'KAIZO KNIGHT — a recreation of EnderCat8\'s "Kaizo Roaring Knight" mod '
@@ -173,7 +177,211 @@ export const KAIZO_TOK3_GEAR = [
   { weapon: 18, armor: [1, 10] },
 ];
 
-export function buildKaizoScene(state, { version = 'A' } = {}) {
+// ── global.knight_mode AND THE TWO FLAGS IT PRODUCES (ledger G-6) ──────────
+//
+// THE PROBLEM THIS SOLVES. `practicemode` and `nohitmode` are read in
+// FOURTEEN already-translated branches across kaizo/party/ and
+// kaizo/scenes/, and until now they were written NOWHERE — every one of them
+// was permanently on its false arm. This is the fight's own half of G-6: the
+// knight's Create block, and a way for a scene to say which mode it is. The
+// PRE-FIGHT ROOM that lets a player choose (the sword-draw's four-option
+// menu, the kaizo settings sign) is G-9/G-10 and is NOT here.
+//
+// THE PRODUCER, `gml_Object_obj_ch3_PTB02_Step_0.gml:444, 495, 500`: `con 3.2`
+// sets `global.knight_mode = 0` unconditionally (:444 — so from that moment the
+// global EXISTS, whatever is chosen next) and offers Practice / No Hit /
+// Standard / Return as choices 0..3. The commit is a two-armed test at con 3.4,
+// and WHICH ARM WRITES WHAT is the whole point:
+//
+//     if (global.choice == 3)        { ... room_restart(); exit; }   // Return
+//     else if (global.choice == 1)   { ...; global.knight_mode = global.choice; }  // :495
+//     else                           { con = 4; global.knight_mode = global.choice; } // :500
+//
+// The `else` at :500 is not "Standard"; it is EVERY choice that is not 3 and
+// not 1 — which is 0 (Practice) as well as 2 (Standard). So all three playable
+// choices write the global, and only Return does not. Reading it as "1 and 2
+// only" makes Practice unreachable, which contradicts the consumer below:
+// `practicemode = 1` needs `global.knight_mode == 0` to have been written, and
+// :500 is the line that writes it.
+//
+// With `global.kaizo_practice` unset the menu is skipped entirely and
+// `global.choice = 2` — Standard.
+//
+// THE CONSUMER, `gml_Object_obj_knight_enemy_Create_0.gml:88-109`, verbatim:
+//
+//     practicemode = 0;
+//     nohitmode = 0;
+//     knight_items = [];  for (i = 0; i < 13; i++) knight_items[i] = global.item[i];
+//     if (variable_global_exists("knight_mode"))
+//     {
+//         if (global.knight_mode == 0)
+//             practicemode = 1;
+//         if (global.knight_mode == 1)
+//         {
+//             nohitmode = 1;
+//             global.hp[1] = global.maxhp[1];
+//             global.hp[2] = global.maxhp[2];
+//             global.hp[3] = global.maxhp[3];
+//             global.hp[4] = global.maxhp[4];
+//         }
+//     }
+//
+// `variable_global_exists` IS LOAD-BEARING, and it is why the byte-gate
+// recordings are Standard runs. The oracle patch boots the game and
+// `room_goto(room_bullettest_new)` — PTB02 never runs, `global.knight_mode`
+// is never created, the test is FALSE and both flags stay 0. So "no mode
+// given" is not a convenience default here; it is the recorded state, and
+// `undefined` models the missing global exactly. Passing 2 (Standard) reaches
+// the same two zeroes down the other road, and both are asserted.
+//
+// `knight_items` is the inventory snapshot, G-12's business (the mod moved it
+// behind `global.knight_mode == 2`); this lane's bag is a title-screen
+// loadout, a different model, so it is not translated here.
+export const KNIGHT_MODE_PRACTICE = 0;
+export const KNIGHT_MODE_NOHIT = 1;
+export const KNIGHT_MODE_STANDARD = 2;
+
+/** The names `buildKaizoScene({ mode })` takes, and the global they mean. */
+export const KNIGHT_MODES = {
+  practice: KNIGHT_MODE_PRACTICE,
+  nohit: KNIGHT_MODE_NOHIT,
+  standard: KNIGHT_MODE_STANDARD,
+};
+
+/**
+ * `global.hp[1..4] = global.maxhp[1..4]` — no-hit mode's opening heal.
+ *
+ * BY SLOT, because the party arrays in this engine are slot-indexed and the
+ * roster is what maps a slot to a character. The GML writes four character
+ * cells whether or not those characters are in the fight; a write to an
+ * absent character lands nowhere that this fight reads, which is the same
+ * reading kaizo/party/damage.js's `practiceHp` records for the practice-mode
+ * HP dance.
+ *
+ * THE MAX COMES FROM THE ROSTER FIRST, and getting that order wrong is a
+ * silent corruption rather than a crash: `PARTY[1].maxhp` is SUSIE'S 190, and
+ * the Weird Route's slot 1 is Noelle with 120. `maxhpOfChar` reads the
+ * installed roster (0 when none is), `state.partyMaxhp` is the HUD's copy
+ * that buildKaizoScene writes for a roster version, and the engine's
+ * chapter-3 table is the last resort for a vanilla-shaped three.
+ *
+ * ── THE PADDED SPARE IS NOT A CHARACTER, AND IT WAS BEING HEALED ──────────
+ *
+ * `state.partyHp.length` IS NOT THE ROSTER SIZE. buildKaizoScene pads a short
+ * party back out to three with the spare marked dead and untargetable, because
+ * that is what `global.char = [1, 4, 0]` looks like to every vanilla-shaped
+ * consumer (the note at the padding loop has the full reasoning). So on the
+ * Weird Route this walk ran slots 0, 1 AND 2 — and slot 2 has no character at
+ * all. `maxhpOfChar` correctly returned 0 for it, `state.partyMaxhp` is the
+ * roster's own two entries so index 2 was undefined, and the walk fell all the
+ * way through to `PARTY[2].maxhp` — RALSEI'S 140, written into a slot the
+ * Weird Route's party does not have. Measured:
+ *
+ *     buildKaizoScene({ version: 'D', mode: 'nohit' })
+ *     partyHp  [160, 120, 0]  ->  [160, 120, 140]      chardead [0, 0, 1]
+ *
+ * A slot that is dead, untargetable and holding 140 HP is a contradiction
+ * waiting for the first consumer that reads HP without reading `chardead`
+ * beside it — the exact failure mode the padding note warns about, arriving
+ * from the other direction.
+ *
+ * The GML is CHARACTER-indexed and answers this by construction: it writes
+ * `global.hp[1..4]`, and a character who is not in the fight has its cell
+ * written somewhere nothing reads. Modelled here by resolving the slot's
+ * character FIRST and skipping the slot when there is none — `CHAR_NONE` is
+ * the mod's own 0, so this is the same test `scr_fixparty` and `hpOfChar`
+ * make, not a guard invented for this site.
+ */
+function healPartyToMax(state) {
+  if (!Array.isArray(state.partyHp)) return;
+  for (let slot = 0; slot < state.partyHp.length; slot++) {
+    const charId = charIdOf(state, slot);
+    // `global.hp[0]` — an empty slot is character 0, and the GML's write to a
+    // character not in the party lands nowhere this fight reads.
+    if (charId === CHAR_NONE) continue;
+    const m = maxhpOfChar(state, charId)
+      || state.partyMaxhp?.[slot]
+      || PARTY[slot]?.maxhp;
+    if (typeof m === 'number' && m > 0) state.partyHp[slot] = m;
+  }
+}
+
+/**
+ * obj_knight_enemy's Create block for the two mode flags. Call it once the
+ * knight record exists — the GML runs it in the Knight's own Create, before
+ * his first Step, and his first Step is where `armHpscene` reads
+ * `!practicemode && !nohitmode` (kaizo/party/scenes.js:1042).
+ *
+ * IT WRITES BOTH HOMES ON PURPOSE. The fourteen readers do not agree on
+ * where the flags live: kaizo/party/scenes.js and kaizo/party/gloom.js read
+ * them off `state.knight` (the obj_knight_enemy instance record), while
+ * kaizo/party/damage.js, freeze.js, spells.js and kaizo-vc-hooks.js read
+ * `state.kaizo.practicemode`. In the GML there is one instance and one
+ * variable; writing one home only would have left half the branches dead and
+ * a green suite either way, which is exactly the failure this repo keeps
+ * hitting. Both are written, and check-knight-mode.mjs asserts every reader
+ * from the outside rather than trusting the field name.
+ *
+ * @param {*} state
+ * @param {number|undefined} knightMode `global.knight_mode`; `undefined`
+ *        means the global does not exist, which is the recorded fight.
+ */
+export function applyKnightMode(state, knightMode) {
+  // :88-89 — the defaults, unconditional.
+  let practicemode = false;
+  let nohitmode = false;
+  // :95 — `variable_global_exists("knight_mode")`.
+  if (knightMode !== undefined && knightMode !== null) {
+    if (knightMode === KNIGHT_MODE_PRACTICE) practicemode = true;
+    if (knightMode === KNIGHT_MODE_NOHIT) {
+      nohitmode = true;
+      // :104-107 — the four `global.hp[c] = global.maxhp[c]` lines. (:103 is
+      // `nohitmode = 1`, the line above; the citation used to start there.)
+      healPartyToMax(state);
+    }
+  }
+  if (state.knight) {
+    state.knight.practicemode = practicemode;
+    state.knight.nohitmode = nohitmode;
+  }
+  if (state.kaizo) {
+    state.kaizo.practicemode = practicemode;
+    state.kaizo.nohitmode = nohitmode;
+    // The producer's own value, kept so a reader can tell "Standard was
+    // chosen" (2) from "the global never existed" (undefined) — G-12's
+    // inventory snapshot and G-8's ESC restart both branch on `== 2`.
+    state.kaizo.knightMode = knightMode ?? null;
+  }
+  return { practicemode, nohitmode };
+}
+
+/**
+ * @param {*} state
+ * @param {object} [opts]
+ * @param {string} [opts.version] a KAIZO_VERSIONS key.
+ * @param {string|number} [opts.mode] `global.knight_mode` (see KNIGHT_MODES).
+ * @param {Record<number, {weapon: number, armor: number[]}>} [opts.gear]
+ *   A CHARACTER-INDEXED equipment override, forwarded to `installRoster`'s
+ *   own `gear` parameter and read back through `gearOfChar`
+ *   (`state.kaizo.gear[charId]`).
+ *
+ *   IT ONLY APPLIES TO A VERSION THAT BRINGS A ROSTER — V-D today. That is
+ *   not a limitation, it is the scope: `installRoster` is the only thing that
+ *   reads it, and a version without a roster has no `state.kaizo.gear` for
+ *   `gearOfChar` to consult. Passing it to V-C would be a value written where
+ *   nothing reads it, which is this repo's signature defect, so it is
+ *   documented as ignored rather than left to be discovered.
+ *
+ *   WHY IT EXISTS: the equip screen. `kaizo/ui/proceed.js` puts the Weird
+ *   Route's two members on the title's equip page, and without this the
+ *   player's choices would edit `title.gear` and never reach the fight — the
+ *   roster would keep supplying its own defaults and the menu would be a
+ *   decoration. check-proceed-route.mjs asserts the wire from the outside.
+ *
+ *   DEFAULT UNCHANGED: omitted means `installRoster` is called exactly as it
+ *   was, and the A-Side byte gate (V-C, no roster) never reaches this at all.
+ */
+export function buildKaizoScene(state, { version = 'A', mode, gear } = {}) {
   const v = KAIZO_VERSIONS[version];
   // The ledgers must exist before the turn loop's first launch. Launches only
   // happen inside stepFrame, after build returns — but setting the marker
@@ -294,7 +502,7 @@ export function buildKaizoScene(state, { version = 'A' } = {}) {
   let roster = null;
   if (v.party) {
     const marker = state.kaizo;
-    installRoster(state, { charIds: v.party, sideb: version === 'D' });
+    installRoster(state, { charIds: v.party, sideb: version === 'D', gear: gear ?? null });
     roster = state.kaizo.roster;
     state.kaizo = { ...marker, ...state.kaizo };
     // LANE W2 (menu / spells / ACTs / X-Slash): fill the engine's
@@ -438,5 +646,21 @@ export function buildKaizoScene(state, { version = 'A' } = {}) {
   // The mod's stat block (scr_monstersetup): HP 10000. The knight entity was
   // just created by the build with the vanilla 7300.
   if (v.knight && state.knight) state.knight.hp = v.knight.maxhp;
+
+  // obj_knight_enemy Create_0:88-109 — G-6. HERE because the knight record
+  // does not exist until buildKaizoTurnLoop has run, and it must exist
+  // before the first Step: `knightFirstStep` (kaizo-vc-hooks.js:327) reads
+  // `!practicemode && !nohitmode` through armHpscene on the frame
+  // `damagereductiontimer == 1`.
+  //
+  // DEFAULT IS THE RECORDED FIGHT. `mode` unset means `global.knight_mode`
+  // does not exist, both flags are 0, and nothing about the page changes —
+  // web/kaizo.js passes no mode and stays on Standard. Nothing in this repo
+  // is a player-facing mode selector yet; that is G-9/G-10.
+  const knightMode = typeof mode === 'string' ? KNIGHT_MODES[mode] : mode;
+  if (typeof mode === 'string' && knightMode === undefined) {
+    throw new Error(`buildKaizoScene: unknown mode "${mode}" (practice | nohit | standard)`);
+  }
+  applyKnightMode(state, knightMode);
   return state;
 }

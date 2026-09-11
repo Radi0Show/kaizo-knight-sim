@@ -56,6 +56,11 @@
 //      (con armed, damage 206, target 0, vertical under endtype 1) and
 //      scr_damage_all_maxhp(0.5) taking HALF OF MAX HP from every living
 //      member; endtype 1 defers the strike by exactly 20 frames
+//   9b THE ENDTYPE-1 ARM DELIBERATELY OMITS armKaizoSplitter, and that
+//      omission was argued in a comment and guarded by nothing. Asserted by
+//      consequence: the vertical organism is born at con 0 with damage != 206,
+//      runs its own twenty-frame wind-up, picks the soul's half, and creates
+//      obj_knight_lightorb — all four of which an armed organism skips.
 //  10  Step_0:36-50 — the endtype despawn gate: -60 vs -160, exactly 100
 //      frames apart
 //  11  THE TURN ENDS ITSELF, on every path. The dispatch pins the clock at
@@ -680,18 +685,30 @@ function bigScene(endtype, seed = 11) {
   for (let f = 0; f < 90; f++) {
     if (st.soul && st.soul.alive) st.soul.y = BOX_Y - 8;
     stepFrame(st, {});
-    if (!splitter) splitter = alive(st, 'obj_knight_split_growtangle')[0] ?? null;
-    // The vertical organism is an APPROX stand-in and its own teeth would
-    // set global.inv, which would gate the deferred strike out. Retire it
-    // once its arming has been observed — the +20 delay is what this
-    // scenario is pinning.
+    // G-2, 2026-09-10: this used to look for obj_knight_split_growtangle
+    // (the horizontal organism, spawned with `vertical = true` as a ledgered
+    // stand-in). big_Step_0:51 names the _vertical object and quickslash now
+    // spawns it, so the search — and the assertion below — name it too.
+    if (!splitter) splitter = alive(st, 'obj_knight_split_growtangle_vertical')[0] ?? null;
+    // The organism's own clamp would pin the soul and its damage would set
+    // global.inv, which would gate the deferred strike out. Retire it once
+    // its arrival has been observed — the +20 delay is what this scenario is
+    // pinning.
     if (splitter && splitter.alive && big.timer >= 41) splitter.alive = false;
     if (big.timer === 42) aliveAt42 = big.alive && big.playerstrike === 1;
     if (big.timer === 61) aliveAt61 = big.alive && big.playerstrike === 1;
     if (died < 0 && !big.alive) died = big.timer;
   }
-  ok(splitter && splitter.vertical === true,
-    'endtype 1 cuts VERTICALLY (big_Step_0:51, the _vertical organism stand-in)');
+  // POSITIVE: the endtype-1 arm spawns the REAL vertical organism, and the
+  // horizontal one is NOT in the room — a regression to the stand-in fails
+  // both halves.
+  ok(splitter && splitter.type
+    && splitter.type.name === 'obj_knight_split_growtangle_vertical',
+  'endtype 1 spawns obj_knight_split_growtangle_vertical (big_Step_0:51)');
+  ok(splitter && splitter.target === 0,
+    'the mod\'s `_splitter.target = 0` lands AFTER scr_bullet_inherit (big_Step_0:53)');
+  ok(alive(st, 'obj_knight_split_growtangle').length === 0,
+    'and the horizontal organism is never created on this arm');
   ok(aliveAt42 === true,
     'endtype 1 still HOLDS the soul at timer 42, where endtype 0 has already struck');
   ok(aliveAt61 === true, 'and at timer 61');
@@ -701,6 +718,55 @@ function bigScene(endtype, seed = 11) {
   ok(st.turntimer === 240 || st.turntimer === 239,
     `endtype 1 writes global.turntimer 240, not 80 (Other_11:46-49), got ${st.turntimer}`);
   ok(c.endtype === 1 && st.turntimer > 80, 'the 240 branch is really taken (not the 80 default)');
+}
+{
+  // ── 9b. THE ENDTYPE-1 ARM DOES *NOT* ARM THE ORGANISM ────────────────────
+  //
+  // big_Step_0:49-54 is three statements — instance_create,
+  // scr_bullet_inherit, `target = 0` — and the endtype-0 arm above adds a
+  // fourth of the sim's own, `armKaizoSplitter`, because the HORIZONTAL
+  // organism's con 0 waits on a splitslash signal this call site never sends.
+  // The vertical organism needs none of that: its con 0 is its own
+  // twenty-frame wind-up and no event of it writes `damage`.
+  //
+  // THE OMISSION WAS ARGUED IN A COMMENT AND GUARDED BY NOTHING, so a tidy-up
+  // that "restored the missing call for symmetry" would have passed every
+  // suite. This is the guard, and it asserts CONSEQUENCES rather than the
+  // absence of a line: armKaizoSplitter sets `con = 1, timer = 0, damage =
+  // 206`, and con 1 skips the wind-up — which is the only place `heart_y` is
+  // chosen and the only place obj_knight_lightorb is created.
+  const { st, big } = bigScene(1, 23);
+  let birth = null;
+  let tearAt = -1;
+  let sp = null;
+  for (let f = 0; f < 80; f += 1) {
+    if (st.soul && st.soul.alive) st.soul.y = BOX_Y - 8;
+    stepFrame(st, {});
+    if (!sp) {
+      sp = st.entities.find(
+        (e) => e.alive && e.type.name === 'obj_knight_split_growtangle_vertical',
+      ) ?? null;
+      if (sp) birth = { con: sp.con, timer: sp.timer, damage: sp.damage };
+    }
+    if (sp && tearAt < 0 && sp.con === 1) tearAt = sp.timer;
+  }
+  ok(birth !== null, 'the endtype-1 arm creates the vertical organism at all');
+  ok(birth && birth.con === 0,
+    `NO armKaizoSplitter on the endtype-1 arm: the organism is born at con 0 `
+    + `and runs its own wind-up, got con ${birth && birth.con}`);
+  ok(birth && birth.damage !== 206,
+    `…and it is NOT stamped with the horizontal organism's damage 206 `
+    + `(no event of obj_knight_split_growtangle_vertical writes damage), got `
+    + `${birth && birth.damage}`);
+  // The consequence that would actually break the attack: arming con skips
+  // the `timer == 20` branch, so the soul never gets a half and the light orb
+  // (Step_0:15) is never created.
+  ok(sp && sp.heart_y !== 0,
+    `…so the tear really runs and picks the soul's half, got heart_y `
+    + `${sp && sp.heart_y}`);
+  ok(st.entities.some((e) => e.alive && e.type.name === 'obj_knight_lightorb'),
+    '…and obj_knight_lightorb is created on the tear frame (Step_0:15), which '
+    + 'an armed organism would have skipped entirely');
 }
 
 // ── 10. the endtype despawn gate: -60 vs -160 ─────────────────────────────

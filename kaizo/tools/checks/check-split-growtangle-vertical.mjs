@@ -10,6 +10,16 @@
 //   V1  CREATE — the box's blend and scales are copied, the box is hidden,
 //       depth is box + 100, and the two cut-face flame markers exist facing
 //       opposite ways at double scale.
+//   V1b CLEANUP_0 IS THE TYPE'S `cleanUp` HOOK, not just an exported
+//       function. V1 calls the function by hand and therefore passes with the
+//       hook deleted; this asserts the two consequences of the hook through a
+//       plain `destroy()` — obj_growtangle.visible comes back, and both flame
+//       markers die WITH the organism instead of outliving it — plus the
+//       `cleanedUp` latch that keeps a second destroy inert.
+//   V1c …AND THROUGH THE PATH THAT ACTUALLY ENDS THE TURN: clearTurn's
+//       `with (obj_bulletparent) instance_destroy()` sweep, after the tear.
+//       MEASURED while sabotaging the hook: the box stays HIDDEN through the
+//       sweep without it — clearTurn's rebuild does not restore `visible`.
 //   V2  THE TEAR, at timer 20 exactly: con 0 -> 1, the MOD'S ONE DELTA (the
 //       soul's mask becomes spr_dodgeheart_smaller_2px_mask — every other
 //       line in this object is byte-identical to vanilla v1.05), the custom
@@ -44,6 +54,7 @@
 import { createState, stepFrame } from '../../../sim/index.js';
 import { spawn, destroy } from '../../../sim/entity.js';
 import { buildSingleAttackScene } from '../../../sim/scenes/single.js';
+import { clearTurn } from '../../../sim/scenes/fight.js';
 import { ensureSoul } from './scaffold-soul.mjs';
 import { scrEaseOut } from '../../../sim/gml.js';
 import { HEART_RECT } from '../../../sim/masks.js';
@@ -147,6 +158,60 @@ function markers(state) {
   assertEq(markers(state).length, before, 'V1: CleanUp destroys both markers');
 }
 
+// ── V1b — CleanUp_0 IS WIRED AS THE TYPE HOOK, not merely exported ─────────
+{
+  // THE HOLE THIS CLOSES. V1 above calls `verticalSplitCleanUp` by hand, so
+  // it passes with the type's `cleanUp` entry deleted — and the type entry is
+  // the whole point of the correction: GameMaker runs CleanUp on EVERY
+  // instance_destroy, and the path that really ends this turn is the sweep
+  // (`with (obj_bulletparent) instance_destroy()`), not a hand-placed call.
+  // Without the hook the box's `visible` was left to clearTurn's rebuild and
+  // the flame markers outlived the organism. Both consequences, asserted
+  // through `destroy()` — which is what the sweep does to each instance.
+  const { state, gt } = scene();
+  const sp = spawnVerticalSplit(state, { x: gt.x, y: gt.y }, null);
+  const ms = [...sp.markers];
+  assertEq(ms.length, 2, 'V1b: two markers before the teardown');
+  assertEq(gt.visible, false, 'V1b: …and the box is hidden by Create');
+
+  // A PLAIN instance_destroy. No hand-placed cleanup call anywhere near it.
+  destroy(sp, state);
+
+  assertEq(gt.visible, true,
+    'V1b: destroy() alone restores obj_growtangle.visible — the `cleanUp` type '
+    + 'hook ran (sim/entity.js calls e.type.cleanUp on every destroy path)');
+  assert(ms.every((m) => !m.alive),
+    'V1b: …and both flame markers die WITH the organism instead of outliving it');
+  assertEq(sp.markers.length, 0, 'V1b: …and the organism lets go of them');
+
+  // ONCE, not twice: sim/entity.js latches `cleanedUp`, so a second destroy
+  // (the sweep reaching an instance the Step already killed) is inert.
+  gt.visible = false;
+  destroy(sp, state);
+  assertEq(gt.visible, false, 'V1b: a second destroy does NOT re-run CleanUp');
+}
+
+// ── V1c — …and the TURN SWEEP is the path that proves it matters ──────────
+{
+  // The real end of a B-Side quickslash turn: clearTurn's
+  // `with (obj_bulletparent) instance_destroy()`. Run the organism far enough
+  // to have torn the box (so `visible` is genuinely false and the markers are
+  // genuinely riding the cut faces), then sweep.
+  const { state, gt } = scene();
+  const sp = spawnVerticalSplit(state, { x: gt.x, y: gt.y }, null);
+  for (let f = 0; f < 40; f += 1) stepFrame(state, {});
+  assertEq(sp.con, 1, 'V1c: the organism has torn the box before the sweep');
+  assertEq(gt.visible, false, 'V1c: …so the box is hidden');
+  assert(markers(state).length >= 2, 'V1c: …and its flames are on screen');
+
+  clearTurn(state);
+  assert(!sp.alive, 'V1c: the sweep destroys the organism');
+  assertEq(gt.visible, true,
+    'V1c: …and the box comes back visible, from the organism\'s own CleanUp');
+  assertEq(markers(state).length, 0,
+    'V1c: …with no flame marker left behind');
+}
+
 // ── V2 — the tear ──────────────────────────────────────────────────────────
 {
   const { state, gt } = scene();
@@ -186,11 +251,18 @@ function markers(state) {
   assertEq(gt.image_yscale, Math.fround(3.3333333333333335),
     'V2: …image_yscale narrows to f32 (a built-in) — 3.3333332538604736');
 
-  // The lightorb, ledgered rather than invented or dropped.
-  const orb = state.kaizo.approx.filter((r) => String(r.asked).includes('obj_knight_lightorb'));
-  assertEq(orb.length, 1, 'V2: the untranslated lightorb is ledgered exactly once');
-  assertEq(orb[0].type, 97.1, 'V2: …against the B-Side quickslash controller type');
-  assertEq(orb[0].used, 'nothing spawned', 'V2: …and nothing stands in for it');
+  // THE LIGHTORB IS SPAWNED (G-1, 2026-09-10). This block used to assert an
+  // approx row reading "nothing spawned"; kaizo/attacks/lightorb.js is the
+  // translation, and Step_0:15 creates it on the tear frame at the
+  // organism's own position.
+  const orbs = state.entities.filter((e) => e.alive && e.type.name === 'obj_knight_lightorb');
+  assertEq(orbs.length, 1, 'V2: obj_knight_lightorb is created exactly once (Step_0:15)');
+  assertEq(orbs[0].x, sp.x, 'V2: …at the organism\'s x');
+  assertEq(orbs[0].y, sp.y, 'V2: …and its y');
+  assertEq(
+    state.kaizo.approx.filter((r) => String(r.asked).includes('obj_knight_lightorb')).length,
+    0, 'V2: …so nothing about it is ledgered as an approximation any more',
+  );
 
   // The guard is idempotent: a second tear leaves the scale alone.
   const before = gt.image_yscale;
@@ -381,7 +453,8 @@ if (failures) {
   process.exit(1);
 }
 console.log(`check-split-growtangle-vertical: all ${checks} checks passed`);
-console.log('  V1 create / V2 the tear + the 2px mask delta / V3 the ease-out open');
+console.log('  V1 create / V1b+V1c the CleanUp type hook, by destroy and by sweep');
+console.log('  V2 the tear + the 2px mask delta / V3 the ease-out open');
 console.log('  V4 parked box + riding flames / V5 the half-box clamp, both halves');
 console.log('  V6 it never closes / V7 no rounding / V8 the stand-in was not equivalent');
 process.exit(0);

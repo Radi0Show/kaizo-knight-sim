@@ -233,8 +233,18 @@ for (const name of KAIZO_DRAW_OBJECTS) {
 //                                       is the only hero in the entity list,
 //                                       so it is the only place the seam can
 //                                       reach one
-ok(KAIZO_DRAW_OBJECTS.length === 27,
-  `the registry names the mod's 24 changed Draw objects + 3 engine fills (${KAIZO_DRAW_OBJECTS.length})`);
+// ...and, since 2026-09-10 (ledger G-1), a FOURTH that IS a mod delta but had
+// no engine drawer to override:
+//   obj_knight_lightorb                 Draw_0:200 moves the charge disc from
+//                                       c_blue to get_swordcolor(), but
+//                                       render/canvas.js has no DRAW_EVENTS
+//                                       row for the object at all (it is
+//                                       unreachable in vanilla) and its
+//                                       sprite is not in the pack, so the
+//                                       Side-B orb drew nothing while its
+//                                       sunbolts drew
+ok(KAIZO_DRAW_OBJECTS.length === 28,
+  `the registry names the mod's changed Draw objects + the engine fills (${KAIZO_DRAW_OBJECTS.length})`);
 ok(KAIZO_DRAW_OBJECTS.every((n) => typeof KAIZO_DRAW_OVERRIDES[n] === 'function'),
   'every registry entry is a function');
 

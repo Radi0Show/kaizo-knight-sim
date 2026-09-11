@@ -588,6 +588,34 @@ if (KV.C) {
     'check-heroes-draw', 'check-tensionbar-draw', 'check-render-depth-kaizo',
     'check-render-manifest-kaizo', 'check-quickslash-draw', 'check-scenes',
     'check-split-growtangle-vertical',
+    // WIRED 2026-09-11, rounds 4 and 5. Same reason as the block above, and
+    // the reviewers raised it against every one of these lanes in turn: a
+    // check that runs, reports and cannot fail the gate is guarding nothing.
+    // Each is deterministic, needs no recording, and runs in seconds.
+    //   check-lightorb            obj_knight_lightorb — the B-Side sunbolt
+    //                             attack, its two emitters, the 166-damage
+    //                             bolts, and an EXACT per-frame u32 sequence
+    //                             (a class filter could not see a draw that
+    //                             moved by one frame, which is how the budget
+    //                             came to be eight short).
+    //   check-kaizo-hitboxes      the two masks the mod changed and the
+    //                             B-Side blade dash windup.
+    //   check-quickslash-draw     the finisher's Draw.
+    //   check-spellenemy-row      the spell's enemy row is DRAWN. It was a
+    //                             submenu nothing painted, which is what the
+    //                             extra Enter on Rude Buster really was.
+    //   check-aside-messages      the mod's turn-end text on the A-Side.
+    //   check-spellphase-kaizo    the downed-caster skip.
+    //   check-knight-mode         practicemode / nohitmode actually written.
+    //   check-opening-msg         the B-Side encounter opener.
+    //   check-proceed-route       UNUSED -> the reddening ramp -> the shatter
+    //                             -> the Weird Route title.
+    //   check-heal-roster         the no-hit heal no longer fills a padded
+    //                             empty slot on a two-member roster.
+    'check-lightorb', 'check-kaizo-hitboxes', 'check-quickslash-draw',
+    'check-spellenemy-row', 'check-aside-messages', 'check-spellphase-kaizo',
+    'check-knight-mode', 'check-opening-msg', 'check-proceed-route',
+    'check-heal-roster',
     // WIRED 2026-09-10 with k_hpscene, the MAX-HP SHEAR — the fourth
     // turn-hijacking scene (obj_knight_enemy Step_0:54-63 arms it,
     // :1771-1929 plays it) and THE ONLY ONE THAT IS NOT B-SIDE GATED. Its

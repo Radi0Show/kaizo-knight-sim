@@ -63,7 +63,13 @@ import {
 import { spawnImpact, stepAttackVfx } from '../../sim/attackvfx.js';
 import { stepRudeBuster, rudeBusterBusy } from '../../sim/rudebuster.js';
 import { castSpell, resolveActPages } from '../../sim/spells.js';
-import { needsSpellphase, createSpellphase, stepSpellphase } from '../../sim/spellphase.js';
+import { needsSpellphase, createSpellphase } from '../../sim/spellphase.js';
+// THE MOD'S OWN obj_spellphase Step. `sim/spellphase.js` translates V1.03 and
+// is correct for it; EnderCat8's build adds a downed-caster skip and a
+// `char < 3` guard that vanilla has no trace of (ledger G-25). Law 6 forbids
+// editing the vendored engine for a mod delta, so the Step — and ONLY the
+// Step; Create and Alarm_0 are unchanged — comes from kaizo/versions/.
+import { stepKaizoSpellphase } from '../versions/kaizo-spellphase.js';
 import {
   stepScenes, scrMnendturnScenes, sceneHijacksTurn, attachSceneKnight,
   applySceneHandbackCharturn,
@@ -143,6 +149,17 @@ const ATTACKPRESS_FADE = 13;
  * turn loop.
  */
 const TURN_GAP = 1;
+
+/**
+ * `scr_encountersetup` case 115's flag[456] arm — ledger G-13,
+ * `gml_GlobalScript_scr_encountersetup.gml:717`. The mod's own
+ * `k_stringsetloc`, English side, verbatim: `^1` is the one-beat pause and
+ * `&` the line break, the same notation every other message in this lane
+ * carries. The Japanese half is
+ * `"＊ 咆哮の騎士が　現れた。^1&＊ 何かがおかしい。"`; this build has no
+ * localisation layer, so only the English string is translated.
+ */
+export const SIDEB_OPENING_MSG = '* The Roaring Knight appeared^1.&* Something seems wrong.';
 
 
 
@@ -370,7 +387,23 @@ const director = {
     e.turn = 0;
     // `*downmessage` — one-shot per character per FIGHT, never cleared.
     state.downSeen = { kris: false, susie: false, ralsei: false };
-    state.battlemsg = OPENING_MSG;
+    // THE B-SIDE ENCOUNTER OPENER — ledger G-13,
+    // `gml_GlobalScript_scr_encountersetup.gml:713-718`, case 115:
+    //
+    //     global.battlemsg[0] = stringsetloc("* The Roaring Knight appeared.", ...);
+    //     if (global.flag[456])
+    //         global.battlemsg[0] = k_stringsetloc(
+    //             "* The Roaring Knight appeared^1.&* Something seems wrong.", ...);
+    //
+    // The vanilla line is assigned FIRST and overwritten, which is why this
+    // is a ternary over `OPENING_MSG` and not a separate branch: on the
+    // A-Side the engine's constant is still the value the box shows.
+    // `global.flag[456]` is the Snowgrave flag — the same one
+    // `obj_knight_enemy` Create:115 reads into `k_sideb` — and this lane
+    // carries it as `state.kaizo.sideb`, stamped by buildKaizoScene before
+    // the turn loop is built (WEIRD-ROUTE.md lists all six flag[456] sites).
+    // FIRST THING A B-SIDE PLAYER READS, and it had never been wired.
+    state.battlemsg = state.kaizo?.sideb ? SIDEB_OPENING_MSG : OPENING_MSG;
     e.owner = null;
     e.gap = TURN_GAP;
     e.started = false;
@@ -1480,7 +1513,10 @@ const director = {
       if (e.spellphase) return;
     }
     if (e.spellphase) {
-      const done = stepSpellphase(state, e.spellphase, e, {
+      // THE MOD'S STEP, not the engine's — G-25. It is byte-neutral wherever
+      // no queued caster is down (both tracked recordings), and skips the
+      // downed one outright where vanilla would pose them and burn 90 frames.
+      const done = stepKaizoSpellphase(state, e.spellphase, e, {
         castSpell: (st, c, id, target) => {
           const r = castSpell(st, c, id, target, { alreadyPaid: true });
           // The kaizo cases write their delay to the lane's name; hand it to
