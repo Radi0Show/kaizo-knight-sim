@@ -154,16 +154,64 @@ export function ensureFreezeState(state) {
 // Indexing — the slot/charId bridge
 // ───────────────────────────────────────────────────────────────────────────
 
-/** `global.char[slot]`. 0 for an empty slot, exactly as scr_fixparty leaves it. */
+/**
+ * `global.char` for a lane that installed no roster — V-C, the Normal Route.
+ *
+ * NOT A DEFAULT AND NOT AN INVENTION: it is the engine's own party, and
+ * `sim/spells.js` ("THE CHARACTER-TABLE SEAM") states the same identity —
+ * "slot i is always character i + 1, so `SPELL_LIST[1]` is Susie's list".
+ *
+ * WHERE THE [1, 2, 3] REALLY COMES FROM, corrected 2026-09-10. This used to
+ * cite `scr_gamestart`'s chapter-3 block, which says the opposite:
+ *
+ *     global.char[0] = 1;  global.char[1] = 0;  global.char[2] = 0;
+ *     (gml_GlobalScript_scr_gamestart.gml:18-20, v105 — byte-identical in
+ *      the mod's dump; gml_Object_obj_initializer_Create_0.gml:4 the same)
+ *
+ * Kris alone. The trio is assembled later, by `scr_setparty(true, true, …)`,
+ * which calls `scr_getchar(2)` and `scr_getchar(3)`
+ * (gml_GlobalScript_scr_setparty.gml:14 and :29); `scr_getchar` walks slots
+ * 0..2 and drops the character into the first ZERO one
+ * (gml_GlobalScript_scr_getchar.gml:24-37), so Susie lands in slot 1 and
+ * Ralsei in slot 2 — hence [1, 2, 3], in that order, for a full chapter-3
+ * party. The recorder boots into that state; the citation, not the value,
+ * was wrong.
+ *
+ * This used to be absent, and `charIdOfSlot` returned 0 for every slot on a
+ * roster-less lane — which made `scr_havechar` false for Kris, Susie and
+ * Ralsei and silently emptied every char-keyed read in this module. B-1 /
+ * ledger G-3 needs `downMessages` on the A-Side, and with the hole in place
+ * it computed four empty strings and a downcount of 0, forever.
+ */
+const VANILLA_PARTY_CHARIDS = [1, 2, 3];
+
+/**
+ * `global.char[slot]`. 0 for an empty slot — which is what `scr_losechar`
+ * leaves (`global.char[2] = 0; global.char[1] = 0;`,
+ * gml_GlobalScript_scr_losechar.gml:3-4) and what `scr_getchar` tests for.
+ * `scr_fixparty` DOES exist — kaizo_settings_init.gml, obj_ch3_PTB02's
+ * Create_0 and obj_npc_sign's Draw_0 all call it, three references in the
+ * mod dump. A correction written here on 2026-09-10 claimed the opposite and
+ * was wrong; it is named rather than quietly deleted because it shipped as a
+ * verified grep, which is the worst kind of wrong note to leave in a file
+ * someone will trust. What IS true is the narrower thing this comment needs:
+ * `scr_fixparty` compacts and re-sorts the party, it is not what leaves a 0
+ * in a slot, and `scr_losechar` is (:3-4).
+ */
 export function charIdOfSlot(state, slot) {
   const r = state.kaizo?.roster;
-  if (!r || slot < 0 || slot >= r.length) return 0;
+  if (!r) return VANILLA_PARTY_CHARIDS[slot] ?? 0;
+  if (slot < 0 || slot >= r.length) return 0;
   return r[slot].charId ?? 0;
 }
 
 /** The inverse. -1 when that character is not in the party. */
 export function slotOfCharId(state, charId) {
-  const r = state.kaizo?.roster ?? [];
+  const r = state.kaizo?.roster;
+  if (!r) {
+    const i = VANILLA_PARTY_CHARIDS.indexOf(charId);
+    return i;
+  }
   for (let i = 0; i < r.length; i++) if (r[i].charId === charId) return i;
   return -1;
 }
@@ -504,6 +552,20 @@ export function statueForSlot(state, slot) {
  * statue standing) and it also disables statue re-spawn for that hero forever,
  * because Draw's `herofrozen == -4` gate can no longer be true.
  *
+ * THE ONE TRANSLATION OF THIS EVENT (B-2 / ledger §3 rows 2-3). It used to be
+ * translated twice — again as `cleanupKaizoHero` in kaizo/party/heroes.js,
+ * over the hero RECORD's own `herofrozen` and the char-keyed `freezeByChar`
+ * mirror — so each cleared half the state and neither was called by anything
+ * but a check. `cleanupKaizoHero` is now the ENTRY POINT (it owns
+ * `state.heroes[]`, which this module must not reach into) and delegates the
+ * shared work here. Call that one; this is what it runs.
+ *
+ * NEITHER IS ON A LIVE PATH, and the mod is why: `obj_heroparent`'s CleanUp
+ * fires when a hero instance is destroyed, and no hero is destroyed inside
+ * the fight — the end-of-fight teardown is `scr_kaizo_killobjs`, which is the
+ * `clearAllFreeze` sweep below. Wiring a call would be inventing a
+ * destruction the mod does not perform.
+ *
  * @returns {{thawed:boolean, leaked:object|null}} `leaked` is the statue the
  *          destroy failed to take, so a caller can assert the bug is present.
  */
@@ -759,7 +821,7 @@ const DOWN_LATCH_KEYS = { 1: 'kris', 2: 'susie', 3: 'ralsei', 4: 'noelle' };
  *
  * KRIS'S LINE IS FOUR-DEEP, and every layer overwrites the last:
  *
- *     base   "* Kris collapsed in silence.&"      (vanilla)
+ *     base   "* Kris collapsed in silence.&"      (MOD — see below)
  *     sideb  "* Can't move your body.&"           (k_sideb)
  *     freeze "* Kris was frozen solid.&"          (k_freeze[1]) — wins over sideb
  *     funni  "* Kris is now dead.&"               (kaizo_funchance(100), 1/100)
@@ -777,6 +839,17 @@ const DOWN_LATCH_KEYS = { 1: 'kris', 2: 'susie', 3: 'ralsei', 4: 'noelle' };
  * ThornRing."`, which nothing reads and which is not emitted here.
  *
  * RNG: `kaizo_funchance` draws twice, and only when the Kris branch runs.
+ *
+ * NONE OF IT IS `k_sideb`-GATED — ledger G-3 / B-1, corrected 2026-09-10.
+ * The three base lines are the MOD's, not vanilla's: v105 says "* Kris
+ * kneeled in silence.&", "* Susie was hurt and beaten.&", "* Ralsei became a
+ * pile of fluff.&" (gml_vanilla_v105 obj_knight_enemy Step_0:712/719/726 —
+ * the Susie and Ralsei numbers read 720/727 until 2026-09-10, one line off
+ * each, landing on the `downcount++` under the string instead of the
+ * `stringsetloc` itself; Kris's 712 was right, and
+ * sim/battlemsg.js downMsg carries exactly those). The mod replaces all three
+ * and adds Noelle's, on BOTH routes. The label on the first line used to read
+ * "(vanilla)" and was wrong on both counts.
  *
  * @returns {{battlemsg:string, downcount:number, lines:object, draws:number}}
  */

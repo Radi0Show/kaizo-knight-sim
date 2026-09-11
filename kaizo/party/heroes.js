@@ -47,6 +47,10 @@ import {
   HERO_VICTORY,
 } from '../../sim/heroes.js';
 import { rosterSize, memberAt, isFrozen, charIdOf } from './roster.js';
+// The other half of obj_heroparent's CleanUp — one event, one translation.
+// See cleanupKaizoHero. freeze.js imports nothing from this module, so the
+// direction is one-way.
+import { heroCleanUp } from './freeze.js';
 
 export {
   FACE_IDLE, FACE_ATTACK, FACE_SPELL, FACE_ITEM, FACE_DEFEND, FACE_ACT,
@@ -337,15 +341,35 @@ export function stepKaizoHeroes(state) {
  *
  * `k_freeze[_mychar] = 0` IS unconditional and does work — the character is
  * unfrozen even though their statue survives.
+ *
+ * ── ONE EVENT, ONE TRANSLATION (B-2 / ledger §3 rows 2-3) ─────────────────
+ * This CleanUp had been translated TWICE, independently: here, over the hero
+ * RECORD (`state.heroes[slot].herofrozen`, `state.kaizo.freezeByChar`), and
+ * again as `heroCleanUp` in kaizo/party/freeze.js, over the freeze module's
+ * own arrays (`k.freeze[]`, `k.herofrozen[]`, `k.frozenStatues[]`). The two
+ * cleared different halves of the same state, so calling either one alone
+ * left the other half stale — and nothing outside `kaizo/tools/checks/`
+ * called either.
+ *
+ * RECONCILED ONTO `heroCleanUp`, which is the fuller of the two: it owns the
+ * statue registry and the `k_freeze` array that `kFreezeChar` actually reads.
+ * This function stays as the hero-record ENTRY POINT — `state.heroes[]` is
+ * this module's data and the freeze module must not reach into it — and
+ * delegates the shared work rather than repeating it. Its return value is
+ * `heroCleanUp`'s, so a caller still gets the leaked statue.
  */
 export function cleanupKaizoHero(state, slot) {
   const h = state.heroes?.[slot];
-  if (!h) return;
+  if (!h) return null;
+  // `with (obj_knight_enemy) k_freeze[_mychar] = 0` and the -99 leak, both
+  // through the module that owns the arrays.
+  const r = heroCleanUp(state, slot);
+  // The CHARACTER-keyed mirror kaizo/party/roster.js publishes for the Draw.
   const charId = charIdOf(state, slot);
   if (state.kaizo?.freezeByChar) state.kaizo.freezeByChar[charId] = 0;
-  if (state.kaizo?.freeze) state.kaizo.freeze[slot] = false;
+  // The hero record's own handle — the half heroCleanUp cannot see. Same
+  // ordering bug, same outcome: cleared, never destroyed.
   if (h.herofrozen !== HEROFROZEN_NONE) {
-    // ORIGINAL BUG: assignment first, destroy second — the destroy misses.
     const leaked = h.herofrozen;
     h.herofrozen = HEROFROZEN_CLEANED;
     if (state.kaizo) {
@@ -353,6 +377,7 @@ export function cleanupKaizoHero(state, slot) {
       if (leaked && typeof leaked === 'object') state.kaizo.leakedStatues.push(leaked);
     }
   }
+  return r;
 }
 
 /** Put a character into a timed animation. Resets the timer, as the Step does. */

@@ -7,7 +7,8 @@
 // knight-research/kaizo-mod/NOTES.md). PUBLISH GATE applies (HANDOFF §5-C).
 
 import { gmlRound } from '../../sim/gml.js';
-import { statFor } from '../../sim/damage.js';
+import { statFor, PARTY_POS } from '../../sim/damage.js';
+import { castRudeBuster } from '../../sim/rudebuster.js';
 import { krisMult } from '../../sim/knight.js';
 import {
   launchVCAttack, openVCArena, vcTurnLength, vcMoveheartDest,
@@ -28,6 +29,81 @@ import { VC_KNIGHT, VC_GATE_FRACTION, VC_LOOP, VC_PHASE4_DEFAULT } from '../vers
  *  is blocked to ceil(damage / 5) — obj_heroparent Step 361-393: the block
  *  is CRIT-GATED (`points < 150`), so only a frame-perfect 150 lands whole. */
 const GUARD_DROP = 0.4;
+
+// ── THE A-SIDE SPELL SEAM — ledger G-22 and G-45, both on one turn ──────────
+//
+// V-C installs no roster, so `installKaizoMenu` (kaizo/party/spells.js) never
+// runs and the Normal Route reaches the VENDORED `castSpell`. Two mod deltas
+// live in that one case and both were still doing DELTARUNE's thing.
+//
+// G-22 — `scr_monstersetup` monstertype 104 sets `global.monsterdf[myself] =
+// 5` (vanilla 0). `scr_spell.gml:144` is
+//
+//     damage = ceil((battlemag[arg1] * 5) + (battleat[arg1] * 11)
+//                   - (global.monsterdf[star] * 3));
+//     damage = ceil(damage * (obj_knight_enemy.damagereduction + 0.65));
+//
+// and `sim/knight.js` spellDamage subtracts `KNIGHT_DF * 3` with KNIGHT_DF 0
+// — 15 points of overstated party damage before the multiplier. The FIGHT bar
+// already honours 5 through `fightDamage` below (VC_KNIGHT.df); this is the
+// second of the three formulas the ledger lists, and X-Slash (the third) is
+// kaizo/party/spells.js xslashDamage.
+//
+// G-45 — `obj_rudebuster_bolt`'s Step. The whole diff of that file against
+// vanilla v105 is a DELETION:
+//
+//     -        if (i_ex(obj_knight_enemy))
+//     -        {
+//     -            targety -= 50;
+//     -        }
+//
+// so the bolt flies at the registered `global.monstery` and detonates 50px
+// lower on the Knight's sprite. `sim/spells.js:62-65` folds the vanilla
+// offset into `KNIGHT_AIM = { dx: 60, dy: 90 - 50 }` and says so in its own
+// comment. Repo rule 6 forbids editing `sim/` for kaizo's sake, so the mod's
+// aim is `dy: 90` here and the engine keeps vanilla's.
+//
+// The rest of the case is the engine's, verbatim — the same live-instance
+// read (`global.monsterx/monstery` track the instance, and this Knight bobs),
+// the same fallback origin, the same `castRudeBuster` call and return string.
+// NEITHER DELTA CAN MOVE THE BYTE GATE: `monsterhp` is pinned by the recorder
+// and mirrored by `--pin-monsterhp`, and the bolt is not `isBullet`, so it
+// never enters the 32-slot sheet. Measured: _tok3 stayed byte-exact and
+// _rev1's front did not move (frame 12492 / bullets 12499) with this live.
+const VC_RUDEBUSTER_AIM = { dx: 60, dy: 90 };
+/** `sim/spells.js`'s KNIGHT_POS, duplicated for the same reason it is there. */
+const VC_KNIGHT_POS = { x: 425, y: 78 };
+
+/**
+ * The mod's `scr_spell` case 4, as a `state.kaizo.hooks.castSpell` case.
+ * `undefined` for every other id hands it straight back to the engine.
+ */
+function vcCastSpell(state, slot, spellId) {
+  if (spellId !== 4) return undefined;
+  const st = statFor(state, slot);
+  // G-22: `- (global.monsterdf[star] * 3)`, and monsterdf[0] is 5.
+  const base = Math.ceil(st.magic * 5 + st.at * 11 - VC_KNIGHT.df * 3);
+  const dr = state.knight?.damagereduction ?? 0;
+  const damage = Math.max(0, Math.ceil(base * (dr + 0.65)));
+  const kn = state.entities.find((en) => en.alive && en.type?.name === 'obj_knight_enemy');
+  const kx = (kn?.x ?? VC_KNIGHT_POS.x) + VC_RUDEBUSTER_AIM.dx;
+  // G-45: no `targety -= 50`.
+  const ky = (kn?.y ?? VC_KNIGHT_POS.y) + VC_RUDEBUSTER_AIM.dy;
+  castRudeBuster(state, PARTY_POS[slot].x, PARTY_POS[slot].y, damage, kx, ky);
+  return 'Rude Buster!';
+}
+
+/**
+ * Install it. `??=` so that a version which brought its own menu layer
+ * (V-D's installKaizoMenu, which runs at scene build) keeps it, and so that a
+ * check's recording wrapper wins — the same reason kaizo-fight.js gives for
+ * `knightTarget`.
+ */
+function installVCSpellSeam(state) {
+  if (!state.kaizo) return;
+  state.kaizo.hooks ??= {};
+  state.kaizo.hooks.castSpell ??= vcCastSpell;
+}
 
 /**
  * Kris's CHECK, the mod's version — obj_knight_enemy Other_23:1-9 defines
@@ -56,7 +132,7 @@ export const KAIZO_CHECK_PAGES = {
 };
 
 /**
- * THE B-SIDE TURN-END MESSAGES — obj_knight_enemy Step_0:566-781, the block
+ * THE TURN-END MESSAGES — obj_knight_enemy Step_0:566-781, the block
  * under `mnfight == 2 && turntimer <= 1 && setdownmessage == false`, AFTER
  * the row advance has written the new row's telegraph (:523-552, which the
  * `advance` hook below models). In the mod's order:
@@ -93,11 +169,51 @@ export const KAIZO_CHECK_PAGES = {
  * assign it). `phase` is the knight's own, which the gate has already moved
  * to 4 (:571) by the time :768 reads it.
  *
- * ONLY ON THE B-SIDE. The block's A-Side lines (the "guard falters" pair,
- * :681-685) are the mod's too, but V-C's message path is what the _tok3
- * gate was fitted around, so they wait for their own run; here they are
- * reproduced because the B-Side branch nests inside them and the non-
- * progamer B-Side turn gets the A-Side line.
+ * BOTH ROUTES — B-1 / ledger G-3, corrected 2026-09-10. This used to return
+ * at the top unless `k.sideb`, which silenced the whole block on the A-Side.
+ * THE GML HAS NO `k_sideb` ON THE BLOCK. Read the dump and the guard appears
+ * in exactly FIVE places, all of them INSIDE — re-counted 2026-09-10 off
+ * `grep -n k_sideb` over the whole Step_0, which is also where these line
+ * numbers now come from; the list used to say "four" while naming five, and
+ * every number in it was off (four by one, the reward's by seven):
+ *
+ *   :593         the Kris down-line override ("* Can't move your body.&")
+ *   :635         the Noelle down-line ("* She was used up.&")
+ *                — both inside downMessages
+ *   :649         the `downcount == 0` GLOOM call-outs
+ *   :686         the "\ck* Well, aren't you something special..." reward
+ *                (the string at :690, and with it didfullnohit /
+ *                turnsafternohit / curhp / idlesprite — Step_0:691-694)
+ *   :760         the Multislash2 "Not a scratch yet" line (string at :764)
+ *
+ * Everything else — the four down lines with their k_freeze variants and the
+ * 1-in-100 `kaizo_funchance(100)` joke, the `downcount == 2` four-term
+ * concat, the RoaringDelta "guard falters" pair, the whole `didfullnohit`
+ * taunt ladder, the spell taunt and `k_lastpro` — runs on the Normal Route
+ * too, and the recreation used to fall through to the vendored VANILLA text
+ * (sim/battlemsg.js) or, under a custom `advance` hook, to no line at all.
+ *
+ * TWO OF THOSE BRANCHES ARE STILL DEAD ON THE A-SIDE, and it is the mod that
+ * kills them, not this function — so they are kept ungated exactly as the GML
+ * writes them and left unreachable:
+ *   * `didfullnohit` is assigned in FOUR places (Step_0:691, :750, :755,
+ *     :1479) and only ONE of them makes it truthy — :691, inside the :686
+ *     `k_sideb`; the other three are `= false`. So `else if (didfullnohit)`
+ *     at :698 and the turnsafternohit ladder under it cannot fire on the
+ *     A-Side. (The count read "ONE place (Step_0:696)" until 2026-09-10 —
+ *     wrong line and wrong count, right conclusion. What matters is the
+ *     truthy assignment, so say which one it is rather than how many exist.)
+ *   * `k_nospellsaw` is assigned in THREE places — Create_0:131 `= 0`,
+ *     Step_0:770 `= 0`, Step_0:2036 `= 1` — and again only :2036 is truthy.
+ *     That line is k_tpscene 12, and k_tpscene only ever leaves 0 under
+ *     `k_sideb && !practicemode` (scr_mnendturn.gml:149-155), so the spell
+ *     taunt at :768 cannot fire on the A-Side either.
+ *
+ * WHAT IS LIVE ON THE A-SIDE, therefore: the four down lines (mod text —
+ * "collapsed in silence", "demise was expected", "hope was shattered",
+ * "* Noelle's breath goes cold.&"), the funchance draw, the two-term concat,
+ * the "guard falters" / "Kris coughed" pair after RoaringDelta, and
+ * `k_lastpro`'s one-shot "So close, yet so far from perfection...".
  *
  * THE RECOLOUR LANDS ON THE INSTANCE. `idlesprite` is an obj_knight_enemy
  * instance variable and the reader is kaizoIdlesprite, which looks at the
@@ -106,10 +222,12 @@ export const KAIZO_CHECK_PAGES = {
  * times over and shown never. applyKaizoIdleRecolor takes the state and
  * finds the instance, which is the only object the GML could mean.
  */
-function sidebTurnEndMessages(state, { prevatk, phase, phase4turn }) {
+function kaizoTurnEndMessages(state, { prevatk, phase, phase4turn }) {
   const kn = state.knight;
   const k = state.kaizo;
-  if (!kn || !k?.sideb) return;
+  if (!kn || !k) return;
+  // `k_sideb` — the four sub-branches that really carry it (see the header).
+  const sideb = !!k.sideb;
   const practicemode = !!k.practicemode;
   kn.didfullnohit ??= false;      // Create_0:135
   kn.turnsafternohit ??= 0;       // Create_0:136
@@ -120,7 +238,10 @@ function sidebTurnEndMessages(state, { prevatk, phase, phase4turn }) {
   if (!(phase === 4 && phase4turn < 3)) {
     const d = downMessages(state);
     if (d.battlemsg !== null) msg = d.battlemsg;
-    if (d.downcount === 0) {
+    // :648 — `if (downcount == 0) { if (k_sideb) { ...GLOOM... } }`. The
+    // GLOOM meter itself is B-Side-only (the emitters run under k_sideb in
+    // Step_2), so the guard is the mod's belt and braces; kept explicit.
+    if (d.downcount === 0 && sideb) {
       const g = kaizoGloomMessages(state);
       if (g !== null) msg = g;
     }
@@ -130,7 +251,11 @@ function sidebTurnEndMessages(state, { prevatk, phase, phase4turn }) {
     msg = "* The enemy's guard falters, just for a moment...";
     if (kn.progamer === true) {
       msg = '* Kris coughed.&* The enemy pauses in wonder...';
-      // k_sideb — always true in here.
+    }
+    // :686 — `if (k_sideb) { if (progamer == true) { ... } }`; the assignment
+    // is :691, the ONE place in the dump that ever sets didfullnohit TRUTHY
+    // (the other three, :750/:755/:1479, all clear it).
+    if (sideb && kn.progamer === true) {
       msg = "\\ck* Well, aren't you something special...^2?&* Go ahead.";
       kn.didfullnohit = 1;
       kn.turnsafternohit = 0;
@@ -167,8 +292,11 @@ function sidebTurnEndMessages(state, { prevatk, phase, phase4turn }) {
     }
   }
 
+  // :758-767 — `if (prevatk == "atk_Multislash2" && !practicemode) { if
+  // (k_sideb) { if (progamer == true) { ... } } }`. The k_sideb was dropped
+  // while this function could only run on the B-Side; it is load-bearing now.
   if (prevatk === 'atk_Multislash2' && !practicemode) {
-    if (kn.progamer === true) msg = '\\ck* Not a scratch yet, hm...^1?&* Impressive.';
+    if (sideb && kn.progamer === true) msg = '\\ck* Not a scratch yet, hm...^1?&* Impressive.';
   }
   if (phase > 1 && k.didspell && k.nospellsaw) {
     k.nospellsaw = 0;
@@ -249,7 +377,7 @@ export function vcHooks({ sideb = false, roster = null } = {}) {
       // every turn including the charge-up (which opens no board — hence the
       // reset sits here, above openVCArena's own ac -1 return).
       //
-      // IT IS THE OTHER HALF OF THE NO-HIT RECOLOUR. sidebTurnEndMessages
+      // IT IS THE OTHER HALF OF THE NO-HIT RECOLOUR. kaizoTurnEndMessages
       // puts spr_roaringknight_idle2 on him at a turn END; this puts the
       // ordinary idle back at the next turn's START. So the reward is worn
       // for the length of the taunt and no longer, which is what makes it
@@ -324,6 +452,14 @@ export function vcHooks({ sideb = false, roster = null } = {}) {
     // stamps `k_hpscene = 1` back over whatever state the scene had reached —
     // the scene would replay its first frame forever.
     knightFirstStep: (state) => {
+      // …AND, riding the only per-frame hook this file owns that runs from
+      // frame 0, the A-Side spell seam (B-3 / ledger G-22 + G-45). It is
+      // idempotent (`??=`) and has to be installed before the FIRST menu,
+      // which rules out `openArena` — the party phase precedes the board.
+      // buildKaizoScene is the natural home for it and belongs to another
+      // lane; hoisting it there is a pure move, nothing here depends on the
+      // site. See vcCastSpell.
+      installVCSpellSeam(state);
       if (state.knight?.damagereductiontimer !== 1) return;
       armHpscene(state);
     },
@@ -354,6 +490,26 @@ export function vcHooks({ sideb = false, roster = null } = {}) {
       const k = state.knight;
       const vars = (state.kaizo.vars ??= {});
       const blocked = accuracy < 150 && (vars.kaizo_block ?? true) && !k.endCutscene;
+      // THE ELSE ARM, which was untranslated — B-3 / ledger G-24. The GML is
+      // a FORK, not a single assignment (obj_heroparent Step_0:362-369):
+      //
+      //     if (points < 150)
+      //         knightblock = obj_knight_enemy.kaizo_block
+      //                       && obj_knight_enemy.end_cutscene_version == 0;
+      //     else
+      //         obj_knight_enemy.blockanim = 0;
+      //
+      // so a 150-point CRIT does not merely skip the block — it CANCELS a
+      // block pose already in flight. `blockanim` is a real reader here: it
+      // drives the two block_ol ghosts in kaizoBlockStepTail and gates
+      // `endCutsceneReached` (`blockanim > 0` refuses the ending), which is
+      // the mod's own Draw_0:151 test. Without this the Knight stayed posed a
+      // frame or two past the crit that broke through.
+      //
+      // It sits ABOVE the `cancelattack == 0` body in the GML, so it fires
+      // whether or not the hit is cancelled; the `accuracy <= 0` return above
+      // is still correct, because `points <= 0` takes the `points < 150` arm.
+      if (accuracy >= 150) k.blockanim = 0;
       // `global.battleat[myself]` — SLOT-indexed, summed from the character
       // in that slot. sim/damage.js's statFor is the vanilla trio by slot,
       // so on a roster it would hand Noelle (slot 1) Susie's AT 18 and Kris
@@ -456,17 +612,21 @@ export function vcHooks({ sideb = false, roster = null } = {}) {
           state.battlemsg = '* A powerful hit should be enough! Make your move!';
         }
       }
-      // THE B-SIDE TAIL of the same turn end (Step_0:566-781): the down and
+      // THE TAIL of the same turn end (Step_0:566-781): the down and
       // GLOOM lines, the no-hit taunts, the Multislash2 line, the spell
-      // taunt, k_lastpro — after the telegraph, last write wins. See
-      // sidebTurnEndMessages. `kaizo_prevatk` on a gate turn is the row the
+      // taunt, k_lastpro — after the telegraph, last write wins. B-1 /
+      // ledger G-3: this ran `if (sideb)` and the GML has no such guard on
+      // the block, so the Normal Route got vanilla text (or, under this
+      // hook, none). See kaizoTurnEndMessages, which now carries the four
+      // real k_sideb guards internally.
+      // `kaizo_prevatk` on a gate turn is the row the
       // gate SKIPPED: the launch block pre-advances `kaizo_attack` to the
       // finished row's nextAttack (:528-529) and the gate then copies THAT
       // into prevatk (:574) — the natural next, linear in the table with
       // phase 3's tail looping to VC_LOOP, independent of the sim's own
       // resume bookkeeping. `phase4turn` is 0 on the gate turn and row + 1
       // inside the finale (Other_10 increments it at selection).
-      if (sideb) {
+      {
         let naturalNext;
         if (!lastInPhase) naturalNext = t[prevPhase][prevTurn + 1];
         else if (prevPhase === 3) naturalNext = t[VC_LOOP.phase][VC_LOOP.turn];
@@ -474,7 +634,7 @@ export function vcHooks({ sideb = false, roster = null } = {}) {
         const prevatk = gateTripped ? (naturalNext?.id ?? prevRowId) : prevRowId;
         const knightPhaseNow = gateTripped ? 4 : prevPhase;
         const phase4turn = gateTripped ? 0 : (prevPhase === 4 ? prevTurn + 1 : 0);
-        sidebTurnEndMessages(state, { prevatk, phase: knightPhaseNow, phase4turn });
+        kaizoTurnEndMessages(state, { prevatk, phase: knightPhaseNow, phase4turn });
       }
       // THE KNIGHT REPORTS THE ROW HE IS LEAVING, not the one he is taking.
       // The mod's selector sets `phase = kaizo_AT.attackPhase`

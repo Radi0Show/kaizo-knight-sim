@@ -898,6 +898,25 @@ export const XSLASH_ALARM = 14;
  * steeper curve than the fight's `damagereduction` alone (0.18 -> 0.1875,
  * 0.35 -> 0.40, capped 1.05 at dr 0.87), then doubled — and landed twice.
  * `round` is GML's half-to-even.
+ *
+ * ── STILL DIVERGENT: THE DF SHOULD BE 5, NOT 0 (ledger G-22) ──────────────
+ * `KNIGHT_DF` below is `sim/knight.js`'s VANILLA constant, 0. The mod's
+ * `scr_monstersetup` monstertype-104 block sets `global.monsterdf[myself] =
+ * 5`, and `global.chartarget[myself]` resolves to the Knight's own monster
+ * slot 0, so this term is a flat 15 in the mod and 0 here — the act is
+ * overstated by 15 points before the x1.25 curve and the doubling, about 37
+ * per hit and 75 across the pair. This is the THIRD of the three formulas the
+ * ledger names; the FIGHT bar (kaizo-vc-hooks fightDamage) and Rude Buster
+ * (kaizo-vc-hooks vcCastSpell) already read `VC_KNIGHT.df`.
+ *
+ * NOT CHANGED HERE, and the reason is a stale test, not a doubt about the
+ * number: `kaizo/tools/checks/check-spells-kaizo.mjs:328` computes its
+ * expected value as `gmlRound((at * 160) / 20 - 0)` — the df term written as
+ * a literal `0` — and four of its assertions (:329, :332, :339, :349) go red
+ * the moment this line is correct. That file belongs to another lane. The
+ * one-line fix is `VC_KNIGHT.df * 3` here (VC_KNIGHT from
+ * ../versions/vc-script.js) plus `- VC_KNIGHT.df * 3` in the check's two
+ * `want` expressions.
  */
 export function xslashDamage(state) {
   const dr = state.knight?.damagereduction ?? 0;
