@@ -90,24 +90,31 @@
 //   * Draw_0 — pure drawing (two half-box blits at ±dist plus the flame
 //     edges). `flame_index += 0.5` is its one piece of state and lives in
 //     endStep here, exactly as the sim module places its own.
-//   * CleanUp_0 restores `obj_growtangle.visible` and destroys the two
-//     markers. There is no destroy hook in sim/entity.js, so it ships as the
-//     exported `verticalSplitCleanUp(state, e)` — the sim module has the same
-//     gap and simply lets the turn sweep collect the markers.
+//   * (CleanUp_0 IS translated — this bullet used to claim otherwise. The
+//     line "there is no destroy hook in sim/entity.js" was wrong when it was
+//     written: `sim/entity.js` calls `e.type.cleanUp(e, state)` on every
+//     destroy path. It is wired as the type's `cleanUp` below AND exported as
+//     `verticalSplitCleanUp(state, e)`; see that entry for what the hook is
+//     load-bearing for and check-split-growtangle-vertical.mjs V1b/V1c for
+//     the assertions.)
 //
-// ── the one APPROXIMATION, ledgered ───────────────────────────────────────
+// ── the APPROXIMATION THAT USED TO BE HERE, now closed ────────────────────
 //
-// `instance_create(x, y, obj_knight_lightorb)` on the tear frame. That object
-// is a whole sub-attack run out of its Draw event — a growing orb that after
-// 40 frames starts firing five-way `obj_knight_bullethell_bullet2` sunbolts
-// at damage 166 every ten frames, doubled and split ±60px on the B-Side
-// (`type = 1` under kaizo_sideb) — and nothing in kaizo/ or sim/ translates
-// it. Spawning a stand-in would be inventing bullets; dropping it silently
-// would hide live damage. So it is LEDGERED at the point of use, the same
-// shape kaizo-mod-launcher.js writes, and `state.kaizo.approx` stays the
-// work queue.
+// `instance_create(x, y, obj_knight_lightorb)` on the tear frame used to be a
+// ledgered approx row ("used: nothing spawned"), because that object is a
+// whole sub-attack run out of its Draw event — a growing orb that after 40
+// frames fires five-way `obj_knight_bullethell_bullet2` sunbolts every ten
+// frames, doubled and split ±60px on the B-Side (`type = 1` under
+// kaizo_sideb). Ledger gap G-1.
 //
-// SUITE: kaizo/tools/checks/check-split-growtangle-vertical.mjs.
+// It is translated as of 2026-09-10: `kaizo/attacks/lightorb.js` carries the
+// orb, its two obj_knight_bullethell2 emitters and the sunbolt, and Step_0:15
+// below now calls `spawnLightorb`. `state.kaizo.approx` gains no row from this
+// object any more, and check-split-growtangle-vertical.mjs asserts the ORB
+// rather than the ledger entry.
+//
+// SUITE: kaizo/tools/checks/check-split-growtangle-vertical.mjs, and
+// kaizo/tools/checks/check-lightorb.mjs for the sub-attack itself.
 
 import { spawn, destroy } from '../../sim/entity.js';
 import { scrEaseOut, GRAY, WHITE } from '../../sim/gml.js';
@@ -118,6 +125,9 @@ import { cue } from '../../sim/audio.js';
 // would be a second type with the same name and the renderer would have to
 // know about both.
 import { splitFlameMarker } from '../../sim/attacks/split-growtangle.js';
+// G-1 — the sunbolt sub-attack this organism creates on its tear frame
+// (Step_0:15). Was a ledgered approx row until 2026-09-10.
+import { spawnLightorb } from './lightorb.js';
 import { kaizoMask } from '../data/masks.js';
 import { HEART_RECT } from '../../sim/masks.js';
 
@@ -165,12 +175,11 @@ function baseDepth(e) {
   return e.depth ?? 0;
 }
 
-/** The approx ledger — the same shape kaizo-mod-launcher.js and quickslash.js
- *  write; verify-kaizo prints it. Guarded so a bare check-state can run. */
-function ledger(state, entry) {
-  if (!state.kaizo) state.kaizo = {};
-  (state.kaizo.approx ??= []).push(entry);
-}
+// (The private `ledger()` helper stood here until 2026-09-10. Its one caller
+// was the obj_knight_lightorb approx row, and G-1 closed that — a helper with
+// no reader is exactly the shape this repo keeps catching itself in, so it
+// went with the row. kaizo-mod-launcher.js still owns the ledger for the
+// arms that really are approximations.)
 
 /** Other_10 — event_user(0). Two lines, and this object calls it once. */
 function eventUser0(e) {
@@ -282,16 +291,16 @@ export const splitGrowtangleVertical = {
         cue(state, 'snd_knight_boxbreak', 1.1);
         cue(state, 'snd_chargeshot_fire');
 
-        // `instance_create(x, y, obj_knight_lightorb)` — APPROX, ledgered.
-        // See the header: the lightorb is an untranslated sub-attack that
-        // fires damage-166 sunbolts out of its Draw event. One row per tear,
-        // and the tear happens once.
-        ledger(state, {
-          type: 97.1,
-          asked: 'obj_knight_lightorb (vertical split, Step_0:16)',
-          used: 'nothing spawned',
-          why: 'lightorb sunbolt sub-attack not translated yet',
-        });
+        // `instance_create(x, y, obj_knight_lightorb)` — Step_0:15.
+        //
+        // G-1, closed 2026-09-10. This used to be a ledgered approx row
+        // reading "nothing spawned", which is why the recreation's B-Side
+        // quickslash had no sunbolts at all. kaizo/attacks/lightorb.js is the
+        // translation of all three objects (the orb, its two
+        // obj_knight_bullethell2 emitters, and obj_knight_bullethell_bullet2)
+        // and it takes no arguments — the orb reads kaizo_sideb() and
+        // get_swordcolor() itself.
+        spawnLightorb(state, e.x, e.y);
 
         // WHICH HALF THE SOUL IS IN, decided once and never revisited. The
         // +10 is the soul sprite's centre (origin is its top-left corner).
@@ -399,13 +408,38 @@ export const splitGrowtangleVertical = {
       if (heart.y < gt.y + 40) heart.y = gt.y + 40;
     }
   },
+
+  /**
+   * CleanUp_0 AS A TYPE HOOK — the same correction quickslash.js's controller
+   * documents at length. The header above used to say "there is no destroy
+   * hook in sim/entity.js"; there is (`sim/entity.js:259` calls
+   * `e.type.cleanUp(e, state)` exactly once, on whichever path destroys the
+   * instance), and without this entry the only caller of the exported
+   * function was the check. GameMaker runs CleanUp on EVERY destroy, and the
+   * path that actually ends this turn is the sweep
+   * (`with (obj_bulletparent) instance_destroy()`), not a hand-placed call —
+   * so without it the box's `visible` never came back at all and the flame
+   * markers outlived the organism.
+   *
+   * MEASURED, by sabotaging this entry (check-split-growtangle-vertical.mjs
+   * V1c): the claim this docstring used to make — that clearTurn's rebuild
+   * restored `visible` instead — is FALSE. Delete the hook and the box is
+   * still `visible === false` after the sweep, i.e. the arena stays invisible
+   * into the next turn. Nothing else restores it.
+   *
+   * Argument order is the hook's `(e, state)`; the exported function keeps
+   * the `(state, e)` shape its check already calls with, and both run the
+   * same three lines.
+   */
+  cleanUp(e, state) {
+    verticalSplitCleanUp(state, e);
+  },
 };
 
 /**
- * CleanUp_0, three lines. sim/entity.js has no destroy hook, so this is
- * explicit — call it wherever the organism is torn down early. The turn sweep
- * collects the markers on its own, so the only thing that is genuinely lost
- * without a call is the box's `visible`, which clearTurn rebuilds anyway.
+ * CleanUp_0, three lines. Wired as the type's `cleanUp` hook above, so every
+ * destroy path runs it; still exported for a caller that tears the organism
+ * down without destroying it.
  */
 export function verticalSplitCleanUp(state, e) {
   const gt = box(state);
@@ -415,12 +449,32 @@ export function verticalSplitCleanUp(state, e) {
 }
 
 /**
- * The creator, `obj_roaringknight_quickslash_big` Step_0:44-54 — the endtype
- * fork's B-Side arm. Exported so quickslash.js's endtype-1 branch becomes the
- * three lines the GML actually is:
+ * The creator, `obj_roaringknight_quickslash_big` Step_0:**49-54** — the
+ * `else` half of the endtype fork, whose body is the three statements at
+ * :51-53. (:44-54 is the WHOLE fork including the endtype-0 arm at :43-48;
+ * that span belongs in the header, not here.)
  *
- *     const sp = spawnVerticalSplit(state, e);   // instance_create + inherit
- *     armKaizoSplitter(sp);                      // stays quickslash's
+ *     else
+ *     {
+ *         var _splitter = instance_create(obj_growtangle.x, obj_growtangle.y,
+ *                                         obj_knight_split_growtangle_vertical);
+ *         scr_bullet_inherit(_splitter);
+ *         _splitter.target = 0;
+ *     }
+ *
+ * Exported so quickslash.js's endtype-1 branch is ONE line:
+ *
+ *     spawnVerticalSplit(state, e, scrBulletInherit);
+ *
+ * AND NOT TWO. An earlier draft of this docstring advertised a second line,
+ * `armKaizoSplitter(sp)`. There is no such call in the GML and quickslash
+ * deliberately does not make one: that helper kicks the HORIZONTAL organism to
+ * `con = 1` and stamps damage 206, which this object needs neither of — its
+ * con 0 is its own twenty-frame wind-up (Step_0:2-5) and no event of it writes
+ * `damage` at all. Arming it here would skip the wind-up, so `heart_y` would
+ * never be chosen and the light orb at Step_0:15 would never be created.
+ * check-quickslash.mjs's "the endtype-1 arm does NOT arm the organism" block
+ * is the guard; see quickslash.js at the call site for the argument.
  *
  * `scr_bullet_inherit` is the caller's (quickslash imports it already), so it
  * is passed in rather than re-imported: `inherit` runs on the new organism

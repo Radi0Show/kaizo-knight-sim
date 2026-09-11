@@ -116,6 +116,13 @@ import {
 //
 // The vanilla module keeps its own diff and is not touched.
 import { splitGrowtangle } from './flurry-split-growtangle.js';
+// KAIZO G-2 — the endtype-1 arm's REAL organism. big_Step_0:49-54 names
+// obj_knight_split_growtangle_vertical, not the horizontal one, and the two
+// share only a name: this one opens ONCE and permanently, fires no teeth, and
+// shrinks the soul's mask. `spawnVerticalSplit` was written for exactly this
+// call site (its header spells the three lines out) and, until now, had no
+// caller outside its own check.
+import { spawnVerticalSplit } from './split-growtangle-vertical.js';
 // The combination chain seam. Imported from sim/, NOT from
 // kaizo/attacks/combination.js — that module imports this one, so importing it
 // back would close a cycle. The sim's chainNext is the indirection that exists
@@ -574,21 +581,34 @@ export const quickslashBig = {
         armKaizoSplitter(sp);
       } else {
         // KAIZO big_Step_0:49-54 — Side B splits the box VERTICALLY via
-        // obj_knight_split_growtangle_vertical (the fountain-wall organism).
-        // APPROX: that object is untranslated; the verified split organism
-        // runs its vertical cut instead. Ledgered.
-        ledger(state, {
-          type: 97.1,
-          asked: 'obj_knight_split_growtangle_vertical (Side B vertical finish)',
-          used: 'obj_knight_split_growtangle with vertical = true',
-          why: 'vertical fountain-wall organism not translated yet',
-        });
-        const gt = box(state);
-        const sp = spawn(state, splitGrowtangle, { x: gt ? gt.x : e.x, y: gt ? gt.y : e.y });
-        scrBulletInherit(e, sp);
-        sp.target = 0;
-        sp.vertical = true;
-        armKaizoSplitter(sp);
+        // obj_knight_split_growtangle_vertical, a DIFFERENT object.
+        //
+        // G-2, closed 2026-09-10. This arm used to spawn the HORIZONTAL
+        // organism with `sp.vertical = true` and ledger the substitution. It
+        // was never close: that organism opens, fires thirteen teeth, closes
+        // and repeats; this one opens once and permanently, fires nothing,
+        // and shrinks the soul's hurtbox to spr_dodgeheart_smaller_2px_mask
+        // on the tear frame. `spawnVerticalSplit` is the GML's three lines —
+        // instance_create at the box, scr_bullet_inherit, then `target = 0`
+        // in that order — so the inherit's target is overridden after it
+        // lands, exactly as the GML sequences them.
+        //
+        // NO armKaizoSplitter HERE, deliberately. That helper kicks the
+        // horizontal organism to `con = 1` and stamps damage 206 because the
+        // flurry module's con 0 waits on a signal this call site never
+        // sends; the vertical organism's con 0 is its own twenty-frame
+        // wind-up (Step_0:2-5) and its damage is whatever scr_bullet_inherit
+        // gave it — no event of that object writes `damage` at all (grepped
+        // across all eight).
+        //
+        // GUARDED, as of the round-4 pass: an argument in a comment is not a
+        // guard, and "restore the call for symmetry with the arm above" is
+        // exactly the tidy-up a later reader would make. check-quickslash.mjs
+        // block 9b asserts the CONSEQUENCES — con 0 at birth, damage != 206,
+        // the wind-up really running, `heart_y` chosen, and the Step_0:15
+        // obj_knight_lightorb created. Arming the organism skips all five,
+        // because con 1 never reaches the `timer == 20` branch that does them.
+        spawnVerticalSplit(state, e, scrBulletInherit);
       }
       e.sprite_index = 'spr_rk_quickslash';
       e.image_speed = 1;

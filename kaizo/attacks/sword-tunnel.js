@@ -98,7 +98,13 @@ import {
   gmlEq, WHITE,
 } from '../../sim/gml.js';
 import { scrBulletInit, collidebulletOther15 } from '../../sim/bullets/regularbullet.js';
-import { DIAMOND_MASK, HEART_MASK, masksOverlap } from '../../sim/masks.js';
+import { HEART_MASK, masksOverlap } from '../../sim/masks.js';
+// KAIZO G-23 — obj_sword_tunnel_sword has no mask_index, so its default
+// sprite spr_knight_diamondbullet_l IS its collision shape, and the mod
+// widened that sprite's mask by 3px (ml 5->3, mr 93->94; the mask_sha1
+// column differs). The engine's DIAMOND_MASK is the VANILLA bitmap and stays
+// right for the vanilla sim; this file used it at both contact sites.
+import { KAIZO_DIAMONDBULLET_L_MASK } from './kaizo-hitboxes.js';
 import { gmlChoose, gmlIrandom } from '../../sim/rng.js';
 import { cue } from '../../sim/audio.js';
 import { swordTunnelAnim } from './sword-tunnel-anim.js';
@@ -182,6 +188,12 @@ export const swordTunnelSword = {
     // spr_knight_diamondbullet_l; the visible blades are drawn by
     // obj_knight_swordtunnelanim. Unchanged by the mod.
     e.sprite_index = 'spr_knight_diamondbullet_l';
+    // KAIZO G-23 — the GRAZE path is a separate reader. sim/index.js `grazes`
+    // resolves `e.mask ?? SPRITE_MASKS[e.sprite_index]` and consults no type
+    // override, so leaving this unset would have the sword HIT on the mod's
+    // 3px-wider mask and GRAZE on the engine's vanilla one. Same singleton
+    // both sides.
+    e.mask = KAIZO_DIAMONDBULLET_L_MASK;
     e.isBullet = true;
   },
 
@@ -303,9 +315,11 @@ export const swordTunnelSword = {
         // spr_knight_diamondbullet_l at current scales/angle) — note
         // image_yscale under 1 cannot register, per the calibrated model,
         // which is what keeps a freshly-spawned sword harmless.
+        // KAIZO G-23: the MOD'S bitmap, 3px wider than the engine's.
         if (masksOverlap(
           heart.mask ?? HEART_MASK, hp.x, hp.y,
-          DIAMOND_MASK, e.x, e.y, e.image_xscale, e.image_yscale, e.image_angle,
+          KAIZO_DIAMONDBULLET_L_MASK, e.x, e.y,
+          e.image_xscale, e.image_yscale, e.image_angle,
         )) {
           e.tunnelHits = (e.tunnelHits ?? 0) + 1;
           state.tunnelHits = (state.tunnelHits ?? 0) + 1;
@@ -353,9 +367,12 @@ export const swordTunnelSword = {
    * collidebulletOther15 exactly as the ordinary bullet family does.
    */
   collides(e, heart) {
+    // KAIZO G-23: the MOD'S spr_knight_diamondbullet_l mask. Same bitmap as
+    // the swept probe above, so the two paths cannot disagree.
     return masksOverlap(
       heart.mask ?? HEART_MASK, heart.x, heart.y,
-      DIAMOND_MASK, e.x, e.y, e.image_xscale, e.image_yscale, e.image_angle,
+      KAIZO_DIAMONDBULLET_L_MASK, e.x, e.y,
+      e.image_xscale, e.image_yscale, e.image_angle,
     );
   },
 

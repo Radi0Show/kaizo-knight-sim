@@ -84,7 +84,12 @@ import {
 } from '../../sim/bullets/regularbullet.js';
 import { scrLerpvar } from '../../sim/lerpvar.js';
 import { scrAfterimage, scrAfterimageGrow } from '../../sim/fx.js';
-import { spriteMaskHit } from '../../sim/masks.js';
+import { spriteMaskHit, enginePairHit } from '../../sim/masks.js';
+// KAIZO G-23 — spr_knight_diamondbullet_l's mask is 3px wider in the mod
+// (ml 5->3, mr 93->94, mask_sha1 differs). It is the LONG blade's sprite
+// with no mask_index, so it is that blade's hitbox; the _s and _m sheets are
+// unchanged and keep the engine's.
+import { KAIZO_DIAMONDBULLET_L_MASK } from './kaizo-hitboxes.js';
 import { cue, cueLoop, cueStop } from '../../sim/audio.js';
 import { chainNext } from '../../sim/attacks/combination.js';
 import { scrDamageSingle, scrDamageAll } from '../../sim/damage.js';
@@ -282,11 +287,31 @@ export const diamondSwordBullet = {
     // `scr_script_delayed(scr_lerpvar, 13, "speed", -4, 0, 8, 2, "out")` then
     // `..., 21, "speed", 0, 24, 12` — it rocks BACKWARDS first, stops, and
     // then drives in at 24.
-    e.pending = [
-      { at: 13, run: (st) => scrLerpvar(st, spawn, e, 'speed', -4, 0, 8, 2) },
-      { at: 21, run: (st) => scrLerpvar(st, spawn, e, 'speed', 0, 24, 12) },
-      { at: 21, run: () => { e.do_afterimage = 1; } },
-    ];
+    //
+    // KAIZO Other_10:36-47, ledger gap G-44 — THE WHOLE BLOCK IS FORKED on
+    // `kaizo_sideb()`, and this module carried only the A-Side arm.
+    //
+    //   A-Side (vanilla):  -4 -> 0 over  8f at delay 13
+    //                       0 -> 24 over 12f at delay 21, afterimages at 21
+    //   B-SIDE:            -4 -> 0 over  5f at delay 13
+    //                       0 -> 24 over  8f at delay 18, afterimages at 18
+    //
+    // The rock-back is three frames shorter and the dash starts three frames
+    // earlier over four fewer frames, so a B-Side blade is at full 24 speed
+    // on frame 26 instead of 33 — seven frames of dodge window off EVERY
+    // blade of the wall, which is why this is a [4] and not a cosmetic.
+    const sideb = kaizoSideb(state);
+    e.pending = sideb
+      ? [
+        { at: 13, run: (st) => scrLerpvar(st, spawn, e, 'speed', -4, 0, 5, 2) },
+        { at: 18, run: (st) => scrLerpvar(st, spawn, e, 'speed', 0, 24, 8) },
+        { at: 18, run: () => { e.do_afterimage = 1; } },
+      ]
+      : [
+        { at: 13, run: (st) => scrLerpvar(st, spawn, e, 'speed', -4, 0, 8, 2) },
+        { at: 21, run: (st) => scrLerpvar(st, spawn, e, 'speed', 0, 24, 12) },
+        { at: 21, run: () => { e.do_afterimage = 1; } },
+      ];
     e.pendingT = 0;
   },
 
@@ -355,6 +380,21 @@ export const diamondSwordBullet = {
     // is the ordinary test again. It has to be the engine and not an
     // override here: grazes() calls masksOverlap directly and consults no
     // type override, and the graze path is where most of these contacts are.
+    //
+    // KAIZO G-23 — `e.mask` FIRST, for exactly that reason. `spriteMaskHit`
+    // reads SPRITE_MASKS and ignores `mask`, while `grazes` reads `mask`
+    // first; a blade carrying the mod's wider _l bitbox would otherwise graze
+    // on one shape and be hit-tested on another. `enginePairHit` is the same
+    // masksOverlap call spriteMaskHit makes, with the mask named.
+    //
+    // ASSERTED, as of the round-4 pass — check-kaizo-hitboxes.mjs H3b. It was
+    // not: H3 measured the two bitmaps and H5 proved the long blade carries
+    // the mod's one, and deleting THIS line passed both. H3b drives the type
+    // at one pixel past the engine's tip and two past its hilt, with a
+    // field-less control that answers the engine's way at both, and with the
+    // graze path beside it — so the "grazes on one shape, hit-tested on
+    // another" split now fails a check instead of going quiet.
+    if (e.mask) return enginePairHit(heart, e, e.mask);
     return spriteMaskHit(e, heart);
   },
 
@@ -439,7 +479,17 @@ function fireBlade(state, e, opts) {
   // chosen, not to the default one.
   let width = 33;
   if (opts.len > 48) { b.sprite_index = 'spr_knight_diamondbullet_m'; width = 66; }
-  if (opts.len > 80) { b.sprite_index = 'spr_knight_diamondbullet_l'; width = 99; }
+  if (opts.len > 80) {
+    b.sprite_index = 'spr_knight_diamondbullet_l';
+    width = 99;
+    // KAIZO G-23. `e.mask` is read by BOTH readers once `collides` below
+    // prefers it: sim/index.js `grazes` resolves `e.mask ??
+    // SPRITE_MASKS[sprite_index]` and consults no type override, so this is
+    // the only way the graze box and the hit test can agree on the mod's
+    // bitmap. Only the _l sheet changed — _s and _m fall through to the
+    // engine's masks, unset `mask` and all.
+    b.mask = KAIZO_DIAMONDBULLET_L_MASK;
+  }
   const endscale = opts.len / width;
   b.image_xscale = opts.startScale;
   // CURVE -1 IS ease_out_back — the blade OVERSHOOTS its length and settles.

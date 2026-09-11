@@ -154,14 +154,40 @@ import {
 } from '../../sim/masks.js';
 import { roaringknightSlash } from '../../sim/attacks/roaringknight-slash.js';
 import { tunnelslashBullet, afterimage } from '../../sim/attacks/knightlines.js';
+// KAIZO G-23 — the MOD'S spr_roaringknight_slash_tunnel mask (3 inked rows,
+// 8px below the origin, where vanilla's is 9 rows straddling it).
+import { KAIZO_SLASHTUNNEL_MASK } from './kaizo-hitboxes.js';
 import { cue } from '../../sim/audio.js';
 import { scrDamageSingle, gearOf } from '../../sim/damage.js';
 import { grazeFactors } from '../../sim/equipment.js';
 import { scrTensionheal } from '../../sim/tension.js';
 
-// obj_bullet_knight_tunnelslash is byte-identical in both dumps — the
-// verified sim object ships unchanged. Re-exported so the launcher swaps
-// only the import source.
+// obj_bullet_knight_tunnelslash's CODE is byte-identical in both dumps, and
+// the verified sim object shipped unchanged — but its HITBOX is not the same
+// on both sides, and no code diff could ever say so. Ledger gap G-23.
+//
+// The bullet has no `mask_index`, so it collides with its own sprite, and the
+// mod repainted spr_roaringknight_slash_tunnel in place: 99x21 -> 99x32 with
+// the origin held at y = 10, which moves the inked band from rows -4..+4
+// (NINE rows, straddling the blade's line) to +4..+6 (THREE rows, entirely
+// below it). The spear spawns at image_xscale 4, so that is a third of the
+// height, 8px down, at four times the width. See kaizo/attacks/kaizo-hitboxes.js
+// for the two sprite-table rows and their differing mask_sha1.
+//
+// The sim type's own `collides` closes over the ENGINE's SLASHTUNNEL_MASK —
+// the vanilla bitmap, which is correct for the vanilla fight — so the kaizo
+// side wraps it rather than patching sim/ (HANDOFF §2.3). `name` and every
+// other event are the sim object's, by construction: only `collides` differs.
+export const kaizoTunnelslashBullet = Object.freeze({
+  ...tunnelslashBullet,
+  collides(e, heart) {
+    // The sim type's guard, verbatim — `active = false` is what makes a
+    // spear inert.
+    if (e.active !== 1 && e.active !== true) return false;
+    return enginePairHit(heart, e, KAIZO_SLASHTUNNEL_MASK);
+  },
+});
+
 export { tunnelslashBullet, afterimage };
 
 /** scr_get_box — byte-identical copy of the sim module's local helper. */
@@ -1093,8 +1119,14 @@ export const knightTunnelSlasher = {
 
         // The spear, fired from the SLASH at speed zero (unchanged object,
         // imported from sim/attacks/knightlines.js).
-        const b = spawn(state, tunnelslashBullet, { x: sx, y: sy });
+        const b = spawn(state, kaizoTunnelslashBullet, { x: sx, y: sy });
         b.sprite_index = 'spr_roaringknight_slash_tunnel';
+        // KAIZO G-23 — the GRAZE path is a SECOND reader of the shape and it
+        // consults no type override: sim/index.js `grazes` resolves
+        // `e.mask ?? SPRITE_MASKS[e.sprite_index]`, and SPRITE_MASKS carries
+        // the engine's vanilla bitmap. Without this the spear would be hit-
+        // tested on the mod's 3-row band and grazed on vanilla's 9-row one.
+        b.mask = KAIZO_SLASHTUNNEL_MASK;
         b.direction = gmlChoose(state.gmlRng, [slash.direction, slash.direction + 180]);
         b.speed = 0;
         // `image_angle = other.direction` — the SLASH's angle, not the
