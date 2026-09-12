@@ -186,7 +186,7 @@ section('armed: reddens, shatters, then PROCEEDs — and the intent gets OUT');
   assertEq(t.unused.taken, true, '...and the state says it was taken');
   assertEq(t.settings, null, '...and the SETTINGS SCREEN IS CLOSED — back to the title');
   assertEq(unusedRowStyle(t).name, 'PROCEED', 'the row now reads the mod\'s own word');
-  assertEq(unusedRowStyle(t).sub, '(PROCEED)', '...in the mod\'s own two-line shape');
+  assertEq(unusedRowStyle(t).sub, null, 'a settings row carries no bracketed echo');
   // ONE WAY, ONE SIGNAL.
   let again = 0;
   for (let i = 0; i < 30; i++) if (idle(t).proceed) again += 1;
