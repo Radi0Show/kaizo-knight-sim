@@ -74,6 +74,41 @@
 // seen after a cull would take a shifted sub-image — a different shard of the
 // same glass, at the right place — and the check below pins the exact case
 // rather than trusting the reasoning.
+//
+// ── THE HOLD, AND WHY NOTHING IS PAINTED DURING IT ────────────────────────
+//
+// On the FINAL HIT `scr_screenshatter_create` gives every piece `delay = 6`
+// (`gml_GlobalScript_scr_lerpvar.gml:61`, translated in
+// `kaizo/attacks/roaring-final-shatter.js`), and for those six frames
+// `scr_screenshatter_step` takes the delay branch: the piece only jitters
+// about its birth spot by `irandom_range(-delay, delay) / 2` and NOTHING
+// assigns `image_blend` — the two `image_blend = shatter_blend[...]` lines are
+// in the else, past the hold. The non-final path has `delay = 0` and the same
+// gap is one frame wide: a Draw runs on the creation frame (CLAUDE.md,
+// "Creation frame") and the controller has not stepped yet.
+//
+// IN THE MOD THAT GAP IS FREE, because each piece is a live capture of the
+// screen (`sprite_create_from_surface`) — an untinted piece IS the unbroken
+// screen, which is exactly the illusion the hold exists to sell. Here the
+// piece is a STENCIL, so "untinted" meant `image_blend ?? c_white`: 31 white
+// silhouettes that tile the whole 640x480 view, i.e. THE SCREEN TURNED SOLID
+// WHITE for the first frames of the roar's finale. Defaulting to the front
+// blend instead would only change the colour of the slab.
+//
+// WHAT THE PIECE SHOULD LOOK LIKE DURING THE HOLD IS THE SCREEN, and on this
+// renderer the screen is already being drawn underneath — the fight is still
+// painted every frame, these pieces are extra. So a piece that has not yet
+// been given a blend is not painted at all, and the hold shows the live,
+// unbroken screen. That is nearer the mod than any colour could be, and it
+// falls out of the same approximation the header already states: we have
+// silhouettes, not screenshots, and a silhouette has nothing honest to say
+// until the glass starts moving.
+//
+// THE TEST IS `image_blend === undefined`, not `delay > 0`. Both hold cases
+// are the same fact — this piece has never taken a flying step — and the
+// blend is the field that actually decides what would be painted, so reading
+// it cannot go out of step with the stepper the way a second delay counter
+// here would.
 
 import { sliceShatter, drawShatterFragment } from '../../render/shatter.js';
 
@@ -156,7 +191,11 @@ export function drawKaizoShatterPiece(ctx, e, state, helpers) {
   indexPieces(state);
   const info = pieceInfo.get(e);
   if (!info) return true;
-  const slices = slicesFor(entry, unpack(e.image_blend ?? 16777215));
+  // THE HOLD — see the header. No blend yet means this piece has never taken a
+  // flying step, so the screen behind it is still whole and painting a stencil
+  // over it would be the only thing breaking it.
+  if (e.image_blend === undefined) return true;
+  const slices = slicesFor(entry, unpack(e.image_blend));
   if (!slices.length) return true;
   drawShatterFragment(ctx, slices[info.i % slices.length], e.x, e.y, {
     ox: info.ox,

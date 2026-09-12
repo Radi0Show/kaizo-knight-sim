@@ -475,7 +475,7 @@ section('the shatter sheet exists, and the roar finale\'s pieces are painted');
     },
   };
 
-  const { screenshatterCreate } = await import('../../attacks/roaring-final-shatter.js');
+  const { screenshatterCreate, screenshatterStep } = await import('../../attacks/roaring-final-shatter.js');
   const { drawKaizoShatterPiece, KAIZO_SHATTER_OVERRIDE, SHATTER_SHEET } =
     await import('../../ui/shatter-draw.js');
   assertEq(SHATTER_SHEET, PROCEED_SHATTER_SPRITE,
@@ -500,20 +500,50 @@ section('the shatter sheet exists, and the roar finale\'s pieces are painted');
     meta: { w: 640, h: 480, ox: 320, oy: 240 },
   }]]);
   const ctxLog = mkCtx(draws);
-  let drawn = 0;
+
+  // THE HOLD PAINTS NOTHING, AND THAT IS THE FIX RATHER THAN THE BUG.
+  //
+  // `scr_screenshatter_step` assigns `image_blend` only in the branch past the
+  // delay (`scr_lerpvar.gml:166-173`), so on the final-hit path — delay 6 —
+  // the field does not exist for the first frames. In the GML that is
+  // harmless: every piece's texture is a live capture of the screen
+  // (`sprite_create_from_surface`), so an untinted piece IS the unbroken
+  // screen. Against a stencil sheet 'untinted' would mean a white rectangle,
+  // and 31 of them tile the whole 640x480 view — the ending opened on a white
+  // flash. The drawer now paints nothing until the piece has a blend, and the
+  // live frame underneath shows through, which is what the hold is FOR.
+  //
+  // This section used to draw on the creation frame and assert 31 images, so
+  // it asserted the defect as correct. It now asserts both halves.
   for (const p of pieces) {
+    assert(drawKaizoShatterPiece(ctxLog, p, st, { sprites }) === true,
+      'the drawer owns the piece entirely during the hold too (no vanilla tail)');
+  }
+  assertEq(draws.length, 0,
+    'THE HOLD PAINTS NOTHING — the screen is meant to look unbroken');
+
+  // Past the delay, every piece has its blend and every piece paints.
+  for (let i = 0; i < 12; i++) screenshatterStep(st);
+  const live = st.knight.shatter_insts.filter((q) => q && q !== -4);
+  assert(live.length > 0, 'the pieces survived the hold');
+  assert(live.every((q) => q.image_blend !== undefined),
+    '...and every one of them now carries a blend');
+  draws.length = 0;
+  let drawn = 0;
+  for (const p of live) {
     const done = drawKaizoShatterPiece(ctxLog, p, st, { sprites });
     assert(done === true, 'the drawer owns the piece entirely (no vanilla tail)');
     drawn += 1;
   }
-  assertEq(drawn, 31, 'every piece went through the drawer');
-  assertEq(draws.length, 31, 'AND EVERY PIECE PUT AN IMAGE ON THE CANVAS — G-38 closed');
+  assertEq(drawn, live.length, 'every piece went through the drawer');
+  assertEq(draws.length, live.length,
+    'AND EVERY PIECE PUT AN IMAGE ON THE CANVAS ONCE THE GLASS MOVES — G-38 closed');
 
   // THE PIECES ARE DIFFERENT SHARDS, not the same one 31 times. A drawer that
   // painted fragment 0 for everybody would satisfy the count above and still be
   // wrong, so the sub-image assignment is asserted directly.
-  assertEq(new Set(draws.map((d) => d.img)).size, 31,
-    '...and 31 DIFFERENT sub-images, one per piece');
+  assertEq(new Set(draws.map((d) => d.img)).size, draws.length,
+    '...and a DIFFERENT sub-image per piece, not fragment 0 thirty-one times');
 
   // NO SHEET, NO THROW. A clone whose sprite overlay has not been packed must
   // lose the glass, not the page.
