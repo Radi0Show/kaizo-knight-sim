@@ -99,21 +99,20 @@ ok(merged.size >= 250, `and that is the real pack, not a stub (${merged.size} sp
  *   spr_susie_laugh_dw               28x40  manifest 28x41   oy -3    2
  *   spr_roaringknight_sword_ol_alt   74x31  manifest 75x31   ox 37    1   (kaizo overlay)
  *
- * NOT FIXED HERE, and deliberately: five of them are in `assets/sprites/`,
- * which is a vendored engine asset this repo may not hand-edit, and the sixth
- * is in the kaizo overlay, which `kaizo/tools/pack-kaizo-sprites.mjs`
- * REBUILDS from a data.win extraction rather than patches. They are PINNED so
- * that a SEVENTH — a genuinely new mismatch, from a rebuild that half-ran or
- * a row typed by hand — fails this gate loudly.
+ * **ALL SIX ARE FIXED, 2026-09-12, AND THE PIN IS EMPTY.** They were fixed
+ * where the fault was, not here: the five vanilla sprites were re-extracted
+ * UNTRIMMED at the declared size in knight-sim (branch `kaizo-sprite-frames`,
+ * whose `tools/pack-sprites.mjs` now refuses to pack a frame smaller than its
+ * sprite and repads one when given the frame rects) and re-vendored; the
+ * overlay's sword was re-exported from its RAW source rect and composed onto
+ * the sprite's own 75x31 box, because UTMT's padded export composes onto the
+ * TEXTURE's bounding box, which this mod declares one pixel narrower than the
+ * sprite — so the old export had clipped an opaque column away.
+ *
+ * The empty set still does its job: ANY mismatch now fails this gate loudly,
+ * which is what the pin was protecting in the first place.
  */
-const KNOWN_SIZE_MISMATCH = new Set([
-  'spr_battlemsg',
-  'spr_susie_walk_right_dw_unhappy',
-  'spr_ralsei_walk_right_unhappy',
-  'spr_undyne_dw_caught',
-  'spr_susie_laugh_dw',
-  'spr_roaringknight_sword_ol_alt',
-]);
+const KNOWN_SIZE_MISMATCH = new Set([]);
 
 // ── 1. every manifest row agrees with its own PNGs ────────────────────────
 
@@ -151,7 +150,7 @@ function pngSize(path) {
   ok(wrongCount.length === 0,
     `every row's file count matches its \`frames\`${wrongCount.length ? ` — ${wrongCount.slice(0, 5).join(', ')}` : ''}`);
   ok(wrongSize.length === 0,
-    `every PNG's real size matches its row's w/h, bar the six pinned above`
+    `every PNG's real size matches its row's w/h`
     + `${wrongSize.length ? ` — NEW MISMATCH: ${wrongSize.slice(0, 5).join(', ')}` : ''}`);
   // The pin is a MEASUREMENT and must stay one: a name that stops
   // disagreeing has been fixed (or renamed) and should leave the list.

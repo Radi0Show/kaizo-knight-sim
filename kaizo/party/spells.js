@@ -1072,6 +1072,52 @@ export function stepThornringTick(state) {
 }
 
 // ───────────────────────────────────────────────────────────────────────────
+// global.charname — who the battle text says is casting
+// ───────────────────────────────────────────────────────────────────────────
+
+/**
+ * `global.charname[]`, CHARACTER-indexed, from
+ * `gml_GlobalScript_scr_initialize_charnames.gml:5-8` (identical in
+ * `gml_vanilla_v105`, and re-stated at obj_initializer's Create:36-38 for the
+ * first three):
+ *
+ *     global.charname[1] = "Kris";    global.charname[2] = "Susie";
+ *     global.charname[3] = "Ralsei";  global.charname[4] = "Noelle";
+ *
+ * Every line scr_spelltext writes is `stringsetsubloc(..., global.charname[
+ * global.char[caster]], ...)` — `~1` resolved through the SLOT -> ID bridge,
+ * never off the slot. sim/spellphase.js's fallback reads `PARTY[slot].name`
+ * instead, and sim/damage.js's PARTY slot 1 is SUSIE, so on the Weird Route
+ * Noelle's Heal Prayer printed "* Susie cast HEAL PRAYER!" and her SleepMist
+ * "* Susie cast SLEEPMIST!". Both were driven out of `state.battlemsg`.
+ *
+ * THE READER ALREADY EXISTED. `charName` (sim/spellphase.js:242-251) has
+ * consulted `state.kaizo.hooks.charName` since the seam was cut; nothing ever
+ * installed it. That is this repo's signature defect wearing its other face —
+ * a reader with no writer — so `check-castername-kaizo.mjs` fails when the
+ * READER is removed as well as when the name is wrong.
+ */
+export const CHARNAME_BY_CHAR = {
+  1: 'Kris',
+  2: 'Susie',
+  3: 'Ralsei',
+  4: 'Noelle',
+};
+
+/**
+ * The `charName` hook: `global.charname[global.char[slot]]`.
+ *
+ * Returns undefined for a slot the roster does not fill — the engine's `??`
+ * fallback then answers, which is what an empty pad slot deserves. A roster
+ * member's own `name` is the HUD's upper-case spelling ("NOELLE"), so the
+ * table above is read by character id rather than title-casing that.
+ */
+export function kaizoCharName(state, slot) {
+  const charId = charIdOf(state, slot);
+  return CHARNAME_BY_CHAR[charId];
+}
+
+// ───────────────────────────────────────────────────────────────────────────
 // The controller entity and the install
 // ───────────────────────────────────────────────────────────────────────────
 
@@ -1118,6 +1164,18 @@ export function installKaizoMenu(state) {
   hooks.castSpell ??= kaizoCastSpell;
   hooks.resolveActPages ??= kaizoResolveActPages;
   hooks.actBusy ??= kaizoActBusy;
+  // `global.charname[global.char[caster]]` — sim/spellphase.js's charName has
+  // read this hook all along and nothing wrote it, so every spell and item
+  // line named the SLOT's vanilla character. See CHARNAME_BY_CHAR above.
+  //
+  // `hooks.spellText` (sim/spellphase.js:280) is the other half of that seam
+  // and it stays UNINSTALLED on purpose: once charName answers, the engine's
+  // own SPELL_TEXT table produces this roster's lines verbatim — the mod's
+  // scr_spelltext cases 2/8/9/10 are byte-identical to the vanilla strings
+  // sim/spellphase.js already carries. The mod's one addition is the k_freeze
+  // "* It had no effect...!" suffix (scr_spelltext.gml:108-114 and :287-293),
+  // which belongs with the freeze mechanic, not here.
+  hooks.charName ??= kaizoCharName;
   ensureSpellController(state);
   return hooks;
 }

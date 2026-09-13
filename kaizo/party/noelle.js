@@ -302,17 +302,36 @@ export function noelleSprites(sideb = false) {
 
 /**
  * `spr_noelleb_swooned` — MOD-ONLY, and its assignment site is not the hero's
- * own Create but obj_knight_enemy's Step, inside `if (k_sideb)`:
+ * own Create but obj_knight_enemy's Step:
  *
- *     with (obj_herokris)   { defeatsprite = spr_kris_fell; }
- *     with (obj_heronoelle) { defeatsprite = spr_noelleb_swooned; }
+ *     :65   if (k_sideb)
+ *     :66       with (obj_herosusie) {            <- seventeen lines, Susie's
+ *     ...           normalsprite = ...               B-Side repaint
+ *     :83           defeatsprite = spr_susie_dw_fell;
+ *     :84       }                                  <- THE BLOCK CLOSES HERE
+ *     :85   with (obj_herokris)   { defeatsprite = spr_kris_fell; }
+ *     :89   with (obj_heronoelle) { defeatsprite = spr_noelleb_swooned; }
  *
- * So a downed B-Side Noelle gets her own graphic; off the B-Side she keeps
- * `spr_noelleb_defeat`. (Kris's `spr_kris_fell` is set twice over — here on
- * the B-Side and by obj_heroparent's own Step for encounter 115 generally.)
+ * **NOT `sideb`-GATED.** The `if (k_sideb)` opens at :65 and closes at :84,
+ * and only Susie's `with` is inside it; Kris's and Noelle's are one line
+ * below, on both routes. This function used to read `sideb ? swooned :
+ * defeat` on a misreading of that nesting, which drew the vanilla
+ * `spr_noelleb_defeat` on a downed A-Side Noelle — and the mod's own party
+ * sign lets a player field Noelle on an A-Side save, so that was reachable.
+ * Ledger G-4, corrected against the dump 2026-09-12; the ledger's §7.2 item
+ * 12 is the same correction from the audit side.
+ *
+ * Kris's `spr_kris_fell` is set twice over — here, and by obj_heroparent's
+ * own Step for encounter 115 generally. `roster.js` has always had his
+ * un-gated for that reason, and the two now agree.
+ *
+ * The parameter is kept so every caller's `{ sideb }` keeps flowing through
+ * one shape, and so a reader who remembers the old gate sees it ignored on
+ * purpose rather than silently dropped.
  */
+// eslint-disable-next-line no-unused-vars
 export function noelleSwoonSprite(sideb = false) {
-  return sideb ? 'spr_noelleb_swooned' : 'spr_noelleb_defeat';
+  return 'spr_noelleb_swooned';
 }
 
 /**

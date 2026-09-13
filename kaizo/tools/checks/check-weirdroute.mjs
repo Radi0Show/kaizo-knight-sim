@@ -46,6 +46,7 @@ import { buildKaizoScene, KAIZO_VERSIONS } from '../../scenes/kaizo-fight.js';
 import {
   launchVCAttack, openVCArena, vcTurnLength, vcSelfEnding } from '../../scenes/kaizo-mod-launcher.js';
 import { VC_TABLE, VD_TABLE, VC_KNIGHT } from '../../versions/vc-script.js';
+import { WEIRD_ROUTE_PARTY } from '../../party/roster.js';
 import { kaizoVortexendFreeze } from '../../attacks/sword-vortex.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -167,8 +168,15 @@ function makeMenuInput() {
 
 {
   ok(!!KAIZO_VERSIONS.D, 'version D is registered');
-  ok(/B-SIDE|B-Side/i.test(KAIZO_VERSIONS.D.name) && /WIP/.test(KAIZO_VERSIONS.D.name),
-    `version D is labelled as the B-Side, WIP ("${KAIZO_VERSIONS.D?.name}")`);
+  // THIS USED TO ASSERT THE LABEL SAID "B-SIDE" AND "WIP" — it pinned the
+  // scaffolding vocabulary in place, so removing that vocabulary from the
+  // shipped strings turned the check red even though nothing about the route
+  // had changed. A display string is a weak invariant anyway. What actually
+  // distinguishes D is its PARTY and its sideb branch, so assert those.
+  ok(!/WIP|ORACLE/i.test(KAIZO_VERSIONS.D.name),
+    `version D's name carries no build-status jargon ("${KAIZO_VERSIONS.D?.name}")`);
+  eq(KAIZO_VERSIONS.D.party, WEIRD_ROUTE_PARTY,
+    'version D is the two-member Weird Route party, and that is what names it');
   eq(KAIZO_VERSIONS.D.table, VD_TABLE, 'version D runs VD_TABLE');
 
   const runD = (seed) => {

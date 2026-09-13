@@ -286,7 +286,7 @@ export function drawObjSpellSnowgrave(ctx, e, state, helpers) {
     drawRectangleColourVertical(ctx, xx - 10, yy - 10, xx + 700, yy + 500,
       c_white, C_BLUE, bgalpha);                        // :122
   }
-  const snow = sprites.get(SNOWFALL_SPRITE);            // MISSING from both packs today
+  const snow = sprites.get(SNOWFALL_SPRITE);            // packed 2026-09-12 (G-43)
   // :125 — the far sheet, at bgalpha
   drawSpriteTiledExt(ctx, snow, 0, snowspeed / 1.5, timer * 6, 2, 2, null,
     bgalpha, xx, yy, VIEW_W, VIEW_H);
@@ -326,12 +326,18 @@ export function drawObjSpellSnowgrave(ctx, e, state, helpers) {
  * Depth: the sim's (object-definition 0, then `tardep` — the target's
  * depth - 1 — once within 120px, Step_0:57-60). Sub-image: floor + wrap on
  * the frame count (drawSpriteExt). Returns true: draw_self is the port's.
- * With the sprite unpacked nothing can be drawn and the flake is simply
- * absent — the vanilla tail would have nothing either (no mask for it).
+ *
+ * THE SPRITE IS PACKED as of 2026-09-12 (ledger G-43): `spr_icespell_snowflake`
+ * and `bg_snowfall` are in kaizo/assets/sprites, vanilla-sourced and
+ * byte-identical between the two data files, so this was a VENDORING gap and
+ * not an art delta. The early-return above is kept for a tree whose overlay
+ * has not been built (a fresh clone has none) — it is no longer the normal
+ * case. kaizo/tools/checks/check-snowflake-art.mjs drives a live V-D SnowGrave
+ * cast through the real renderer and counts the blits.
  */
 export function drawObjSpellSnowgraveSnowflake(ctx, e, state, helpers) {
   const entry = helpers.sprites.get(e.sprite_index ?? SNOWFLAKE_SPRITE);
-  if (!entry || !entry.frames.length) return true;      // MISSING from both packs today
+  if (!entry || !entry.frames.length) return true;      // packed 2026-09-12 (G-43)
   const sub = Math.floor(e.image_index ?? 0);
   const xs = e.image_xscale ?? 2;                       // Step_0:1-9 (draw slot)
   const ys = e.image_yscale ?? 2;                       // Step_0:10

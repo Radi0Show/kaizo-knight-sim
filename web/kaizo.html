@@ -85,19 +85,6 @@
      of ours belongs on it. `pointer-events: none` so it can never eat a click
      meant for the canvas, and it steps up out of the way when the debug HUD
      is showing, since both live on the bottom edge. */
-  #credit {
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    margin: 0;
-    padding: 4px 8px;
-    text-align: center;
-    font-size: 11px;
-    color: #555;
-    pointer-events: none;
-    user-select: none;
-  }
   /* ---- TOUCH CONTROLS ------------------------------------------------
      Hidden on fine-pointer machines; shown wherever the primary pointer is
      coarse. The container ignores pointers so the play area stays clean —
@@ -194,16 +181,6 @@
      naturally rest on a held-sideways phone. R keeps its top-right corner.
      Same sizes, same tolerances — only the anchors change. */
   @media (pointer: coarse) and (orientation: landscape) {
-    /* The frame fills the height, so the window's bottom edge is the FRAME's
-       bottom edge — the credit was sitting on the game's own footer text.
-       Top-left is the one corner nothing claims (R owns top-right). */
-    #credit {
-      bottom: auto;
-      top: max(14px, env(safe-area-inset-top));
-      left: max(14px, env(safe-area-inset-left));
-      right: auto;
-      text-align: left;
-    }
     #dpad {
       left: max(12px, env(safe-area-inset-left));
       bottom: auto;
@@ -237,16 +214,64 @@
       transform: translateY(-50%);
     }
   }
+  /* THE PRE-FIGHT MODE SELECT. Deliberately plain: it is a stand-in for the
+     game's own pixel choicer and must not be mistaken for it. `[hidden]`
+     needs the explicit rule because `#modeselect` sets `display: flex`. */
+  #modeselect {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.72);
+    z-index: 10;
+  }
+  #modeselect[hidden] { display: none; }
+  #modeselect-box {
+    border: 2px solid #fff;
+    background: #000;
+    padding: 18px 22px;
+    max-width: min(90vw, 420px);
+    text-align: center;
+  }
+  #modeselect-msg { margin: 0 0 12px; color: #fff; }
+  #modeselect-msg:empty { display: none; }
+  #modeselect-rows { display: flex; flex-direction: column; gap: 8px; }
+  #modeselect-rows button {
+    font: inherit;
+    color: #fff;
+    background: #000;
+    border: 1px solid #fff;
+    padding: 8px 14px;
+    cursor: pointer;
+  }
+  #modeselect-rows button:hover,
+  #modeselect-rows button:focus-visible { background: #fff; color: #000; }
 </style>
 </head>
 <body>
   <canvas id="game" width="640" height="480"></canvas>
-  <p id="credit">Game is by Toby Fox and the Deltarune Team</p>
   <div id="touch">
     <div id="dpad" class="pad"></div>
     <div id="btnZ" class="btn">Z</div>
     <div id="btnX" class="btn">X</div>
     <div id="btnR" class="btn">R</div>
+  </div>
+  <!-- THE PRE-FIGHT MODE SELECT (ledger G-6). Hidden unless the practice
+       setting is on (`?prac=1`), which is the mod's own default: with it off
+       `obj_ch3_PTB02` forces Standard and never raises the menu.
+
+       A LABELLED STAND-IN, and the label is not decoration. The mod draws
+       this with `obj_choicer_neo`, a pixel menu; these are DOM buttons. The
+       four STRINGS, their ORDER and what each one DOES are EnderCat8's and
+       are pinned by kaizo/tools/checks/check-prefight-modeselect.mjs; the
+       pixels are ours, and the repo's fourth law says nothing invented ships
+       unlabelled. -->
+  <div id="modeselect" hidden>
+    <div id="modeselect-box">
+      <p id="modeselect-msg"></p>
+      <div id="modeselect-rows"></div>
+    </div>
   </div>
   <script type="module" src="./kaizo.js"></script>
 </body>

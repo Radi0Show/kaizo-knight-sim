@@ -125,9 +125,25 @@ export const PROCEED_KEY = 'kaizoknight.proceed';
 export const PROCEED_SHATTER_SPRITE = 'spr_roaringknight_finalshatter';
 
 /**
- * Read the saved state. Returns the `{ presses, taken }` shape `armUnused`
- * takes; every field is re-derived there, so a corrupt or hostile entry cannot
- * produce a row that is half-red and already taken.
+ * Read the saved state.
+ *
+ * THE RAMP AND THE ROUTE DO NOT SURVIVE A RELOAD, BY DESIGN. This function
+ * used to return `{ presses, taken }` and the page used to act on it:
+ * web/kaizo.js does `if (title.unused.taken && !explicitVersion)
+ * enterWeirdRoute()` on boot, so a saved flag walked the player straight back
+ * onto the Weird Route before they touched anything. Neither field is read out
+ * of storage any more. Every visit starts on a cold UNUSED row and the Weird
+ * Route is shut until the twenty presses are made again, in THIS session.
+ *
+ * It is deliberately dropped at LOAD rather than at save, and that is the only
+ * placement that works: an installed build already has `taken: true` sitting in
+ * its storage from before this change, and refusing to WRITE it would leave
+ * every one of those players permanently unlocked. Refusing to READ it retires
+ * the old entries too.
+ *
+ * `gear` still persists. It is a loadout, not a door — losing a build the
+ * player assembled would be a second, unasked-for punishment, and it is
+ * unreachable anyway while the route is shut.
  *
  * `gear` rides here too, and NOT in the settings entry. The settings loader
  * accepts a saved loadout only at `length === 3` (a stale entry from before a
@@ -143,7 +159,9 @@ export function loadProceed(storage = globalThis.localStorage) {
     if (!raw) return {};
     const v = JSON.parse(raw);
     if (!v || typeof v !== 'object') return {};
-    const out = { presses: v.presses | 0, taken: !!v.taken };
+    // `v.presses` and `v.taken` are ignored on purpose — see the header. A
+    // stored flag from any build, honest or hostile, cannot open the route.
+    const out = {};
     // Length-checked against the roster, id-coerced: the same discipline the
     // settings loader applies, for the same reason.
     if (Array.isArray(v.gear) && v.gear.length === WEIRD_ROUTE_PARTY.length) {
@@ -160,8 +178,14 @@ export function loadProceed(storage = globalThis.localStorage) {
   }
 }
 
-/** Write it. Called on every press, because twenty presses that do not survive
- *  a reload are not progress, they are a chore repeated every visit. */
+/**
+ * Write it.
+ *
+ * Only `gear` is carried now. The press count and the taken flag are still
+ * written so an older build reading this entry sees a coherent shape, but
+ * `loadProceed` ignores both and nothing else reads the key — the ramp lives
+ * in memory for the length of one visit and dies with it.
+ */
 export function saveProceed(unused, gear = null, storage = globalThis.localStorage) {
   try {
     storage?.setItem(PROCEED_KEY, JSON.stringify({

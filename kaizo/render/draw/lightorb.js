@@ -15,9 +15,12 @@
 // WHAT THE VANILLA RENDERER DREW FOR THIS OBJECT: nothing. render/canvas.js
 // has no DRAW_EVENTS entry for obj_knight_lightorb (the object is unreachable
 // in the vanilla fight — it has no creator anywhere in the v105 dump), and
-// the generic tail needs a sprite or a mask, of which this instance has
-// neither in the pack. Without this entry the orb is invisible while its
-// bullets are not, which reads as "sunbolts out of nowhere".
+// until the overlay grew spr_sneo_bigcircle the generic tail had neither a
+// sprite nor a mask to fall back on. The tail could paint the body now, but
+// it could not paint the wind-up flash, the charge disc, the split pair or
+// the darkener — all four are draw calls in the GML's own Draw event — so
+// this entry still owns the object and still claims the draw (`return true`),
+// which is also what keeps the body from being blitted twice.
 //
 // THE STATE IS THE SIM'S. Everything below reads fields the attack module's
 // `draw(e, state)` slot wrote this frame — `darken_alpha`, `flashAlpha`,
@@ -25,31 +28,37 @@
 // `circle_alpha`, `discColor`. Nothing here advances a counter and nothing
 // here touches state.rng, per the seam's contract.
 //
-// ── THE ART GAP, LABELLED (repo law 4) ────────────────────────────────────
+// ── THE ART GAP IS CLOSED (2026-09-12) ────────────────────────────────────
 //
 // `obj_knight_lightorb`'s sprite is **spr_sneo_bigcircle**
-// (knight-research/kaizo-mod/sprites/objects_kaizo.csv), and its four
-// particle objects use spr_knight_spark, spr_knight_triangle,
-// spr_roaringknight_sword_break_vfx2 and obj_rouxls_power_up_orb's art. NONE
-// of those is in this repo's extracted pack: they are present in both data
-// files' sprite metadata (D:/tmp/sprite_meta_{kaizo,vanilla}.json) but were
-// never pulled as PNGs, so neither assets/sprites/manifest.json nor the kaizo
-// overlay carries them, and `kaizo/tools/pack-kaizo-sprites.mjs` cannot pack
-// what the extraction did not dump.
+// (knight-research/kaizo-mod/sprites/objects_kaizo.csv), and its three
+// sprited particle objects use spr_knight_spark (obj_knight_spark),
+// spr_knight_triangle (obj_knight_triangle) and
+// spr_roaringknight_sword_break_vfx2 (obj_knight_ring). Until today NONE of
+// them was in this repo's extracted pack: they were present in both data
+// files' sprite metadata but had never been pulled as PNGs, so this function
+// painted a canvas RING where the mod paints a 50px disc, and a player on the
+// Weird Route saw a placeholder for the attack.
 //
-// So the ORB BODY here is a PLACEHOLDER: a ring drawn with canvas primitives
-// in the instance's own `image_blend`, at the GML's scale and position. It is
-// deliberately NOT a `sprites.get('spr_sneo_bigcircle')` call — an absent
-// name would draw nothing at all AND would trip
-// check-render-manifest-kaizo's "every sprite the ports ask for is in the
-// pack" assertion, which is the right assertion and not one to weaken. To
-// finish this: re-run the sprite extraction with the five names above added,
-// repack, then replace `drawOrbBodyPlaceholder` with the blit and delete this
-// paragraph.
+// All four are extracted now (UndertaleModCli + sprite_hash.csx, run against
+// a COPY of the mod's data file and a COPY of the player's own vanilla one,
+// never the Steam install) and packed by
+// `kaizo/tools/pack-kaizo-sprites.mjs`. Every frame is byte-identical between
+// the two builds, so all four pack `source: 'vanilla'` with no `replaced`
+// flag: a VENDORING gap, not EnderCat8's art, and the publish gate does not
+// cover them. `kaizo/tools/checks/check-lightorb.mjs` L12 asserts the
+// provenance AND the blit.
 //
-// The two sprites the event uses that ARE in the pack — spr_zapper_tvturnoff1
-// (the wind-up flash) and spr_board_blacktile (the Draw End darkener) — are
-// drawn for real.
+// WHAT IS STILL A PRIMITIVE, and correctly so: the charge disc
+// (`draw_circle_color`, Draw_0:200) and the darkener (a 16x16 black tile
+// scaled 100x, Draw_64) are primitives IN THE GML. The one thing still
+// missing a picture is `obj_rouxls_power_up_orb`, whose sprite column in
+// objects_kaizo.csv is EMPTY — it draws itself from three `draw_circle`
+// calls this repo does not translate, so it has no name to pack.
+//
+// The two sprites the event uses that were already in the pack —
+// spr_zapper_tvturnoff1 (the wind-up flash) and spr_board_blacktile (the Draw
+// End darkener) — are drawn for real, as before.
 
 /** GameMaker colour argument -> css rgb. An [r,g,b] triple passes through; a
  *  packed real decodes BGR through helpers.rgbOf; c_white means white. */
@@ -65,19 +74,36 @@ function css(c, rgbOf) {
 const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
 
 /**
- * THE PLACEHOLDER. `draw_sprite_ext(sprite_index, image_index, x, y, scale,
+ * THE ORB BODY. `draw_sprite_ext(sprite_index, image_index, x, y, scale,
  * scale, image_angle, image_blend, image_alpha)` — Draw_0:174/175/179, with
- * sprite_index = spr_sneo_bigcircle (not extracted; see the header).
+ * sprite_index = spr_sneo_bigcircle (50x50, origin 25,25, one frame,
+ * `source: 'vanilla'` in the kaizo overlay).
  *
- * spr_sneo_bigcircle is a filled soft disc; this stands in with a ring at the
- * same radius so the orb reads as a shape at the right place and size without
- * pretending to be the art. 25px is the sprite's own half-width, measured
- * from the data files' sprite metadata (50x50, origin 25,25 — identical in
- * both builds), so the geometry is real and only the pixels are invented.
+ * `image_angle` is 0 on this object — nothing in Create_0 or Draw_0 writes it
+ * — and passed explicitly rather than left to a default so the blit reads as
+ * the GML's nine arguments.
+ *
+ * THE FALLBACK RING is what this function USED to be, whole: the sprite was
+ * not in any pack, so the body was a canvas stroke at the sprite's own 25px
+ * radius and the header said so at length. It is kept, one arm down, for the
+ * only case that can still reach it — a build whose overlay has not been
+ * packed (CLAUDE.md, "Machine facts": a fresh clone has no
+ * kaizo/assets/sprites) — because an orb that draws NOTHING while its bullets
+ * fly reads as sunbolts out of nowhere, which is the failure this entry exists
+ * to prevent. check-lightorb L12 asserts the BLIT, so the fallback cannot
+ * quietly become the normal path again.
  */
-function drawOrbBodyPlaceholder(ctx, x, y, scale, blend, alpha, rgbOf) {
+function drawOrbBody(ctx, e, x, y, scale, blend, alpha, helpers) {
+  const { sprites, blit, rgbOf } = helpers;
+  if (alpha <= 0) return;
+  const entry = sprites.get(e.sprite_index ?? 'spr_sneo_bigcircle');
+  if (entry && entry.frames.length) {
+    blit(entry.frames[0], entry.meta.ox, entry.meta.oy,
+      x, y, scale, scale, e.image_angle ?? 0, clamp01(alpha), blend);
+    return;
+  }
   const r = 25 * Math.abs(scale);
-  if (!(r > 0.5) || alpha <= 0) return;
+  if (!(r > 0.5)) return;
   ctx.save();
   ctx.globalAlpha = clamp01(alpha);
   ctx.strokeStyle = css(blend, rgbOf);
@@ -115,10 +141,10 @@ export function drawObjKnightLightorb(ctx, e, state, helpers) {
   const blend = e.image_blend ?? [255, 255, 255];
   const alpha = e.image_alpha ?? 1;
   if (e.drawSplit) {
-    drawOrbBodyPlaceholder(ctx, e.x + (e.splitx ?? 0), e.y, scale, blend, alpha, rgbOf);
-    drawOrbBodyPlaceholder(ctx, e.x - (e.splitx ?? 0), e.y, scale, blend, alpha, rgbOf);
+    drawOrbBody(ctx, e, e.x + (e.splitx ?? 0), e.y, scale, blend, alpha, helpers);
+    drawOrbBody(ctx, e, e.x - (e.splitx ?? 0), e.y, scale, blend, alpha, helpers);
   } else {
-    drawOrbBodyPlaceholder(ctx, e.x, e.y, scale, blend, alpha, rgbOf);
+    drawOrbBody(ctx, e, e.x, e.y, scale, blend, alpha, helpers);
   }
 
   // :189-201 — the charge disc. `draw_set_alpha(circle_alpha);

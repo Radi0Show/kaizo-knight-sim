@@ -109,6 +109,9 @@
 //     by kaizoGloomBarSegment, drawing left to the renderer.
 
 import { gmlChoose, gmlIrandomRange, gmlRandomRange } from '../../sim/rng.js';
+import { spawn } from '../../sim/entity.js';
+import { particleGeneric } from '../../sim/fx.js';
+import { scrLerpvar } from '../../sim/lerpvar.js';
 
 /**
  * The `> 45` clamp that scr_damage applies to gloom accrual — and that
@@ -152,6 +155,25 @@ export function kaizoGloomcolor() {
 }
 
 /**
+ * ...and as the `[r, g, b]` an entity's `image_blend` is in this engine —
+ * render/draw/gm.js's `tinted()` takes the ARRAY and throws on a string, so a
+ * mote cannot be handed `KAIZO_GLOOM_COLOR` directly.
+ *
+ * IT IS ONE BLUE OFF FROM `kaizo/party/heroes.js`'s `GLOOM_COLOR`, and that is
+ * recorded rather than reconciled. Both are `merge_color(c_blue, #268CAC,
+ * 0.5)`; the blue channel lands on 213.5, and this file's constant TRUNCATES
+ * (the derivation above says so, and flags it as assumed) while heroes.js
+ * builds the same colour through `sim/gml.js`'s `mergeColor`, which ROUNDS to
+ * 214 — the helper 60 vanilla suites are pinned to. Neither is provably the
+ * runner's answer without a capture of a glooming hero. Picking one here
+ * would silently move whichever of the two is right, so the disagreement
+ * stays visible: the HUD band, the HP number and the motes are all 213 (this
+ * file's), the hero's 30%-opacity body tint is 214 (heroes.js's), and at that
+ * opacity one unit of blue is below anything either surface can show.
+ */
+export const GLOOM_BLEND = Object.freeze([19, 70, 213]);
+
+/**
  * obj_herosusie's object index in the kaizo dump. kaizo_gloomemit branches on
  * it (`if (_ob == 1410)`) to widen her x spread — and in doing so BURNS AN
  * EXTRA RNG DRAW, because the first random_range is assigned to _xx and then
@@ -161,8 +183,26 @@ export function kaizoGloomcolor() {
  */
 const OBJ_HEROSUSIE = 1410;
 
-/** Char id -> the `myheight` kaizo_gloomemit reads. Visual bound only. */
-const HERO_MYHEIGHT = { 1: 42, 2: 50, 3: 42, 4: 44 };
+/**
+ * Char id -> the `myheight` kaizo_gloomemit reads for its `random_range(0,
+ * myheight - 14)` vertical spread.
+ *
+ * MEASURED off obj_heroparent's Create (gml_Object_obj_heroparent_Create_0.gml
+ * :87 Kris 74, :124 Susie 82, :167 Ralsei 86, :215 Noelle 86 — the file's own
+ * `myheight = 37` at :16 is the parent's default and no hero keeps it), and
+ * they agree with kaizo/party/roster.js's HERO_BODY, which is the other reader
+ * of the same four numbers.
+ *
+ * THEY USED TO BE 42 / 50 / 42 / 44 — roughly the halves, and wrong for every
+ * character. It cost nothing while the particles were counted-but-not-created,
+ * because `random_range` is ONE u32 whatever its bounds (CLAUDE.md's RNG
+ * model), so the draw was spent identically and only the discarded VALUE was
+ * off. It stops being free the moment a mote is placed at that value, which is
+ * what `kaizoGloomemit` now does — the streaks would have covered a little
+ * over half of each hero. No stream position moves with this correction, by
+ * the same argument; asserted in check-gloom-hud.mjs L4.
+ */
+const HERO_MYHEIGHT = { 1: 74, 2: 82, 3: 86, 4: 86 };
 
 /** The sim's standing party, for scenes that have not built a roster yet. */
 const DEFAULT_ROSTER_CHARIDS = [1, 2, 3];
@@ -420,14 +460,61 @@ export function kaizoGloomemit(state, slot) {
   if (!rng) return 0;
   const before = rng.draws ?? 0;
   const charId = charIdOfSlot(state, slot);
-  const myheight = HERO_MYHEIGHT[charId] ?? 42;
+  const myheight = HERO_MYHEIGHT[charId] ?? 74;
+  // THE MOTES ARE NOW MADE, not just counted (ledger G-41). `spawn` needs a
+  // real sim state — an entity list and the spawn counter — and this function
+  // is also called from bare harness states that carry neither (check-gloom's
+  // draw-count fixtures are literally `{ gmlRng, kaizo }`). So the VALUES are
+  // computed unconditionally, in the GML's order, and only the creation is
+  // conditional: the RNG stream is identical either way, which is what keeps
+  // every existing count assertion true and is asserted directly in
+  // check-gloom-hud.mjs L4.
+  const canSpawn = Array.isArray(state.entities) && typeof state.nextSpawnSeq === 'number';
+  const member = state.kaizo?.roster?.[slot] ?? null;
+  const hx = member?.pos?.x ?? 0;
+  const hy = member?.pos?.y ?? 0;
+  const hdepth = member?.depth ?? 0;
   for (let r = 0; r < 2; r++) {
-    gmlRandomRange(rng, 0, 28);
-    if (charId === 2) gmlRandomRange(rng, 0, 32); // _ob == 1410
-    gmlRandomRange(rng, 0, myheight - 14);
-    gmlChoose(rng, [-1, 1]); // depth = choose(depth - 1, depth + 1)
-    gmlIrandomRange(rng, 4, 6);
-    gmlRandomRange(rng, 4, 6);
+    // `var _gc = kaizo_gloomcolor();` — inside the repeat, no RNG.
+    let xx = hx + gmlRandomRange(rng, 0, 28) * 2;
+    // `if (_ob == 1410) _xx = x + random_range(0, 32) * 2;` — SUSIE ONLY, and
+    // the first draw above is spent and thrown away. Both draws stay.
+    if (charId === 2) xx = hx + gmlRandomRange(rng, 0, 32) * 2;
+    const yy = hy + gmlRandomRange(rng, 0, myheight - 14);
+    // `depth = choose(other.depth - 1, other.depth + 1)` — `other` is the
+    // HERO, so the mote sits one step in front of or behind the character it
+    // comes off. The value used to be drawn and dropped.
+    const dz = gmlChoose(rng, [-1, 1]);
+    const ys = 2 * gmlIrandomRange(rng, 4, 6);
+    const vs = gmlRandomRange(rng, 4, 6);
+    if (!canSpawn) continue;
+    const p = spawn(state, particleGeneric, { x: xx, y: yy });
+    p.image_blend = GLOOM_BLEND;
+    p.depth = hdepth + dz;
+    // `not_outbound = false` IS NOT WRITTEN, deliberately. It is the field
+    // the mod ADDS to obj_particle_generic (ledger G-57) together with an
+    // Outside-View-0 event — `if (not_outbound) instance_destroy()` — and
+    // `sim/fx.js` has NEITHER the field nor any outside-view event, so
+    // assigning it here would be one more value nothing reads, which is this
+    // repo's signature defect and the reason the grep exists. It would also
+    // be inert if it were read: a mote is born on top of a hero, moves down
+    // 4-6px a frame and is destroyed by `timer = 5`, so it cannot leave the
+    // view inside its own life. When sim/fx.js grows the event (G-57), add
+    // the line and the default `false` is already what this wants.
+    p.sprite_index = 'spr_whitepx';
+    p.image_xscale = 2;
+    p.image_yscale = ys;
+    // vspeed with nothing else: the engine moves an entity by hspeed/vspeed
+    // only under `componentMotion` (sim/index.js runMotion), and declaring it
+    // on the TYPE would set a flag nothing reads — the trap
+    // kaizo/party/scenes.js records for the snowflakes.
+    p.componentMotion = true;
+    p.vspeed = vs;
+    // `scr_lerpvar("image_alpha", 1, 0, 5); timer = 5;` — the fade and the
+    // life are the same five frames, so the mote is gone the frame it would
+    // have reached alpha 0 either way.
+    scrLerpvar(state, spawn, p, 'image_alpha', 1, 0, 5);
+    p.timer = 5;
   }
   return (rng.draws ?? 0) - before;
 }
@@ -548,7 +635,56 @@ export function kaizoGloomStep(state, { bullets = null } = {}) {
     emits += 1;
     draws += kaizoGloomemit(state, slot);
   }
+
+  // AND THE HUD, from the same event that moved the meter — see
+  // publishGloomHud. Last, so what the player sees is this frame's value and
+  // not the previous one's.
+  publishGloomHud(state);
   return { ticks, emits, draws };
+}
+
+/**
+ * THE HUD SEAM — `state.partyStatusBar`, read by render/menu.js's
+ * `statusOverlay` (knight-sim branch `kaizo-gloom-seams`, v1.0.43).
+ *
+ * Ledger G-34, all three of its sites, closed by one publish:
+ *
+ *   scr_charbox:735-746   the CURRENT hp number turns kaizo_gloomcolor()
+ *   scr_charbox:757-769   a band on the 75px bar, (hp-gloom)/maxhp .. hp/maxhp
+ *   obj_battlecontroller  the same band on the target picker's 100px bar
+ *     Draw_0:1387-1399    (unclamped there — the renderer honours that)
+ *
+ * Until this existed, GLOOM was a damage-over-time meter the player could not
+ * see: it ticked, it drained HP, it printed its own call-out at 36, and every
+ * surface that could have shown it drew vanilla DELTARUNE's colours.
+ * `kaizoGloomBarSegment` below is a faithful translation of the middle site
+ * that nothing but its own check had ever called.
+ *
+ * SLOT-INDEXED, and that is the contract's indexing, not the mod's. Both
+ * GML sites read a CHARACTER id — `k_gloom[c + 1]` where scr_charbox's `c`
+ * walks `havechar[0..3]` (so `c + 1` IS the char id, not slot + 1; this
+ * file's header has the whole argument), and `k_gloom[global.char[i]]` in
+ * obj_battlecontroller. Both resolve, per panel, to "the gloom of whoever is
+ * in this slot", which is exactly `led.gloom[slot]`.
+ *
+ * PADDED TO THREE. The renderer walks the picker's three rows and the
+ * charbox's `partySprites.length` panels; a Weird Route roster is two long,
+ * and the empty third slot must read 0 rather than `undefined` so a reader
+ * cannot take `undefined > 0` as a band.
+ *
+ * A-SIDE PUBLISHES NOTHING: the only caller returns before this on
+ * `!kaizoSideb`, so `state.partyStatusBar` stays absent and every pixel of a
+ * V-A / V-C run is what it was. That is also why the field is not cleared
+ * here — nothing can have set it.
+ */
+export function publishGloomHud(state) {
+  const led = ensureGloom(state);
+  const values = [0, 0, 0];
+  for (let slot = 0; slot < Math.max(3, led.gloom.length); slot++) {
+    values[slot] = led.gloom[slot] ?? 0;
+  }
+  state.partyStatusBar = { color: KAIZO_GLOOM_COLOR, values };
+  return state.partyStatusBar;
 }
 
 /**

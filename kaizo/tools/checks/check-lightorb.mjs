@@ -98,7 +98,7 @@
 //
 //     node kaizo/tools/checks/check-lightorb.mjs      exit 0 / 1
 
-import { readdirSync, readFileSync } from 'node:fs';
+import { readdirSync, readFileSync, existsSync } from 'node:fs';
 import { join, relative, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createState, stepFrame } from '../../../sim/index.js';
@@ -113,6 +113,7 @@ import {
 import { getSwordcolor } from '../../attacks/kaizo-colors.js';
 import {
   knightLightorb, knightBullethell2, knightBullethellBullet2,
+  knightSpark, knightTriangle, knightRing,
   spawnLightorb, SUNBOLT_MASK,
 } from '../../attacks/lightorb.js';
 // The call site G-1 closed — imported so "the organism creates one" is
@@ -919,12 +920,247 @@ const rowKey = (r) => `c${r.con}t${r.t}=${r.n}`;
   assert(solo.alive, 'types: …and does not destroy itself doing so');
 }
 
+// ── L12 — THE ART: PROVENANCE, AND THE DRAW ────────────────────────────────
+//
+// Until 2026-09-12 none of this attack's four sprites was in any pack, so
+// kaizo/render/draw/lightorb.js painted a canvas RING for the orb's body and
+// the three particle objects were inline RNG burns with nothing to draw at
+// all: on the Weird Route the whole attack was a placeholder.
+//
+// WHY THIS BLOCK IS NOT A GREP. A consumer grep ("does the drawer mention
+// spr_sneo_bigcircle?") passes on a drawer that still paints primitives, and
+// a manifest check alone passes on art nothing reaches. So the picture is
+// asserted where it is made: the REAL renderer with the REAL kaizo overrides,
+// a stub 2d context that records every drawImage, and a LIVE orb — the same
+// posture as check-snowflake-art.mjs and check-ending-draw.mjs.
+//
+// The three particles are drawn by render/canvas.js's GENERIC TAIL off
+// `sprite_index` (they have no Draw event in the dump), which is why this
+// block drives the whole renderer rather than calling the orb's drawer alone.
+{
+  const noop = () => {};
+  const VALUE_PROPS = new Set(['fillStyle', 'strokeStyle', 'globalAlpha',
+    'globalCompositeOperation', 'font', 'lineWidth', 'lineCap', 'lineJoin',
+    'textAlign', 'textBaseline', 'imageSmoothingEnabled', 'shadowBlur',
+    'shadowColor', 'shadowOffsetX', 'shadowOffsetY', 'miterLimit', 'direction',
+    'filter']);
+
+  /** A 2d-context stand-in. `log` gets `{op}` for every call, plus the blitted
+   *  image for a drawImage — so a stroked ring and a blit are told apart. */
+  const mkCtx = (log = null) => new Proxy({}, {
+    get(t, p) {
+      if (p === 'canvas') return { width: 640, height: 480 };
+      if (p === 'measureText') return () => ({ width: 10 });
+      if (p === 'createLinearGradient' || p === 'createRadialGradient') {
+        return () => ({ addColorStop: noop });
+      }
+      if (p === 'createPattern') return () => ({});
+      if (p === 'getImageData' || p === 'createImageData') {
+        return (a, b, w, h) => {
+          const W = (p === 'createImageData' ? a : w) || 1;
+          const H = (p === 'createImageData' ? b : h) || 1;
+          return { data: new Uint8ClampedArray(W * H * 4), width: W, height: H };
+        };
+      }
+      if (VALUE_PROPS.has(p)) return t[p] ?? '';
+      if (typeof p !== 'string') return undefined;
+      return (...args) => {
+        if (log) log.push({ op: p, img: p === 'drawImage' ? args[0] : null });
+        return undefined;
+      };
+    },
+    set(t, p, v) { t[p] = v; return true; },
+  });
+  globalThis.document = {
+    createElement: (tag) => {
+      if (tag !== 'canvas') return {};
+      const c = { width: 0, height: 0, style: {} };
+      c.getContext = () => mkCtx(null);
+      return c;
+    },
+  };
+  globalThis.window = globalThis;
+  globalThis.devicePixelRatio = 1;
+
+  const PACK = join(ROOT, 'kaizo', 'assets', 'sprites');
+  const MAIN_PACK = join(ROOT, 'assets', 'sprites');
+
+  /**
+   * The four names with the geometry BOTH data files report — typed out from
+   * knight-research/kaizo-mod/sprites/{objects,sprites}_kaizo.csv rather than
+   * read out of the manifest, so the manifest has something to be wrong
+   * against, and tagged with the object that carries each one.
+   */
+  const ART = {
+    spr_sneo_bigcircle: { obj: 'obj_knight_lightorb', w: 50, h: 50, ox: 25, oy: 25, frames: 1 },
+    spr_knight_spark: { obj: 'obj_knight_spark', w: 17, h: 18, ox: 8, oy: 9, frames: 4 },
+    spr_knight_triangle: { obj: 'obj_knight_triangle', w: 16, h: 16, ox: 0, oy: 8, frames: 1 },
+    spr_roaringknight_sword_break_vfx2: {
+      obj: 'obj_knight_ring', w: 64, h: 64, ox: 32, oy: 32, frames: 2,
+    },
+  };
+
+  const manifest = existsSync(join(PACK, 'manifest.json'))
+    ? JSON.parse(readFileSync(join(PACK, 'manifest.json'), 'utf8'))
+    : null;
+  const mainManifest = existsSync(join(MAIN_PACK, 'manifest.json'))
+    ? JSON.parse(readFileSync(join(MAIN_PACK, 'manifest.json'), 'utf8'))
+    : {};
+
+  if (!manifest) {
+    // A fresh clone has no overlay (CLAUDE.md, "Machine facts"), and
+    // check-sprites already hard-exits for that. Say so rather than reporting
+    // an unpacked tree as a regression — but say it, so a silently skipped
+    // block cannot look like a passing one.
+    console.log('  -- L12 SKIPPED: kaizo/assets/sprites is not built '
+      + '(node kaizo/tools/pack-kaizo-sprites.mjs)');
+  } else {
+    // L12a — provenance, per name. `source: 'vanilla'` with no `replaced` flag
+    // is the publish gate's own record: these four are byte-identical in the
+    // mod's data file and the player's, so they are a vendoring gap and NOT
+    // EnderCat8's art.
+    for (const [name, want] of Object.entries(ART)) {
+      const entry = manifest[name];
+      assert(!!entry, `L12a: ${name} (${want.obj}) is in the kaizo overlay`);
+      if (!entry) continue;
+      assertEq(entry.source, 'vanilla',
+        `L12a: …${name} is VANILLA art — the publish gate does not cover it`);
+      assert(!entry.replaced,
+        `L12a: …${name} carries no \`replaced\` flag (the mod did not repaint it)`);
+      assert(entry.w === want.w && entry.h === want.h
+        && entry.ox === want.ox && entry.oy === want.oy && entry.frames === want.frames,
+        `L12a: …${name} is ${want.w}x${want.h}, origin (${want.ox},${want.oy}), `
+        + `${want.frames} frame(s) — got ${entry.w}x${entry.h} (${entry.ox},${entry.oy}) `
+        + `${entry.frames}`);
+      assert(!mainManifest[name],
+        `L12a: …and the MAIN pack still does not carry ${name}, so the vanilla page `
+        + 'is untouched');
+      // The frames are really on disk, at the size the metadata claims — PNG
+      // IHDR, width at byte 16 and height at 20, both big-endian u32. An
+      // entry whose PNG is missing or trimmed draws at the wrong offset and
+      // no manifest assertion can see it.
+      for (let i = 0; i < want.frames; i += 1) {
+        const file = join(PACK, `${name}_${i}.png`);
+        assert(existsSync(file), `L12a: …${name}_${i}.png is on disk`);
+        if (!existsSync(file)) continue;
+        const b = readFileSync(file);
+        assert(b.readUInt32BE(16) === want.w && b.readUInt32BE(20) === want.h,
+          `L12a: …${name}_${i}.png really is ${want.w}x${want.h} `
+          + `(got ${b.readUInt32BE(16)}x${b.readUInt32BE(20)}) — extracted WITH padding, `
+          + 'so the origin lands where the physics expects it');
+      }
+    }
+
+    // L12b — the types carry those names, so the generic tail has something to
+    // look up. `sprite_index` is the whole interface between the sim and the
+    // picture for the three particles.
+    assertEq(knightLightorb.name, 'obj_knight_lightorb', 'L12b: the orb type');
+    for (const [type, name] of [
+      [knightSpark, 'spr_knight_spark'],
+      [knightTriangle, 'spr_knight_triangle'],
+      [knightRing, 'spr_roaringknight_sword_break_vfx2'],
+    ]) {
+      const probe = { x: 0, y: 0, xstart: 0, ystart: 0 };
+      type.create(probe, { gmlRng: gmlCreate(1) });
+      assertEq(probe.sprite_index, name, `L12b: ${type.name} carries ${name}`);
+      assertEq(probe.depth, 0, `L12b: …at depth 0 (objects_kaizo.csv)`);
+      assert(typeof type.step === 'function', `L12b: …and its Step is translated`);
+    }
+
+    // L12c — THE DRAW, on a live split (type 1) orb, through the real
+    // renderer. Node cannot decode a PNG, so each entry is synthesised at the
+    // manifest's own size and tagged `pack://<name>`; the blit is then
+    // identified by the image that reached drawImage.
+    const entryFor = (name) => {
+      const m = manifest[name];
+      return {
+        frames: Array.from({ length: m.frames },
+          (_, i) => ({ width: m.w, height: m.h, src: `pack://${name}#${i}` })),
+        meta: { ox: m.ox, oy: m.oy, w: m.w, h: m.h },
+      };
+    };
+    const fallbackImg = { width: 32, height: 32, src: 'stub://frame' };
+    const fallback = { frames: [fallbackImg], meta: { ox: 16, oy: 16, w: 32, h: 32 } };
+
+    const { createRenderer } = await import('../../../render/canvas.js');
+    const { KAIZO_DRAW_OVERRIDES } = await import('../../render/index.js');
+
+    const drive = async ({ artPresent = true, frames = 130 } = {}) => {
+      const log = [];
+      const canvas = { width: 640, height: 480, style: {}, getContext: () => mkCtx(log) };
+      const renderer = await createRenderer(canvas, { overrides: KAIZO_DRAW_OVERRIDES });
+      const entries = new Map(Object.keys(ART).map((n) => [n, entryFor(n)]));
+      renderer.sprites.get = (name) => {
+        if (entries.has(name)) return artPresent ? entries.get(name) : null;
+        return fallback;
+      };
+      const { state } = scene({ sideb: true, difficulty: 0 });
+      spawnLightorb(state, 320, 160);
+      const blits = {};
+      let strokes = 0;
+      let splitFrameBodies = 0;
+      for (let f = 0; f < frames; f += 1) {
+        log.length = 0;
+        renderer.draw(state);
+        for (const c of log) {
+          if (c.op === 'stroke') strokes += 1;
+          if (c.op !== 'drawImage' || !c.img) continue;
+          const m = /^pack:\/\/([a-z0-9_]+)#/.exec(c.img.src ?? '');
+          if (m) blits[m[1]] = (blits[m[1]] ?? 0) + 1;
+        }
+        const orb = state.entities.find((e) => e.alive
+          && e.type.name === 'obj_knight_lightorb');
+        if (orb && orb.drawSplit) {
+          const bodies = log.filter((c) => c.op === 'drawImage' && c.img
+            && String(c.img.src).startsWith('pack://spr_sneo_bigcircle')).length;
+          if (bodies === 2) splitFrameBodies += 1;
+        }
+        stepFrame(state, {});
+      }
+      return { blits, strokes, splitFrameBodies };
+    };
+
+    const live = await drive({});
+    assert((live.blits.spr_sneo_bigcircle ?? 0) > 0,
+      'L12c: the ORB BODY is blitted from spr_sneo_bigcircle '
+      + `(${live.blits.spr_sneo_bigcircle ?? 0} blits over 130 frames) — this number was `
+      + '0 while the drawer painted a ring');
+    assert(live.splitFrameBodies > 0,
+      'L12c: …twice on a split frame, one mouth at +splitx and one at -splitx '
+      + `(${live.splitFrameBodies} such frames)`);
+    assert((live.blits.spr_knight_spark ?? 0) > 0,
+      `L12c: the SPARKS are blitted (${live.blits.spr_knight_spark ?? 0}) — obj_knight_spark `
+      + 'is a real instance now, not an inline RNG burn');
+    assert((live.blits.spr_knight_triangle ?? 0) > 0,
+      `L12c: the TRIANGLES are blitted (${live.blits.spr_knight_triangle ?? 0})`);
+    assert((live.blits.spr_roaringknight_sword_break_vfx2 ?? 0) > 0,
+      'L12c: the RINGS are blitted '
+      + `(${live.blits.spr_roaringknight_sword_break_vfx2 ?? 0}) — every thirtieth con-1 `
+      + 'frame, and on timer 1');
+    assertEq(live.strokes, 0,
+      'L12c: …and NOT ONE canvas stroke is made while the art is present — the '
+      + 'placeholder ring is gone, not merely overdrawn');
+
+    // L12d — the same drive with the pack taken away reaches the LABELLED
+    // fallback instead. This is what makes L12c a statement about the art and
+    // not about the drawer being called: a drawer that painted a ring either
+    // way would give the same stroke count in both runs.
+    const bare = await drive({ artPresent: false, frames: 60 });
+    assertEq(bare.blits.spr_sneo_bigcircle ?? 0, 0,
+      'L12d: with the overlay absent nothing blits the orb sprite');
+    assert(bare.strokes > 0,
+      `L12d: …and the fallback ring is what draws instead (${bare.strokes} strokes), so an `
+      + 'unpacked clone still shows the orb rather than nothing');
+  }
+}
+
 console.log(failures === 0
   ? `check-lightorb: all ${checks} checks passed\n`
     + '  L1 create / L2 wind-up / L3 the split + emitters / L4 the volleys\n'
     + '  L5 166 at fire, 103 on contact / L6 the mask / L7 the turntimer guard\n'
     + '  L8 the RNG budget, frame by frame / L9 the +-2 aim / L10 retro-thrust\n'
     + '  L11 dead emitters / L11b the `_dir -= 180` flip reaches nothing / L11c no reader\n'
+    + '  L12 the art: four sprites, vanilla-sourced, and the blits they now make\n'
     + '  R1 the render registry\'s ordinal comments match its key order'
   : `check-lightorb: ${failures} of ${checks} FAILED`);
 process.exit(failures === 0 ? 0 : 1);

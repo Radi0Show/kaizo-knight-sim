@@ -74,6 +74,7 @@ import {
   stepScenes, scrMnendturnScenes, sceneHijacksTurn, attachSceneKnight,
   applySceneHandbackCharturn,
 } from '../party/scenes.js';
+import { endingWatchEndcon } from './kaizo-ending.js';
 import { rngNext } from '../../sim/rng.js';
 import {
   fightDamage, damageKnight, advanceTurn, stepKnightAnim, tickChargeup, phase4Reached,
@@ -693,6 +694,23 @@ const director = {
     // The ending's own clock: the white fadeout at 32, the UI teardown and
     // the tension bar's exit past 45. See stepEndCutscene.
     stepEndCutscene(state);
+
+    // ── THE FLAGS THE POST-FIGHT FORK READS (ledger G-15) ────────────────
+    //
+    // The mod's teardown block is the SAME `if (endcon == 1 && endtimer > 45)`
+    // stepEndCutscene just resolved (obj_knight_enemy Step_0:1324-1333), and
+    // it writes `global.flag[50] = 0; global.flag[51] = 1;` there — which
+    // Other_13 then tallies into `flag[50] = 1` and PTB02's con 8 reads as
+    // `defeated` (kaizo/scenes/kaizo-ending.js). Without a producer the fork
+    // would read a flag nobody ever set and route every Weird Route win to
+    // `con = 9`: the "computed correctly, written where nothing reads it"
+    // defect inverted — a reader with no writer.
+    //
+    // It fires ONCE (flag[51] is the latch), writes only `state.kaizo.flag`
+    // and `state.kaizo.ending`, and spawns nothing, so no trace column moves.
+    // Verified: _tok3 stays byte-exact on trace and bullets, _rev1 holds at
+    // f12492 / f12499.
+    endingWatchEndcon(state);
 
     // THE BOARD AND THE SOUL ONLY EXIST DURING THE BULLET PHASE.
     //

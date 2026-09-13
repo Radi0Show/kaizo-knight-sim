@@ -672,13 +672,30 @@ section('THE HAND-BACK — Step_0:1904-1928, and its index base');
   const firstOpen = rows.find((r) => r.open) ?? {};
   eq(firstOpen.f, handbackOf(st).frame, 'the menu opens on the hand-back frame');
   eq(firstOpen.ct, 1, '...ALREADY on slot 1, not one frame late');
-  // NON-VACUOUS: openMenu's own reset would have said 0 here, and does on
-  // every fight where the scene never armed.
+  // NON-VACUOUS, AND THE DISCRIMINATOR MOVED — read this before "fixing" it
+  // back. This control used to assert that with no scene the same dead Kris
+  // still opened the menu on SLOT 0, because the command phase was gated on
+  // `isUp`, which reads `chardead` alone: `partyHp[0] = 0` left Kris reading
+  // STANDING and only the hand-back could produce a 1. That gate is now
+  // `scr_charcan` (gml_GlobalScript_scr_charcan.gml:1-23), whose second test
+  // is `global.hp[global.char[arg0]] <= 0` — so a zero-HP slot is skipped by
+  // the ENGINE too, and the old 0 was a translation gap rather than a fact
+  // about the scene.
+  //
+  // What still discriminates is the HAND-BACK ITSELF: without the scene there
+  // is no hand-back receipt at all, so the frame assertion above ("the menu
+  // opens on the hand-back frame, ALREADY on slot 1") has nothing to match
+  // against here. That is the thing the scene adds, and it is asserted in both
+  // directions — the receipt exists in the scene run and does not exist here.
   const ctl = build({ version: 'C' });
   ctl.partyHp[0] = 0;
   run(ctl, 200);
-  eq(ctl.menu.charturn, 0,
-    'control: with no scene, the same dead Kris still opens the menu on slot 0');
+  eq(ctl.menu.charturn, 1,
+    'control: with no scene, scr_charcan alone already skips a zero-HP Kris');
+  eq(handbackOf(ctl).charturn, undefined,
+    'control: and it did so with NO hand-back receipt — the scene never armed');
+  ok(handbackOf(st).frame !== undefined,
+    'the scene run, by contrast, really did record a hand-back frame');
 }
 {
   // ...and with both down it falls through to slot 2 unconditionally — no

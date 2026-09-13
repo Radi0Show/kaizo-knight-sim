@@ -55,6 +55,10 @@
 import { HERO_SPRITES } from '../../sim/heroes.js';
 import { PARTY as SIM_PARTY } from '../../sim/damage.js';
 import { statsOf } from '../../sim/equipment.js';
+// The mod's item table and its freeze-gated heal scripts, published onto
+// `state.kaizo` at the bottom of installRoster. kaizo/party/items.js imports
+// freeze.js, which imports neither this file nor itself — no cycle.
+import { installKaizoHeals } from './items.js';
 import {
   NOELLE_CHAR_ID, noelleSpec, kaizoActsForRoster, KRIS_FELL_SPRITE,
   KRIS_FROZEN_SPRITE,
@@ -232,10 +236,15 @@ export function characterSpec(charId, opts = {}) {
   //     with (obj_herokris)   { defeatsprite = spr_kris_fell; }
   //     with (obj_heronoelle) { defeatsprite = spr_noelleb_swooned; }
   //
-  // (obj_knight_enemy Step_0:85-92, inside `if (k_sideb)`; obj_heroparent's
-  // own Step does Kris's for encounterno 115 generally.) So the animator must
-  // see it in `spec.defeat` — carrying it only in `sprites.swoon` would leave
-  // the hero state machine drawing the pre-mod pose.
+  // obj_knight_enemy Step_0:85-92, and **OUTSIDE** the `if (k_sideb)` that
+  // opens at :65 — that block holds Susie's seventeen-line repaint and
+  // CLOSES AT :84, one line above these two `with`es. Both routes. (This
+  // comment used to say "inside", and noelle.js gated her sprite on `sideb`
+  // because of it; ledger G-4, corrected against the dump 2026-09-12.
+  // obj_heroparent's own Step does Kris's for encounterno 115 generally, so
+  // his is set twice over and the two agree.) The animator must see it in
+  // `spec.defeat` — carrying it only in `sprites.swoon` would leave the hero
+  // state machine drawing the pre-mod pose.
   c.spec.defeat = c.swoon;
   return c;
 }
@@ -589,6 +598,27 @@ export function installRoster(state, {
     state.knight.damagecounter = state.knight.damagecounter ?? 0;
     state.knight.aoedamage = false;
   }
+
+  // ── THE ITEM LAYER GOES LIVE HERE ─────────────────────────────────────
+  //
+  // The mod rewrote two `scr_itemuse` cases and calls freeze-gated heal
+  // scripts (`scr_healitemspell` / `scr_healallitemspell`) where the engine
+  // calls its own. Both are seams on `state.kaizo` that `sim/items.js` reads
+  // and nothing in `sim/` ever writes, so they have to be PUBLISHED, and
+  // this is the one function every roster version passes through.
+  //
+  // It sits at the bottom, after `state.kaizo` is fully built, because the
+  // hooks close over the roster through `state` and freeze.js's
+  // `ensureFreezeState` sizes its arrays off `state.kaizo.roster`.
+  //
+  // SCOPE, STATED HONESTLY: `installRoster` is called from
+  // `buildKaizoScene`'s `if (v.party)` block, and V-D is the only registered
+  // version with a `party` — so the mod's item numbers reach the WEIRD ROUTE
+  // and not V-C, even though the mod changes them on both routes. Closing
+  // that needs an install point in `kaizo/scenes/kaizo-fight.js` for the
+  // knight versions without a roster; it is not something this file can do
+  // from here, and it is recorded rather than half-done.
+  installKaizoHeals(state);
   return state;
 }
 
@@ -624,6 +654,75 @@ export function setFreeze(state, slot, value) {
 /** `obj_knight_enemy.k_freeze[global.char[myself]] == 1` — the Draw's gate. */
 export function isFrozen(state, slot) {
   return !!state.kaizo?.freeze?.[slot];
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// WHAT THE GAME OVER PUTS BACK — ledger G-18's fourth piece
+// ───────────────────────────────────────────────────────────────────────────
+
+/**
+ * `knight_mode_con` 53 (retry) and 55 (move on), and what each arm restores.
+ *
+ * ── THE TWO ARMS, VANILLA AND MOD SIDE BY SIDE ────────────────────────────
+ *
+ *     con 53, RETRY                      | con 55, MOVE ON
+ *     tempflag[90] = 4, white fade,      | tempflag[90] = 1, plain fade,
+ *     back into the Knight's room        | flag 1047 = 2, on with the chapter
+ *     ---------------------------------- + ----------------------------------
+ *  V  if (!scr_havechar(2)) scr_getchar(2);  if (!scr_havechar(2)) scr_getchar(2);
+ *  A  if (!scr_havechar(3)) scr_getchar(3);  if (!scr_havechar(3)) scr_getchar(3);
+ *  N  for (i = 0; i < 4; i++)                hp[0] = 1; hp[1] = 1;
+ *  I      hp[i] = maxhp[i];                  hp[2] = 1; hp[3] = 1;
+ *     ---------------------------------- + ----------------------------------
+ *  M  (both force-adds DELETED)              (both force-adds DELETED)
+ *  O  for (i = 0; i <= 4; i++)               hp[0] = 1; hp[1] = 1;
+ *  D      hp[i] = maxhp[i];                  hp[2] = 1; hp[3] = 1; hp[4] = 1;
+ *
+ * mod `gml_Object_DEVICE_FAILURE_Step_0.gml:443-462, 475-486`; vanilla
+ * `:411-462, 443-486`.
+ *
+ * ── WHY THE FORCE-ADDS ARE THE PART THAT MATTERS ──────────────────────────
+ *
+ * `scr_getchar(2)` and `scr_getchar(3)` PUT SUSIE AND RALSEI IN YOUR PARTY.
+ * Vanilla does it on both arms because the Knight fight is a three-person
+ * story beat and the game is making sure you leave it with a party. On the
+ * Weird Route the party is Kris and Noelle — so vanilla's restore would hand
+ * a Weird Route player two characters the route does not have, every time
+ * they died. The mod deletes both tests from both arms.
+ *
+ * The recreation has never re-added anyone at a game over, so it is right
+ * today by omission — the same shape as G-21's escape hatch, and the same
+ * risk. `getchar` is returned as a LIST the driver walks so that the deletion
+ * is a value a check can hold and a future "restore the party on retry"
+ * cannot quietly reintroduce. `route: 'vanilla'` returns the pair the loop
+ * would add, which is what keeps that loop from being vacuous under test.
+ *
+ * ── THE HP RESTORES ARE NOT RETURNED, AND THAT IS DELIBERATE ──────────────
+ *
+ * Neither arm's HP writes have anywhere to land here, so returning them would
+ * be this repo's signature defect on purpose — a correct value written where
+ * nothing reads it:
+ *
+ *   * `con 53`'s full heal is what the retry already does. A retry in this
+ *     tool is `reset()`, which rebuilds the fight through `installRoster`,
+ *     and a rebuilt party is at `maxhp` by construction. The mod's widening
+ *     from `i < 4` to `i <= 4` (Noelle, char id 4) therefore changes nothing
+ *     that can be observed: she is healed either way.
+ *   * `con 55`'s `hp = 1` is the state you carry INTO THE REST OF CHAPTER 3.
+ *     There is no rest of the chapter here — moving on goes to the mode menu
+ *     — so a 1-HP party would be overwritten by the next `reset()` before it
+ *     could ever be seen. Recorded in the lane report, not modelled.
+ *
+ * @param {number} con  53 or 55.
+ * @param {{route?: 'kaizo'|'vanilla'}} opts
+ * @returns {{arm: 'retry'|'moveOn', getchar: number[]}}
+ */
+export function knightGameOverRestore(con, { route = 'kaizo' } = {}) {
+  return {
+    arm: con === 55 ? 'moveOn' : 'retry',
+    // BOTH arms, both routes. Vanilla's pair is the same on 53 and 55.
+    getchar: route === 'vanilla' ? [CHAR_SUSIE, CHAR_RALSEI] : [],
+  };
 }
 
 export { kaizoActsForRoster };

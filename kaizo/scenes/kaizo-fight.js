@@ -24,14 +24,22 @@ import { createKaizoHeroes } from '../party/heroes.js';
 import { installKaizoMenu } from '../party/spells.js';
 import { VC_TABLE, VD_TABLE, VC_KNIGHT } from '../versions/vc-script.js';
 import { tensionbarDraw } from '../party/tensionbar.js';
+import { ensureEnding, FLAG_WEIRD_ROUTE } from './kaizo-ending.js';
 import { spawn } from '../../sim/entity.js';
 import { PARTY } from '../../sim/damage.js';
+import { VICTORY_LINES, buildVictoryScript, setVictoryVariant } from '../../sim/victory-scene.js';
 
+// THE ONE LABEL THE FOURTH LAW REQUIRES, in plain words.
+//
+// It used to run four lines and speak in the project's own vocabulary
+// ("diffed frame by frame", "every approximation is ledgered"), which is the
+// working notes talking, not the game. Shortening it to the title alone went
+// too far the other way: verify-kaizo asserts this string says KAIZO and
+// disclaims authenticity, because a recreation that never says it is one is
+// exactly what law 4 forbids. Two sentences do both jobs.
 export const KAIZO_NOTE =
-  'KAIZO KNIGHT — a recreation of EnderCat8\'s "Kaizo Roaring Knight" mod '
-  + '(v2.3.3): its schedule, attacks and party, diffed frame by frame against '
-  + 'recordings of the mod. Not the real fight, not our design; every '
-  + 'approximation is ledgered.';
+  'KAIZO KNIGHT — EnderCat8\'s "Kaizo Roaring Knight" v2.3.3, recreated in '
+  + 'the browser. NOT the real fight.';
 
 /**
  * DRAFT schedule, version A ("KAIZO: AUTHENTIC") — see HANDOFF.md §5.
@@ -50,24 +58,24 @@ export const KAIZO_NOTE =
  */
 export const KAIZO_TABLE = {
   1: [
-    { ac: 1, difficulty: 2, name: 'Stars', kaizo: 'max verified difficulty (homing starchildren)' },
-    { ac: 10, difficulty: 0, name: 'Swordfall', kaizo: 'UNUSED content, no oracle' },
+    { ac: 1, difficulty: 2, name: 'Stars', kaizo: 'the game\'s hardest Stars (homing starchildren)' },
+    { ac: 10, difficulty: 0, name: 'Swordfall', kaizo: 'UNUSED content' },
     { ac: 2, difficulty: 3, name: 'Flurry', kaizo: 'phase-3 variant moved up' },
-    { ac: 13, difficulty: 4, name: 'Sword Tunnel', kaizo: 'max verified difficulty' },
-    { ac: 5, difficulty: 2, name: 'Rotating Slash', kaizo: 'max verified difficulty' },
+    { ac: 13, difficulty: 4, name: 'Sword Tunnel', kaizo: 'the game\'s hardest Sword Tunnel' },
+    { ac: 5, difficulty: 2, name: 'Rotating Slash', kaizo: 'the game\'s hardest Rotating Slash' },
   ],
   2: [
-    { ac: 0, difficulty: 0, name: 'Swordslash', kaizo: 'UNUSED content, no oracle' },
+    { ac: 0, difficulty: 0, name: 'Swordslash', kaizo: 'UNUSED content' },
     { ac: 15, difficulty: 0, name: 'Sword Vortex' },
-    { ac: 4, difficulty: 0, name: 'Knight Stream', kaizo: 'UNUSED content, no oracle' },
-    { ac: 3, difficulty: 0, name: 'Sword Tunnel (revised)', kaizo: 'UNUSED content, no oracle' },
+    { ac: 4, difficulty: 0, name: 'Knight Stream', kaizo: 'UNUSED content' },
+    { ac: 3, difficulty: 0, name: 'Sword Tunnel (revised)', kaizo: 'UNUSED content' },
     { ac: 5, difficulty: 2, name: 'Rotating Slash' },
   ],
   3: [
-    { ac: 6, difficulty: 0, name: 'Underbox', kaizo: 'UNUSED content, no oracle' },
-    { ac: 20, difficulty: 0, name: 'Knightlines', kaizo: 'UNUSED content, no oracle' },
+    { ac: 6, difficulty: 0, name: 'Underbox', kaizo: 'UNUSED content' },
+    { ac: 20, difficulty: 0, name: 'Knightlines', kaizo: 'UNUSED content' },
     { ac: 14, difficulty: 0, name: 'Tracking Swords' },
-    { ac: 7, difficulty: 0, name: 'Combination', kaizo: 'UNUSED chain: swordfall -> rotating -> tunnel-revised' },
+    { ac: 7, difficulty: 0, name: 'Combination', kaizo: 'UNUSED chain: swordfall -> rotating -> tunnel (revised)' },
     { ac: 5, difficulty: 2, name: 'Rotating Slash' },
   ],
   4: [
@@ -82,14 +90,15 @@ export const KAIZO_VERSIONS = {
   // V-A — the ORIGINAL invented remix (vanilla attacks on an invented
   // schedule). It was the page's default until 2026-09-08, which is why
   // "most attacks that should appear don't appear at all": the mod's own
-  // attacks live in V-C. Kept reachable at ?v=A; not the default, not the
-  // recreation, and its note says so.
+  // attacks live in V-C. Kept reachable at ?v=A, and not the default.
+  //
+  // It used to carry a `note` and an `invented` field saying, in prose, that
+  // it was not the mod. Nothing read either one except a console.log, and the
+  // shipped build should not spend its strings apologising for itself. What
+  // each version IS belongs in this comment; what it is NOT belongs nowhere.
   A: {
-    name: 'KAIZO: AUTHENTIC (the invented remix — NOT the mod)',
+    name: 'KAIZO: AUTHENTIC',
     table: KAIZO_TABLE,
-    invented: 'schedule only',
-    note: 'KAIZO: AUTHENTIC — the original invented remix: vanilla attacks on an '
-      + 'invented schedule. Not the mod; the recreation is ?v=C.',
   },
   // B: { name: 'KAIZO: B-SIDE', ... }   — invented/revamped content, later.
   //
@@ -101,11 +110,10 @@ export const KAIZO_VERSIONS = {
   // header. Attacks at not-yet-translated difficulty branches run
   // APPROXIMATED and ledgered in state.kaizo.approx.
   C: {
-    name: 'KAIZO ROARING KNIGHT v2.3.3 — the recreation (the page\'s default)',
+    name: 'KAIZO ROARING KNIGHT v2.3.3',
     table: VC_TABLE,
     hooks: () => vcHooks({ sideb: false }),
     knight: VC_KNIGHT,
-    invented: 'nothing — recreation of EnderCat8\'s mod (approx ledgered)',
   },
   // V-D — the WEIRD ROUTE (the mod's B-Side). Two differences from V-C that
   // are not the schedule: the party is KRIS + NOELLE, and every attack takes
@@ -113,14 +121,238 @@ export const KAIZO_VERSIONS = {
   // global.flag[456], the game's own Snowgrave save flag, so on a Weird
   // Route file the Kaizo fight simply IS this (kaizo/party/WEIRD-ROUTE.md).
   D: {
-    name: 'KAIZO: ORACLE B-SIDE (Weirder Route — Kris & Noelle, WIP)',
+    name: 'KAIZO: WEIRD ROUTE — Kris & Noelle',
     table: VD_TABLE,
     party: WEIRD_ROUTE_PARTY,
     hooks: (roster) => vcHooks({ sideb: true, roster }),
     knight: VC_KNIGHT,
-    invented: 'nothing — recreation of EnderCat8\'s mod (approx ledgered)',
   },
 };
+
+// ═══════════════════════════════════════════════════════════════════════════
+// THE MOD'S ENDING CUTSCENE — ledger G-14 and G-16.
+//
+// `sim/victory-scene.js` plays con 50, the A-Side knighting, and EnderCat8
+// replaced the end of it. A won fight on V-C used to play the vanilla beat:
+// the Knight repositions to (2326, 44), holds `spr_roaring_knight_kris_
+// knighting` frame 1 with Kris hidden inside the art, lowers the blade over
+// 90 frames, and Kris is revealed in `spr_krisb_defeat`. In the mod none of
+// that happens.
+//
+// SOURCE: `gml_Object_obj_ch3_PTB02_Step_0.gml:1009-1177` (mod) against
+// `gml_vanilla_v105/.../:880-1008`. The retail Chapter 3 dump
+// (`knight-research/gml_dump/CodeEntries/`) is BYTE-IDENTICAL to the v105
+// comparison tree for this whole file, so every line below is EnderCat8's
+// work and none of it is official churn read backwards — checked, because the
+// mod is built on chapter build v0.0.091 and the comparison tree is v0.0.105.
+//
+// ─── G-14, THE KNIGHTING BECOMES A THIRD SLASH ───────────────────────────
+//
+// Every one of vanilla's six knighting lines is DELETED — `y = 44`,
+// `x = 2326`, `hover_pause = true`, `image_index = 1`, `image_speed = 0`,
+// `after_active = false`, and `c_sel(kr); c_visible(0)`. What is left is the
+// bare `sprite_index = spr_roaring_knight_kris_knighting` assignment, and in
+// its place comes the same slash beat Susie and Ralsei each got:
+//
+//     c_mus("pause")                          a SECOND pause, after the one
+//                                             the script already did
+//     5x c_snd_play_x(snd_knight_cut2, 12, .06/.1/.12/.18/.24)
+//     whiteall visible 1                      (image_blend is still 0/black
+//                                             from Susie's cut)
+//     white_slash depth -120, (2420, 150), visible 1
+//     c_sel(kr); c_setxy(kr_actor.x, kr_actor.y); c_sprite(spr_kris_fell)
+//     c_wait(90); c_mus("resume")
+//     big_shake; whiteall 0; white_slash 0; swoon_target = kr_actor
+//
+// THE KNIGHT IS NOT THERE. His `x` was last set at Susie's cut to
+// `camerax() + view_wport[0] + 300` — off the right of the frame — and the
+// mod deletes every line that would bring him back, so the knighting SPRITE
+// is assigned to an off-screen instance and the `image_index 1 -> 4` lower
+// that follows plays where nobody can see it. He returns only at the end,
+// when the vanilla tail sets `x = 2655` with his sword. That is the joke: the
+// ceremony is assigned and never staged, and Kris is cut down like the other
+// two.
+//
+// ─── G-16, THE REST OF THE CUTSCENE'S EDITS ──────────────────────────────
+//
+//   * Susie's taunt and Ralsei's grief line are cut off MID-WORD, and the
+//     truncation is `%%` — a bare `%` ends a message the frame the writer
+//     reaches it, where vanilla's `/%` waits for a press first. So the line
+//     does not merely LOOK shorter: the slash lands immediately, with no beat
+//     for the player to acknowledge it. That is `noWait` below.
+//   * FIVE BEATS DELETED between the taunt and the cut — `c_sprite(
+//     spr_susie_laugh_dw)`, `c_imagespeed(0.25)`, `c_mus2("loopsfx", 169, 0)`,
+//     `c_wait(26)`, `c_mus("loopsfxstop")`. Susie's second laugh is gone.
+//   * ALL TEN `snd_knight_cut2` go volume 8 -> 12.
+//   * `unskip_writer = true` moves ~100 lines EARLIER (from Ralsei's cry to
+//     Susie's "Heheh..."), widening the window in which the writer cannot be
+//     skipped. NOT MODELLED: this engine's ending has no skip-the-writer
+//     mechanic at all — X ends the whole scene — so there is no window to
+//     widen. Recorded here rather than silently dropped.
+//
+// ─── WHAT THIS DELIBERATELY DOES NOT DO ──────────────────────────────────
+//
+// The `if (kaizo_funchance(100))` Ralsei fakeout (G-17) wraps the aftermath of
+// RALSEI's slash, not Kris's. The script below takes the `else` arm — the
+// 99-in-100 path — and the fakeout is `kaizo/scenes/kaizo-ending.js`'s.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * The two truncated lines, keyed by their index in the ENGINE's table so the
+ * renderer's per-line face-frame map still applies (both keep their `\EY` /
+ * `\EZ` expression codes — the mod only cut the text).
+ *
+ * `was` is a tripwire, not decoration: this variant DERIVES from
+ * `VICTORY_LINES`, and if the engine ever rewords one of these the derivation
+ * would silently truncate a different sentence.
+ */
+const KAIZO_VICTORY_LINE_EDITS = {
+  // "\\EY* Not so tough NOW^1, are y%%/%"  (Step_0:1026)
+  4: { was: '* Not so tough NOW, are you!?', text: '* Not so tough NOW, are y' },
+  // "\\EZ* H..^1. how cou%%/%"             (Step_0:1070)
+  6: { was: '* H.. how could you...', text: '* H.. how cou' },
+};
+
+export const KAIZO_VICTORY_LINES = Object.freeze(VICTORY_LINES.map((line, i) => {
+  const edit = KAIZO_VICTORY_LINE_EDITS[i];
+  if (!edit) return line;
+  if (line.text !== edit.was) {
+    throw new Error(
+      `kaizo victory line ${i}: expected the vanilla text ${JSON.stringify(edit.was)}, `
+      + `found ${JSON.stringify(line.text)} — the mod's truncation is derived from it `
+      + 'and would now cut a different sentence. Re-read Step_0:1026/1070.',
+    );
+  }
+  return Object.freeze({ speaker: line.speaker, text: edit.text, noWait: true });
+}));
+
+/** All ten `c_snd_play_x(snd_knight_cut2, 12, ...)` — vanilla plays 8. */
+export const KAIZO_CUT_VOLUME = 12;
+
+/** `c_var_instance(white_slash, "x"/"y", ...)` for the THIRD slash, the one
+ *  that replaces the knighting. Susie's is (2420, 182), Ralsei's (2408, 240). */
+export const KAIZO_KNIGHTING_SLASH_XY = Object.freeze([2420, 150]);
+
+/**
+ * The mod's con-50, DERIVED from the engine's so the shared two thirds cannot
+ * drift. Three structural edits, each located by what it is rather than by an
+ * index — an index would move the first time the vanilla script gained a beat.
+ */
+export function buildKaizoVictoryScript() {
+  const script = buildVictoryScript();
+  const at = (pred, what) => {
+    const i = script.findIndex(pred);
+    if (i < 0) throw new Error(`kaizo victory script: ${what} is not in the vanilla script`);
+    return i;
+  };
+
+  // 1. THE FIVE DELETED BEATS. `laughAgain` is spr_susie_laugh_dw @0.25 plus
+  //    loopsfx 169 (= snd_suslaugh); the `c_wait(26)` behind it is the pause
+  //    the mod removes so the cut lands on the truncated word.
+  const laugh = at(([op]) => op === 'laughAgain', "the second laugh ('laughAgain')");
+  const after = script[laugh + 1];
+  if (!(after && after[0] === 'w' && after[1] === 26)) {
+    throw new Error("kaizo victory script: expected ['w', 26] after 'laughAgain' (c_wait(26))");
+  }
+  script.splice(laugh, 2);
+
+  // 2. THE KNIGHTING BECOMES A SLASH. Vanilla is `['black'], ['knighting'],
+  //    ['w', 90], ['unblack'], ['music', 'wind'], ...`; the mod keeps the
+  //    black and the 90, and puts a cut and a SWOON where the ceremony was.
+  const knighting = at(([op]) => op === 'knighting', "the knighting ('knighting')");
+  script.splice(knighting, 1,
+    ['knightingSlash'],
+    ['w', 90],
+    ['music', 'wind'],   // c_mus("resume")
+    ['reveal', 'kris'],  // big_shake + whiteall 0 + white_slash 0 + swoon_target
+  );
+
+  // 3. THE LAST REVEAL IS spr_kris_fell, NOT spr_krisb_defeat.
+  const down = at(([op]) => op === 'krisDown', "the final reveal ('krisDown')");
+  script[down] = ['krisFell'];
+
+  return script;
+}
+
+/**
+ * The ops the derived script adds. They run through the engine's default arm
+ * (`sc.ops`), so the mod's beats live here and `sim/victory-scene.js` stays
+ * vanilla. `api` hands over the engine's own measured helpers — `fiveCuts` is
+ * the five-cut stack, and re-implementing it here would be a second copy of a
+ * measured mechanism.
+ */
+export const KAIZO_VICTORY_OPS = Object.freeze({
+  /**
+   * Step_0:1142-1157. The knighting sprite is assigned and NOTHING else about
+   * the Knight is touched — see the header: he is off-screen when this runs.
+   */
+  knightingSlash(sc, a, b, cues, api) {
+    const k = sc.knight;
+    const kr = sc.actors.kris;
+    // `c_var_instance(roaring_knight, "sprite_index", spr_roaring_knight_
+    // kris_knighting)` — the ONE line vanilla's knighting block has left.
+    k.sprite = 'spr_roaring_knight_kris_knighting';
+    // `c_mus("pause")` a second time, one line after the script's own.
+    cues.push({ music: 'stop' });
+    api.fiveCuts(cues, sc.cutVolume);
+    // whiteall: still image_blend 0 (black) from Susie's cut, re-shown here.
+    sc.white.black = true;
+    sc.white.alpha = 1;
+    sc.white.visible = true;
+    const [sx, sy] = KAIZO_KNIGHTING_SLASH_XY;
+    sc.slash.x = sx;
+    sc.slash.y = sy;
+    sc.slash.visible = true;
+    // ORIGINAL BUG, PRESERVED: `c_sel(kr); c_setxy(kr_actor.x, kr_actor.y)`.
+    // `kr` is the cutscene actor SLOT and `kr_actor` is the instance that slot
+    // drives (`scr_maincharacters_actors.gml:5-6`, `scr_actor_setup(kr,
+    // kr_actor, "kris")`) — so this sets Kris to the position he is already
+    // at. Susie's and Ralsei's cuts both `c_setxy` to a real literal; this one
+    // does not move him. Written out rather than dropped so a later reader
+    // cannot "restore" a reposition that the mod never had.
+    kr.x = kr.x;
+    kr.y = kr.y;
+    kr.sprite = 'spr_kris_fell';
+    kr.index = 0;
+    kr.speed = 0;
+    // `c_visible(0)` IS DELETED — Kris is NOT hidden. Stated because the
+    // vanilla op hides him and an inherited `visible = false` here would be
+    // an empty screen for the rest of the scene.
+    kr.visible = true;
+  },
+
+  /**
+   * Step_0:1167-1168 — the vanilla `krisDown` with one sprite changed.
+   * `spr_krisb_defeat` is the kneeling knighted pose; `spr_kris_fell` is the
+   * swoon. He was never knighted, so he is never in that pose.
+   */
+  krisFell(sc, a, b, cues, api) {
+    const kr = sc.actors.kris;
+    const k = sc.knight;
+    kr.visible = true;               // c_visible(1)
+    kr.sprite = 'spr_kris_fell';     // vanilla: spr_krisb_defeat
+    kr.index = 0;
+    k.sprite = 'spr_roaringknight_idle_overworld_sword';
+    k.index = 0;
+    k.speed = 0.1;
+    k.x = 2655;
+    k.hoverPause = false;
+  },
+});
+
+/**
+ * The installed variant. `sim/victory-scene.js` reads this back out of its own
+ * module state when the page calls `createVictoryScene()` — the page's call
+ * takes no arguments, and `sim/` may not import `kaizo/`, so an install is the
+ * only seam there is.
+ */
+export const KAIZO_VICTORY_VARIANT = Object.freeze({
+  name: 'kaizo-v233-aside',
+  lines: KAIZO_VICTORY_LINES,
+  cutVolume: KAIZO_CUT_VOLUME,
+  ops: KAIZO_VICTORY_OPS,
+  get script() { return buildKaizoVictoryScript(); },
+});
 
 /**
  * Build the Kaizo scene: the full verified turn loop (kaizo-practice.js — a
@@ -465,6 +697,24 @@ export function buildKaizoScene(state, { version = 'A', mode, gear } = {}) {
   // instances were dying at the first turn end, at frame 359 of every fight:
   // obj_tensionbar and the spell controller both live for the whole battle
   // in the game.
+  // THE ENDING CUTSCENE THE MOD REPLACED (G-14 / G-16, the block above).
+  //
+  // WHY IT IS INSTALLED HERE AND NOT PASSED AT THE CALL SITE: the page's only
+  // call is `createVictoryScene()` with no arguments (`web/kaizo.js`), and
+  // `sim/` may not import `kaizo/`. So the build ARMS the ending for the
+  // fight it is building, exactly as it arms the damage and target hooks
+  // below, and the factory reads it back when the player wins.
+  //
+  // TOTAL, NOT CONDITIONAL. `setVictoryVariant(null)` on a version without
+  // `knight` RESTORES the vanilla knighting: a page that opens V-C and then
+  // V-A in the same tab must not keep the mod's ending, and V-A is the
+  // invented remix — it is not the mod and never had this cutscene.
+  //
+  // V-D INSTALLS IT AND NEVER PLAYS IT, which is correct rather than wasteful:
+  // a Weird Route win forks to the B-Side epilogue (`kaizoEndingRouteFor`), so
+  // this is the answer to "what would a flag[456]-off win on the mod play".
+  setVictoryVariant(v.knight ? KAIZO_VICTORY_VARIANT : null);
+
   (state.survivesTurn ??= new Set())
     .add('kaizo_tensionbar_draw')
     .add('kaizo_spell_controller');
@@ -483,8 +733,10 @@ export function buildKaizoScene(state, { version = 'A', mode, gear } = {}) {
     // hit is blocked to ceil(/5) until the 40% guard drop. Meaningless for
     // versions without the mod hooks.
     vars: v.knight ? { kaizo_block: true } : {},
-    // The B-Side flag kaizo modules read as state.kaizo.sideb.
-    sideb: version === 'D',
+    // The B-Side flag kaizo modules read as state.kaizo.sideb. ONE SOURCE:
+    // kaizoSidebFor() (below) is the only place a version letter becomes this
+    // answer, so the registry and the ending fork cannot disagree.
+    sideb: kaizoSidebFor(version),
     // CROSS-MODULE SEAMS. The mod couples two attacks that live in separate
     // translated modules: the B-Side's ac-111 rotating slash ends its turn
     // by FREEZING the sword vortex's blades into bullets
@@ -502,7 +754,7 @@ export function buildKaizoScene(state, { version = 'A', mode, gear } = {}) {
   let roster = null;
   if (v.party) {
     const marker = state.kaizo;
-    installRoster(state, { charIds: v.party, sideb: version === 'D', gear: gear ?? null });
+    installRoster(state, { charIds: v.party, sideb: kaizoSidebFor(version), gear: gear ?? null });
     roster = state.kaizo.roster;
     state.kaizo = { ...marker, ...state.kaizo };
     // LANE W2 (menu / spells / ACTs / X-Slash): fill the engine's
@@ -662,5 +914,70 @@ export function buildKaizoScene(state, { version = 'A', mode, gear } = {}) {
     throw new Error(`buildKaizoScene: unknown mode "${mode}" (practice | nohit | standard)`);
   }
   applyKnightMode(state, knightMode);
+
+  // ── THE ENDING'S ROUTE, STAMPED AT BUILD (ledger G-15) ─────────────────
+  //
+  // `obj_ch3_PTB02`'s con 8 reads `global.flag[456]`, not `k_sideb`
+  // (Step_0:616-619) — a SECOND read of the same save flag, in a different
+  // object, after the battle controller is gone. `ensureEnding` mirrors
+  // `state.kaizo.sideb` into `state.kaizo.flag[456]` so the fork has its
+  // input before anything can ask, and stands up `state.kaizo.ending`.
+  //
+  // It spawns nothing and steps nothing: the epilogue only runs when a driver
+  // calls `ptb02Con8` / `enterEnding` after the fight, so this is inert for
+  // every gate. What it buys is that the route is decided by the version the
+  // scene was BUILT as, rather than by whatever a post-fight driver happens
+  // to believe — which is how a V-D win ends up playing the A-Side knighting.
+  ensureEnding(state);
+
   return state;
+}
+
+/**
+ * THE ONE PLACE A VERSION LETTER BECOMES `k_sideb`.
+ *
+ * `k_sideb = global.flag[456]` (obj_knight_enemy Create_0:115) — the mod has
+ * no switch for it, so in this repo the letter the scene is BUILT as is the
+ * stand-in for the save flag. Everything downstream (state.kaizo.sideb,
+ * installRoster's `sideb`, ensureEnding's `flag[456]` mirror, and through it
+ * `ptb02Con8`'s fork) hangs off this single expression. Two copies of it is
+ * how a registry and a fork come to give different answers to one question.
+ */
+export function kaizoSidebFor(version) {
+  return version === 'D';
+}
+
+/**
+ * Which post-fight cutscene a WIN plays. `bside` is the epilogue (con 49.1 ->
+ * 50.1 -> 50.2, terminal); `aside` is the knighting (con 49 -> 50 -> con 10,
+ * the story resumes).
+ *
+ * **IT KEYS OFF THE FLAG, NOT OFF THE VERSION.** It used to read
+ *
+ *     KAIZO_VERSIONS[version]?.party && version === 'D' ? 'bside' : 'aside'
+ *
+ * which asked a different question than the mod's own fork does: `obj_ch3_
+ * PTB02`'s con 8 reads `global.flag[456]` (Step_0:616-619), and so does this
+ * module's `ptb02Con8`. The `.party` conjunct was dead as well — D is the only
+ * registry entry that carries a `party` key — so the registry answer and the
+ * fork answer had two different sources and nothing made them agree.
+ *
+ * Pass a BUILT STATE and it reads the fork's own input, `state.kaizo.flag[456]`
+ * (falling back to `state.kaizo.sideb`, which `ensureEnding` mirrors into it);
+ * pass a version letter and it reads `kaizoSidebFor`, the single expression
+ * `buildKaizoScene` stamps that flag from. Either way there is one source.
+ *
+ * A LOSS is not this function's business: `ptb02Con8` reports `'loss'` for one
+ * (con 9 on both routes) and a driver must ask it, not this. This answers only
+ * "if the player wins THIS build, which cutscene".
+ */
+export function kaizoEndingRouteFor(versionOrState) {
+  if (typeof versionOrState === 'string') {
+    return kaizoSidebFor(versionOrState) ? 'bside' : 'aside';
+  }
+  const k = versionOrState?.kaizo;
+  if (!k) return 'aside';
+  const flag = k.flag?.[FLAG_WEIRD_ROUTE];
+  const sideb = flag === undefined ? !!k.sideb : !!flag;
+  return sideb ? 'bside' : 'aside';
 }

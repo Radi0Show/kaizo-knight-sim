@@ -199,7 +199,16 @@ assertEq(base.spell, 'spr_noelleb_spell', 'spell sprite');
 
 assertEq(noelleSwoonSprite(true), 'spr_noelleb_swooned',
   'B-Side swoon is the MOD-ONLY spr_noelleb_swooned');
-assertEq(noelleSwoonSprite(false), 'spr_noelleb_defeat', 'off the B-Side she keeps defeat');
+// ...AND SO IS THE A-SIDE'S. Ledger G-4, corrected 2026-09-12: the
+// `if (k_sideb)` at obj_knight_enemy Step_0:65 CLOSES AT :84 and holds only
+// Susie's repaint; `with (obj_heronoelle) { defeatsprite =
+// spr_noelleb_swooned; }` is at :89, outside it, on both routes. This line
+// asserted `spr_noelleb_defeat` off the B-Side and was enforcing the bug —
+// the recreation drew the vanilla pose on a downed A-Side Noelle, which the
+// mod's own party sign makes reachable. check-gameover-sideb walks the
+// dump's braces and proves the nesting rather than restating it.
+assertEq(noelleSwoonSprite(false), 'spr_noelleb_swooned',
+  'and so does an A-SIDE one — the mod gates this on NOTHING');
 assertEq(noelle.sprites.swoon, 'spr_noelleb_swooned', 'the roster entry carries it');
 assertEq(noelle.sprites.frozen, 'spr_noelleb_hurt_sideb',
   'her freeze statue is her HURT pose — only Kris is special-cased');

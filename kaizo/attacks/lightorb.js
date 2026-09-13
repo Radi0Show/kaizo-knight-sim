@@ -158,8 +158,9 @@
 //
 // The power-up orb's roll is not in its Create at all: it is in its own
 // DRAW_0, `random_range(70, 90)` behind an `init == 0` latch — one u32 per
-// orb, for its lifetime. That one is modelled as a real instance rather than
-// burned inline; see "WHAT IS NOT MODELLED" below for why it has to be.
+// orb, for its lifetime. All four are real instances now; that one always had
+// to be, because a roll one frame later at a different depth cannot be burned
+// at this call site at all — see "WHAT IS NOT MODELLED" below.
 //
 // Per-frame budget, in stream order (a `[+n]` line is a Create event):
 //
@@ -190,31 +191,35 @@
 //
 // ── WHAT IS NOT MODELLED, AND WHY ─────────────────────────────────────────
 //
-//   * THE ART. `obj_knight_lightorb`'s sprite is `spr_sneo_bigcircle`
-//     (objects_kaizo.csv) and its particles are obj_knight_spark
-//     (spr_knight_spark), obj_knight_triangle (spr_knight_triangle),
-//     obj_knight_ring (spr_roaringknight_sword_break_vfx2) and
-//     obj_rouxls_power_up_orb. NONE of those five sprites is in this repo's
-//     extracted pack — they are in both data files' metadata but were never
-//     pulled as PNGs, so `assets/sprites/manifest.json` and the kaizo overlay
-//     both lack them. Their names are therefore NOT written as quoted string
-//     literals anywhere under kaizo/attacks — check-sprites.mjs scans this
-//     directory for `'spr_*'` and a name it cannot resolve is a hard failure,
-//     which is the right behaviour and the reason this is stated instead of
-//     smuggled. The renderer entry (kaizo/render/draw/lightorb.js) draws the
-//     charge disc and the darkening — both are draw_circle_color /
-//     draw_sprite_ext of a tile, i.e. primitives — and blits the orb body
-//     only if the sprite ever lands in the map, so this lights up by itself
-//     once someone re-runs the extraction. LABELLED as a gap where the
-//     player sees it, per repo law 4.
-//   * THREE OF THE FOUR PARTICLE INSTANCES. obj_knight_spark,
-//     obj_knight_triangle and obj_knight_ring are pure decoration with no
-//     mask, no Other_15 and no reader, and — the part that lets them be
-//     skipped — every roll they ever make is in their CREATE event, which
-//     runs synchronously inside the `instance_create` that the orb's Draw is
-//     already standing at. Burning those draws inline therefore puts them at
-//     exactly the stream position the game puts them at (`sparkCreateDraws`
-//     and `triangleCreateDraws` below), and no instance is needed.
+//   * NOTHING OF THE ART, ANY MORE — this bullet used to head the list and it
+//     is CLOSED (2026-09-12). `obj_knight_lightorb`'s sprite is
+//     `spr_sneo_bigcircle` (objects_kaizo.csv) and its particles' are
+//     spr_knight_spark (obj_knight_spark), spr_knight_triangle
+//     (obj_knight_triangle) and spr_roaringknight_sword_break_vfx2
+//     (obj_knight_ring). All FOUR are now extracted and in the kaizo overlay
+//     (pack-kaizo-sprites.mjs's WANT list) as `source: 'vanilla'` — they are
+//     byte-identical in the mod's data file and the player's own, measured
+//     frame by frame, so they are a vendoring gap and not EnderCat8's art.
+//     The names are therefore written as ordinary quoted literals here and
+//     resolve under check-sprites.mjs; the drawer
+//     (kaizo/render/draw/lightorb.js) BLITS the orb body where it used to
+//     paint a ring in canvas primitives, and the three particles draw
+//     themselves through render/canvas.js's generic tail.
+//     THE FOURTH PARTICLE, obj_rouxls_power_up_orb, has an EMPTY sprite
+//     column in objects_kaizo.csv — it draws from `draw_circle` primitives in
+//     its own Draw, which this repo does not translate — so there is no fifth
+//     name to pack and it is still invisible. That is the only art gap left in
+//     this attack, and it is a DRAWER gap, not an extraction one.
+//   * THE THREE PARTICLES' MOTION IS MODELLED; THEIR CREATES ARE STILL THE
+//     STREAM. obj_knight_spark, obj_knight_triangle and obj_knight_ring are
+//     pure decoration with no mask, no Other_15 and no reader, and every roll
+//     they ever make is in their CREATE event, which runs synchronously inside
+//     the `instance_create` that the orb's Draw is already standing at. They
+//     were inline burns while their art was unpacked (nothing could have drawn
+//     them); now that it is packed they are real types whose `create()` makes
+//     those same rolls at the same call site, so the stream is identical and
+//     the pictures are real. Their Steps (three, four and five lines) are
+//     translated with them.
 //   * obj_rouxls_power_up_orb IS SPAWNED, and it is the exception that proves
 //     the rule above. Its Create rolls nothing; its ONE roll
 //     (`random_range(70, 90)`, Draw_0:22) is in its own DRAW event behind an
@@ -243,6 +248,7 @@
 import { spawn, destroy } from '../../sim/entity.js';
 import {
   lerp, mergeColor, pointDirection, scrEaseIn, lengthdirX, lengthdirY, WHITE,
+  gmlEq, gmlLt,
 } from '../../sim/gml.js';
 import {
   gmlRandom, gmlIrandom, gmlChoose, gmlRandomRange,
@@ -331,50 +337,172 @@ function knightOf(state) {
   return state.entities.find((e) => e.alive && e.type.name === 'obj_knight_enemy') ?? null;
 }
 
-// ── THE PARTICLE CREATE EVENTS, as draws ────────────────────────────────────
+// ── THE THREE PARTICLE OBJECTS ──────────────────────────────────────────────
 //
-// `instance_create` runs the created object's Create event inside the call, so
-// these belong at the call site, in this order, AFTER whichever of the call's
-// own arguments rolled. Byte-identical to v105 in the dump — both files were
-// diffed; the mod changes neither object.
+// `instance_create` runs the created object's Create event INSIDE the call, so
+// every roll a Create makes lands at the call site, in this order, after
+// whichever of the call's own arguments rolled. All three objects are
+// byte-identical to v105 in the dump — both files were diffed; the mod changes
+// none of them.
+//
+// THEY WERE INLINE BURNS UNTIL 2026-09-12, and the reason was honest: their
+// rolls are all in their Create, which runs synchronously inside the
+// `instance_create` the orb's Draw is already standing at, so burning the
+// draws at the call site put them at exactly the stream position the game puts
+// them at and no instance was needed. What that could not do is PAINT — and
+// the reason it did not need to was that none of the three sprites was in any
+// pack this repo can reach, so an instance would have drawn nothing anyway.
+//
+// All three are packed now (pack-kaizo-sprites.mjs's WANT list, vanilla art,
+// byte-identical in both data files), so they are real types again: `spawn()`
+// runs `create()` synchronously, in the same place the burn stood, so the u32
+// budget check-lightorb L8 pins is UNCHANGED by the conversion — and the
+// Weird Route's orb finally throws the sparks, triangles and rings the mod
+// throws. None of them carries a mask, an Other_15 or a reader, so nothing
+// else in the sim can see them: they are drawn by render/canvas.js's generic
+// tail off `sprite_index`, which is what a GML object with no Draw event does.
 
 /**
+ * `obj_knight_spark` — the orb's constant shower.
+ *
  * `gml_Object_obj_knight_spark_Create_0.gml`, 6 u32:
  *
+ *     image_speed  = 0;
  *     image_index  = irandom(3);       // 2
  *     image_blend  = choose(c_white);  // 1 — one argument, still a draw
  *     image_xscale = choose(-1, 1);    // 1
  *     image_yscale = choose(-1, 1);    // 1
  *     image_angle  = random(360);      // 1
+ *     life = 2;
  *
- * The values are discarded: the spark has no mask, no reader and a two-frame
- * life (`life = 2`, its Step only counts down). The DRAWS are the whole point
- * — CLAUDE.md, "A visual's draws are still draws".
+ * and `gml_Object_obj_knight_spark_Step_0.gml` is `life--; if (life == 0)
+ * instance_destroy();` — the whole object. `image_speed = 0` with a random
+ * `image_index` is why the sprite's four frames read as four different sparks
+ * rather than an animation.
  */
-function sparkCreateDraws(rng) {
-  if (!rng) return;
-  gmlIrandom(rng, 3);
-  gmlChoose(rng, [WHITE]);
-  gmlChoose(rng, [-1, 1]);
-  gmlChoose(rng, [-1, 1]);
-  gmlRandom(rng, 360);
-}
+export const knightSpark = {
+  name: 'obj_knight_spark',
+
+  create(e, state) {
+    const rng = state.gmlRng;
+    e.image_speed = 0;
+    e.image_index = rng ? gmlIrandom(rng, 3) : 0;
+    e.image_blend = rng ? gmlChoose(rng, [WHITE]) : WHITE;
+    e.image_xscale = rng ? gmlChoose(rng, [-1, 1]) : 1;
+    e.image_yscale = rng ? gmlChoose(rng, [-1, 1]) : 1;
+    e.image_angle = rng ? gmlRandom(rng, 360) : 0;
+    e.life = 2;
+    // objects_kaizo.csv: sprite spr_knight_spark, depth 0. `depth` has no
+    // INSTANCE_DEFAULT in this engine (kaizo/HANDOFF.md §8), and the draw
+    // order sorts on it.
+    e.sprite_index = 'spr_knight_spark';
+    e.depth = 0;
+  },
+
+  step(e, state) {
+    e.life -= 1;
+    if (e.life === 0) destroy(e, state);
+  },
+};
 
 /**
+ * `obj_knight_triangle` — the ring of spinning shards around the orb's mouth.
+ *
  * `gml_Object_obj_knight_triangle_Create_0.gml`, 2 u32:
  *
  *     len = 10;
  *     dir = random(360);   // 1
  *     o   = choose(-1, 1); // 1
  *
- * Its Step spins `dir` and destroys itself once `image_xscale` runs out, and
- * nothing else reads it — decoration, drawn from the stream all the same.
+ * Its Step shrinks `image_xscale` by 0.4 a frame, spins `dir` by +-4, and
+ * rides a 10px circle around its spawn point until the orb is gone:
+ *
+ *     image_xscale -= 0.4;
+ *     if (image_xscale < 0) instance_destroy();
+ *     dir += (o == 1) ? 4 : -4;
+ *     if (i_ex(obj_knight_lightorb)) { x = xstart + lengthdir_x(len, dir);
+ *         y = ystart + lengthdir_y(len, dir); image_angle = dir; }
+ *     else instance_destroy();
+ *
+ * `gmlLt` because GML's `<` is epsilon-tolerant and the orb starts it at
+ * `1 + random(0.7)`, which can land on an exact multiple of 0.4.
  */
-function triangleCreateDraws(rng) {
-  if (!rng) return;
-  gmlRandom(rng, 360);
-  gmlChoose(rng, [-1, 1]);
-}
+export const knightTriangle = {
+  name: 'obj_knight_triangle',
+
+  create(e, state) {
+    const rng = state.gmlRng;
+    e.len = 10;
+    e.dir = rng ? gmlRandom(rng, 360) : 0;
+    e.o = rng ? gmlChoose(rng, [-1, 1]) : 1;
+    // objects_kaizo.csv: sprite spr_knight_triangle, depth 0. The orb
+    // overwrites both scales straight after the call.
+    e.sprite_index = 'spr_knight_triangle';
+    e.depth = 0;
+  },
+
+  step(e, state) {
+    e.image_xscale -= 0.4;
+    if (gmlLt(e.image_xscale, 0)) {
+      destroy(e, state);
+      return;
+    }
+    e.dir += (e.o === 1) ? 4 : -4;
+    if (orbOf(state)) {
+      e.x = e.xstart + lengthdirX(e.len, e.dir);
+      e.y = e.ystart + lengthdirY(e.len, e.dir);
+      e.image_angle = e.dir;
+    } else {
+      destroy(e, state);
+    }
+  },
+};
+
+/**
+ * `obj_knight_ring` — the expanding shockwave, every thirtieth con-1 frame.
+ *
+ * `gml_Object_obj_knight_ring_Create_0.gml` is four constants and rolls
+ * NOTHING (`timer = 0; image_alpha = 0; image_xscale = 1.4; image_yscale =
+ * 1.4;`), which is why its line in the budget below is 0 u32 — it was the one
+ * particle whose conversion could not move the stream even in principle.
+ *
+ * Its Step fades IN while it shrinks, and the empty `if (image_xscale == 0.6)`
+ * is in the dump verbatim — a branch the mod (and vanilla) left hollow:
+ *
+ *     timer++; image_alpha += (1/3);
+ *     image_xscale -= 0.2; image_yscale -= 0.2;
+ *     if (image_xscale == 0.6) { }
+ *     if (image_xscale == 0) instance_destroy();
+ *
+ * `gmlEq` for both: 1.4 less seven 0.2s is -2.2e-16 in float64, so a literal
+ * `=== 0` would never fire and the ring would live forever, shrinking through
+ * negative scales. GML's `==` is epsilon-tolerant and the game's does fire.
+ */
+export const knightRing = {
+  name: 'obj_knight_ring',
+
+  create(e) {
+    e.timer = 0;
+    e.image_alpha = 0;
+    e.image_xscale = 1.4;
+    e.image_yscale = 1.4;
+    // objects_kaizo.csv: sprite spr_roaringknight_sword_break_vfx2, depth 0.
+    e.sprite_index = 'spr_roaringknight_sword_break_vfx2';
+    e.depth = 0;
+  },
+
+  step(e, state) {
+    e.timer += 1;
+    e.image_alpha += (1 / 3);
+    e.image_xscale -= 0.2;
+    e.image_yscale -= 0.2;
+    // `if (image_xscale == 0.6) { }` — empty in the dump, and left out here
+    // rather than translated as an empty block: it holds no statement, makes
+    // no draw and changes nothing. Recorded so a later reader does not go
+    // looking for the missing arm.
+    if (gmlEq(e.image_xscale, 0)) destroy(e, state);
+  },
+};
 
 // ── obj_rouxls_power_up_orb — the ONE particle that has to be an instance ───
 
@@ -675,9 +803,12 @@ export const knightLightorb = {
     // so vanilla's orb never split.
     e.orbtype = kaizoSideb(state) ? 1 : 0;
     e.splitx = 0;
-    // objects_kaizo.csv: sprite spr_sneo_bigcircle, depth 0. The sprite is
-    // NOT in the extracted pack (header, "THE ART"), so `sprite_index` is
-    // left unset and the drawer paints the primitives it can.
+    // objects_kaizo.csv: sprite spr_sneo_bigcircle, depth 0. The sprite IS in
+    // the extracted pack since 2026-09-12 (pack-kaizo-sprites.mjs's WANT
+    // list), so `sprite_index` is assigned like any other object's and
+    // kaizo/render/draw/lightorb.js blits it — it used to be left unset with
+    // the drawer painting a ring in its place.
+    e.sprite_index = 'spr_sneo_bigcircle';
     e.depth = 0;
     e.image_blend = WHITE;
     // Draw-time values the renderer reads; initialised so the first frame
@@ -727,11 +858,18 @@ export const knightLightorb = {
       if (e.timer > 15) e.darken_alpha -= 0.1;
       if (e.timer === 9) cue(state, 'snd_knight_stretch', 1.5, 0.6);
       if (e.timer % 3 === 0) scrShakescreen(state);
-      // `if ((timer % 1) == 0)` — always true. The spark: TWO argument draws,
-      // Y FIRST (GML call arguments evaluate right-to-left), then the SIX in
-      // obj_knight_spark's own Create, which instance_create runs here.
-      if (rng) { gmlRandom(rng, 60); gmlRandom(rng, 60); }
-      sparkCreateDraws(rng);
+      // `if ((timer % 1) == 0)` — always true.
+      //
+      //     instance_create((x - 30) + random(60), (y - 30) + random(60),
+      //                     obj_knight_spark);
+      //
+      // TWO argument draws, Y FIRST (GML call arguments evaluate
+      // right-to-left), then the SIX in obj_knight_spark's own Create, which
+      // instance_create runs here — hence the spawn AFTER both, with the
+      // values it rolled.
+      const sparkY = rng ? gmlRandom(rng, 60) : 30;
+      const sparkX = rng ? gmlRandom(rng, 60) : 30;
+      spawn(state, knightSpark, { x: (e.x - 30) + sparkX, y: (e.y - 30) + sparkY });
       // :38-46 — the tvturnoff flash. Visual; `aa` parked for the drawer.
       if (e.timer < 40) {
         let aa = 0.25 - (e.timer / 100);
@@ -781,13 +919,28 @@ export const knightLightorb = {
         // rolls, then TWO in its Create (random(360), choose(-1, 1)), and only
         // then the two the orb writes onto it. The Create's pair comes FIRST
         // because instance_create returns after running it.
-        triangleCreateDraws(rng);
-        if (rng) { gmlRandom(rng, 0.5); gmlRandom(rng, 0.7); }
+        //
+        //     tri = instance_create(x + _x, y, obj_knight_triangle);
+        //     tri.image_yscale = 1 + random(0.5);
+        //     tri.image_xscale = 1 + random(0.7);
+        //
+        // yscale before xscale — two statements, in that order.
+        const tri = spawn(state, knightTriangle, { x: e.x + x2, y: e.y });
+        tri.image_yscale = 1 + (rng ? gmlRandom(rng, 0.5) : 0);
+        tri.image_xscale = 1 + (rng ? gmlRandom(rng, 0.7) : 0);
         // obj_knight_ring at `timer % 30 == 0 || timer == 1` — four constant
         // assignments in its Create, so no draws either way.
-        // The spark again: two argument draws, Y first, then its six.
-        if (rng) { gmlRandom(rng, 60); gmlRandom(rng, 60); }
-        sparkCreateDraws(rng);
+        if (e.timer % 30 === 0 || e.timer === 1) {
+          spawn(state, knightRing, { x: e.x + x2, y: e.y });
+        }
+        // The spark again: two argument draws, Y first, then its six. Its x
+        // carries the mouth offset — `(x - 30) + random(60) + _x`.
+        const sparkY = rng ? gmlRandom(rng, 60) : 30;
+        const sparkX = rng ? gmlRandom(rng, 60) : 30;
+        spawn(state, knightSpark, {
+          x: (e.x - 30) + sparkX + x2,
+          y: (e.y - 30) + sparkY,
+        });
 
         if (e.timer % 10 === 0) {
           // :100-104 — the aim. The mod narrowed +-5 to +-2 and wrapped it in

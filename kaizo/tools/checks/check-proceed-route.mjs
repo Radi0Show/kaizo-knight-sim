@@ -293,8 +293,20 @@ section('title.gear -> the override -> installRoster -> gearOfChar');
   assertEq(a.partyHp.join(','), '160,190,140', '...and the A-Side party is the A-Side party');
 }
 
-// ── 5. PERSISTENCE ────────────────────────────────────────────────────────
-section('the ramp survives a reload, and a hostile entry cannot take the route');
+// ── 5. THE RAMP IS SESSION-ONLY ──────────────────────────────────────
+//
+// THIS SECTION USED TO ASSERT THE OPPOSITE. It required that "a reload
+// resumes at the press it left on" and that "the route comes back taken",
+// because the ramp persisted and the page acted on it: web/kaizo.js boots
+// with `if (title.unused.taken && !explicitVersion) enterWeirdRoute()`, so a
+// saved flag put the player back on the Weird Route before they touched a key.
+//
+// That is now reversed on purpose. Every visit starts on a cold UNUSED row and
+// the Weird Route stays shut until the twenty presses are made again in THIS
+// session. The assertions below guard the new rule, and the one that matters
+// most is the last: a stored `taken: true` — left by an older build or
+// hand-written by someone poking at localStorage — must not open the door.
+section('the ramp dies with the session, and no stored flag can take the route');
 {
   // A tiny in-memory localStorage. The real one is the browser's; the module
   // takes the store as a parameter precisely so this can run headless.
@@ -313,21 +325,34 @@ section('the ramp survives a reload, and a hostile entry cannot take the route')
 
   const t2 = atUnusedRow();
   armUnused(t2, { ...loadProceed(store), sprite: PROCEED_SHATTER_SPRITE });
-  assertEq(t2.unused.presses, 7, 'a reload resumes at the press it left on');
-  assertEq(unusedRowStyle(t2).heat, 7 / UNUSED_PRESSES, '...at the same heat');
+  assertEq(t2.unused.presses, 0, 'a reload starts cold — the presses do not carry');
+  assertEq(unusedRowStyle(t2).heat, 0, '...and the row is not part-red either');
+  assertEq(t2.unused.taken, false, '...and the route is shut');
 
   // Take it, with a loadout, and read both back.
-  for (let i = 7; i < UNUSED_PRESSES - 1; i++) tap(t2, 'confirm');
+  for (let i = 0; i < UNUSED_PRESSES - 1; i++) tap(t2, 'confirm');
   stepTitle(t2, { ...NONE_IN, confirm: true }, []);
-  assert(t2.unused.shatter !== null, 'the twentieth press on the reloaded row breaks it');
+  assert(t2.unused.shatter !== null,
+    'twenty fresh presses on the reloaded row still break it');
   runShatter(t2);
   assertEq(t2.unused.taken, true, 'taken on the reloaded row');
   const g = weirdRouteGear();
   g[1].weapon = 12;
   saveProceed(t2.unused, g, store);
   const back = loadProceed(store);
-  assertEq(back.taken, true, 'the route comes back taken');
-  assertEq(back.gear?.[1]?.weapon, 12, '...and the Weird Route loadout with it');
+  assertEq(back.taken, undefined, 'a taken route is NOT read back');
+  assertEq(back.presses, undefined, '...nor the press count');
+  assertEq(back.gear?.[1]?.weapon, 12,
+    '...but the loadout is: a build the player assembled is not the door');
+
+  // THE ONE THAT MATTERS. An installed build already has `taken: true` in its
+  // storage from before this change, and a curious player can write one by
+  // hand. Dropping the field at LOAD rather than at save is what retires both.
+  mem.set(PROCEED_KEY, JSON.stringify({ v: 1, presses: 20, taken: true }));
+  const forged = atUnusedRow();
+  armUnused(forged, { ...loadProceed(store), sprite: PROCEED_SHATTER_SPRITE });
+  assertEq(forged.unused.taken, false, 'a stored taken flag does not open the route');
+  assertEq(unusedRowStyle(forged).heat, 0, '...and does not even warm the row');
 
   // Hostile / corrupt entries.
   mem.set(PROCEED_KEY, '{ not json');
@@ -337,14 +362,25 @@ section('the ramp survives a reload, and a hostile entry cannot take the route')
   assertEq(hostile.gear, undefined, 'a wrong-length saved loadout is refused');
   const t3 = atUnusedRow();
   armUnused(t3, { ...hostile, sprite: PROCEED_SHATTER_SPRITE });
-  assertEq(t3.unused.presses, UNUSED_PRESSES, 'an absurd press count is clamped');
-  assertEq(t3.unused.taken, false, '...and clamping it does not TAKE the route');
+  // THIS USED TO ASSERT CLAMPING: a saved `presses: 9999` became exactly
+  // UNUSED_PRESSES, leaving the row one press from the route. The guarantee is
+  // stronger now that no press count is read at all — an absurd entry is not
+  // clamped, it is IGNORED, and the forger is back at the start with everyone
+  // else.
+  assertEq(t3.unused.presses, 0, 'an absurd press count is ignored, not clamped');
+  assertEq(t3.unused.taken, false, '...and cannot TAKE the route');
   assertEq(unusedRowStyle(t3).name, 'UNUSED', '...the row is still UNUSED, not PROCEED');
   assertEq(t3.unused.shatter, null, '...and no saved value can arm a live shatter');
-  // IT STILL TAKES ONE MORE PRESS. This is the assertion that a corrupt entry
-  // cannot walk a player onto the Weird Route without them doing anything.
+  // AND IT TAKES THE FULL TWENTY. The old version of this block proved a
+  // corrupt entry could not reach the route in ZERO presses; it can no longer
+  // reach it in fewer than all of them.
+  // `tap` is press AND release; a bare stepTitle holds the key, and the next
+  // press is then not a fresh edge.
+  const rOne = tap(t3, 'confirm');
+  assertEq(rOne.shatter, false, 'one press on a forged row breaks nothing');
+  for (let i = 1; i < UNUSED_PRESSES - 1; i++) tap(t3, 'confirm');
   const rFull = stepTitle(t3, { ...NONE_IN, confirm: true }, []);
-  assertEq(rFull.shatter, true, 'a clamped-full row breaks on its next press');
+  assertEq(rFull.shatter, true, '...the twentieth honest press still does');
   assertEq(rFull.proceed, false, '...and even that press is not the door');
   // A throwing store (private mode) must not take the page down.
   const angry = { getItem() { throw new Error('denied'); }, setItem() { throw new Error('denied'); } };

@@ -107,6 +107,122 @@ const WANT = [
   'spr_noelleb_defeat',
   'spr_berdlyb_idle_shocked',
   'spr_shine',
+  // THE SNOWGRAVE FLAKE AND ITS BACKDROP (ledger G-43, 2026-09-12). The mod
+  // REBUILT obj_spell_snowgrave_snowflake's Draw — the `siner != 0` side-copy
+  // gate scaled by `flakescale`, and the `repeat (2) draw_self()` triple-blit
+  // for a gathered flake — and kaizo/render/draw/snowgrave.js is that
+  // translation. It had nothing to paint: neither name is in the main pack
+  // (the vanilla Knight fight never casts SnowGrave, so the pack filtered
+  // them out) and neither was in this overlay's WANT list, so the drawer
+  // bailed and only the white-to-blue wash reached the screen.
+  //
+  // BOTH ARE VANILLA ART, not the mod's: extracted from both data files and
+  // byte-compared here (kaizo/tools/checks/check-snowflake-art.mjs asserts
+  // `source: 'vanilla'` and no `replaced` flag, which is what keeps the
+  // publish gate honest about them). That makes this a VENDORING gap the
+  // packer closes, not an art delta.
+  //
+  //   spr_icespell_snowflake  46x46, origin (23,23), 1 frame, bbox [2,2,42,44]
+  //   bg_snowfall             64x64, origin (0,0),   1 frame — a SPRITE in
+  //                           this build despite the `bg_` name, which is why
+  //                           it comes through the sprite extractor at all.
+  'spr_icespell_snowflake',
+  'bg_snowfall',
+  // THE B-SIDE EPILOGUE'S OVERWORLD ART (2026-09-12). `kaizo/scenes/
+  // kaizo-ending.js`'s SPR table names 36 sprites and EIGHTEEN of them
+  // resolved in neither pack: this WANT list was built for the FIGHT, and the
+  // epilogue is a CUTSCENE — Kris/Susie/Ralsei overworld walk cycles, the
+  // shocked and unhappy poses, the Knight's overworld attack and turn-away,
+  // and the one-pixel white stamp the flash uses.
+  //
+  // The gap was invisible for a reason worth recording: `check-sprites.mjs:61`
+  // scans source with /'(spr_[a-z0-9_]+)'/g — SINGLE QUOTES — and that SPR
+  // table was written in BACKTICKS, so the enforced gate could not see a
+  // single one of the names and stayed green. Packing them is what lets the
+  // table go back to plain single-quoted literals (it has) and puts the whole
+  // set back under the scanner.
+  //
+  // PROVENANCE, measured by extracting all 18 from BOTH data files and
+  // byte-comparing every frame (65 frames each side; the same answer the
+  // whole-file hash in kaizo-mod/sprites/frames_{vanilla,kaizo}.csv gives):
+  // SIXTEEN are byte-identical and pack as `source: 'vanilla'`, so they are a
+  // vendoring gap and not an art delta. TWO are the mod's own repaint and pack
+  // as `source: 'mod', replaced: true` — spr_roaringknight_attack_overworld
+  // (6/6 frames differ) and spr_roaringknight_faceaway_turning (10/10). That
+  // is the same blue recolour the fight sprites carry, applied to the Knight's
+  // OVERWORLD set, and it is publish-gated by kaizo/assets/.gitignore like the
+  // rest of EnderCat8's art. `kaizo/tools/checks/check-ending-sprite-pack.mjs`
+  // asserts that split by name, in both directions.
+  'spr_krisd_dark',
+  'spr_krisl_dark',
+  'spr_pixel_white',
+  'spr_ralsei_down_surprised2',
+  'spr_ralsei_shocked_right',
+  'spr_ralsei_shocked_standing_right',
+  'spr_ralsei_surprised_left_walk',
+  'spr_ralsei_surprised_right_walk',
+  'spr_ralsei_walk_down_unhappy',
+  'spr_ralsei_walk_left_unhappy',
+  'spr_ralsei_walk_right_sad',
+  'spr_ralsei_walk_up_sad',
+  'spr_roaringknight_attack_overworld',
+  'spr_roaringknight_faceaway_turning',
+  'spr_susie_dw_jump_ball_fixed',
+  'spr_susie_hurt',
+  'spr_susie_walk_down_dw_unhappy',
+  'spr_susie_walk_left_dw_unhappy',
+  // THE ACT GRID'S CROSSED-OUT PARTNER HEADS (2026-09-12). render/menu.js:231
+  // does `sprites.get('spr_tenna_x')` for the X-SLASH row's portrait strip and
+  // draws the sprite TWICE per partner head, frame 1, at 6 and 4 degrees —
+  // the double-stamp that makes the mark read as scratched on. The lookup was
+  // resolving to nothing: `spr_tenna_x` is in BOTH data files' sprite metadata
+  // and in both extraction dumps, but the WANT list was built for the FIGHT
+  // and the main pack filtered it out (the vanilla Knight fight never opens an
+  // ACT grid with a partner strip). The file's own comment says it "is NOT in
+  // any pack this renderer can reach yet" — this is that gap closed, not a new
+  // dependency: the call site is unchanged and still skips when absent.
+  //
+  // What the player saw without it: the partner heads greyed correctly, but
+  // the crosses that say WHY the row refuses the confirm never drew.
+  //
+  // 32x32, origin (16,16), 2 frames, byte-identical in both dumps, so it packs
+  // `source: 'vanilla'` with no `replaced` flag.
+  'spr_tenna_x',
+  // THE B-SIDE SUNBOLT ORB AND ITS PARTICLES (ledger G-1, 2026-09-12).
+  // `obj_knight_lightorb` is the Weird Route's sunbolt attack — the organism
+  // the vertical box tear creates — and NOT ONE of the four sprites it and its
+  // particles draw was in either pack, so `kaizo/render/draw/lightorb.js`
+  // painted a canvas RING where the mod paints a 50px disc and the three
+  // particle objects had no art to draw at all. A player on the Weird Route
+  // saw a placeholder for the whole attack.
+  //
+  // The names and the objects that carry them, from the mod's own object
+  // table (knight-research/kaizo-mod/sprites/objects_kaizo.csv):
+  //
+  //   obj_knight_lightorb   spr_sneo_bigcircle                  50x50 (25,25) 1f
+  //   obj_knight_spark      spr_knight_spark                    17x18 ( 8, 9) 4f
+  //   obj_knight_triangle   spr_knight_triangle                 16x16 ( 0, 8) 1f
+  //   obj_knight_ring       spr_roaringknight_sword_break_vfx2  64x64 (32,32) 2f
+  //
+  // (obj_rouxls_power_up_orb, the fourth particle, has an EMPTY sprite column
+  // in that table and draws itself from primitives — there is no fifth name to
+  // pack. The module header used to say five; it says four now.)
+  //
+  // PROVENANCE — VANILLA ART, every frame, measured twice. Extracted from the
+  // mod's data file (a COPY: kaizo-mod/oracle/data-kaizo-pristine.win) and
+  // from a COPY of the player's own vanilla data.win, never the Steam install,
+  // with UndertaleModCli + kaizo-mod/tools/patches/sprite_hash.csx; `cmp` says
+  // all EIGHT frames are byte-identical, and the whole-file pixel hashes in
+  // kaizo-mod/sprites/frames_{kaizo,vanilla}.csv agree sprite for sprite
+  // (spr_sneo_bigcircle 602f0262…, spr_knight_triangle 977dc54a…, and both
+  // frames of the vfx2 ring and all four of the spark). So the packer
+  // classifies them `source: 'vanilla'` with no `replaced` flag and the V-C
+  // publish gate does not cover them — a VENDORING gap, not an art delta.
+  // kaizo/tools/checks/check-lightorb.mjs L12 asserts that split by name.
+  'spr_sneo_bigcircle',
+  'spr_knight_spark',
+  'spr_knight_triangle',
+  'spr_roaringknight_sword_break_vfx2',
 ];
 
 /** Every frame file for `name` in a dump dir, in frame order. */

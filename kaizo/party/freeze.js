@@ -617,6 +617,25 @@ export function clearAllFreeze(state) {
 // ───────────────────────────────────────────────────────────────────────────
 // What a frozen member cannot do — the heal scripts
 // ───────────────────────────────────────────────────────────────────────────
+//
+// WHO READS THESE, and it is worth stating because for four days NOBODY DID.
+// The three translations below were complete, correct and roster-guarded, and
+// `check-freeze.mjs` exercised them in isolation — while `sim/items.js` went
+// on calling its own `scrHealitem` / `scrHealitemAll`, so no heal in the fight
+// ever reached them and a k_freeze'd member was healed like anyone else. This
+// repo's signature defect, instance eleven: ready-made correct code with no
+// caller, and a suite that looked green because it called the code itself.
+//
+// THE READER IS NOW `kaizo/party/items.js`, which adapts
+// `scrHealallitemspell` / `scrHealitemspell` onto `state.kaizo.hooks`'s
+// `scrHealitemAll` / `scrHealitem`; `installRoster` installs them, and
+// `sim/items.js` consults them before its own bodies.
+// `kaizo/tools/checks/check-items-kaizo.mjs` §6 drives a frozen member's heal
+// through the REAL MENU, so it goes red if any link in that chain is removed
+// — which a test of these functions alone cannot do.
+//
+// `scrHealall` itself is still called only through `scrHealallitemspell`
+// (which is how the mod calls it too: scr_healallitemspell.gml:4).
 
 /**
  * Default heal application. The kaizo party module owns the roster-aware

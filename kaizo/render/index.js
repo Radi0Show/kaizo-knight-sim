@@ -167,3 +167,23 @@ export const KAIZO_DRAW_OVERRIDES = Object.freeze({
  *  three are the blade fill at row 21, the finisher fill at row 12 and the
  *  party actor at row 28, none of which is a changed Draw. 25 + 3 = 28. */
 export const KAIZO_DRAW_OBJECTS = Object.freeze(Object.keys(KAIZO_DRAW_OVERRIDES));
+
+// ───────────────────────────────────────────────────────────────────────────
+// THE B-SIDE EPILOGUE'S DRAWER — a SCENE drawer, deliberately not a row above
+// ───────────────────────────────────────────────────────────────────────────
+//
+// `drawKaizoEpilogue` paints `con 50.2` (ledger G-15). It is re-exported here
+// so kaizo's whole draw surface has one address, and it is NOT an entry in
+// `KAIZO_DRAW_OVERRIDES` for a structural reason, not a stylistic one: the
+// override seam runs inside render/canvas.js's depth-sorted pass, which
+// positions everything by `state.view` — the BATTLE camera, 0 in this scene.
+// The epilogue is an overworld cutscene at `camerax() ~ 2230-2400` with its
+// own `sb_camX` kick, and `state.view` is already owned by sim/shake.js (whose
+// `big_shake` really does move it three times here). The vanilla port answers
+// the same question the same way for the A-Side knighting —
+// `render/draw/victory-scene.js` is one scene function the page calls with a
+// camera — so this follows the precedent instead of bending the seam.
+//
+// The row count above is therefore unchanged at 28, which is what
+// `check-lightorb.mjs`'s R1 block pins by name AND position.
+export { drawKaizoEpilogue, objShakeOffset, epilogueRalseiSprite } from './draw/ending.js';

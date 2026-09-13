@@ -77,7 +77,9 @@ import { screenCut } from '../../../render/draw/roaring.js';
 import { FONTS, drawSpriteText } from '../../../render/text.js';
 import { PARTY } from '../../../sim/damage.js';
 import { charIdOf } from '../../party/roster.js';
-import { kaizoCharboxGloom, kaizoSideb, KAIZO_GLOOM_COLOR } from '../../party/gloom.js';
+import {
+  kaizoCharboxGloom, kaizoGloomBarSegment, kaizoSideb, KAIZO_GLOOM_COLOR,
+} from '../../party/gloom.js';
 import { KAIZO_TELEGRAPH_COLOR } from '../../attacks/kaizo-colors.js';
 
 /** camerawidth() / cameraheight() — every surface in the Draw is this size. */
@@ -590,16 +592,25 @@ function drawHpHud(state, sprites) {
       g.fillStyle = rgb(charcolor);
       const fill = Math.ceil((hp / maxhp) * 75);
       g.fillRect(x + 40, 17, fill + 1, 9); // draw_rectangle(_x + 40, 17, _x + 40 + ceil(...), 25)
+      // THE SEGMENT ARITHMETIC IS `kaizoGloomBarSegment`'s, not this file's.
+      // Other_22:59-77 and scr_charbox:757-769 are the SAME four lines over
+      // the same 75px fill — `ceil` on both ends of `(hp - gloom)/maxhp` and
+      // `hp/maxhp` — and this file used to carry its own transcription of
+      // them beside the charbox row's. Two copies of one formula is how a
+      // `ceil` becomes a `round` on one surface and not the other, so there
+      // is now one, in kaizo/party/gloom.js, and this is a reader of it
+      // (ledger G-34: until 2026-09-12 its only callers were itself and its
+      // own check). Its `null` covers both guards this branch used to spell
+      // out — `k_gloom > 0`, and the enclosing `hp > 0 && maxhp > 0`.
       if (sideb) {
-        const gloom = kaizoCharboxGloom(state, ch);
-        if (gloom > 0) {
+        const seg = kaizoGloomBarSegment(state, ch, maxhp);
+        if (seg) {
           const xx = x + 40;
-          const lv = hp - gloom;
-          const rv = hp;
-          const lx = Math.ceil((lv / maxhp) * 75);
-          const rx = Math.ceil((rv / maxhp) * 75);
-          g.fillStyle = KAIZO_GLOOM_COLOR;
-          g.fillRect(xx + lx, 17, rx - lx + 1, 9); // draw_rectangle(__xx + __LX, 17, __xx + __RX, 25)
+          g.fillStyle = seg.color;
+          // draw_rectangle(__xx + __LX, 17, __xx + __RX, 25) — GML's filled
+          // rectangle covers x1..x2 INCLUSIVE, hence the +1, and that is the
+          // one thing that is this surface's and not the segment's.
+          g.fillRect(xx + seg.lx, 17, seg.rx - seg.lx + 1, 9);
         }
       }
     }

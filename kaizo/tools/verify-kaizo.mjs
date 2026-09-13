@@ -616,6 +616,168 @@ if (KV.C) {
     'check-spellenemy-row', 'check-aside-messages', 'check-spellphase-kaizo',
     'check-knight-mode', 'check-opening-msg', 'check-proceed-route',
     'check-heal-roster',
+    // WIRED 2026-09-12 — THE WEIRD ROUTE'S BACK HALF. The route is reachable
+    // from the settings menu now, not just by `?v=D`, so these stopped being
+    // debug-build translations and became things a player can walk into.
+    //   check-gameover-sideb      the mod's game-over screen: both slots read
+    //                             "PROCEED#(PROCEED)" and `global.choice == 1`
+    //                             routes to knight_mode_con 53, not 55 — on
+    //                             this route the screen offers no way out. It
+    //                             is where the settings row that becomes
+    //                             PROCEED got its word, its red and its
+    //                             refusal to leave.
+    //   check-endfight-teardown   the writer, face, shake and frozennpc
+    //                             teardown, and CleanUp_0's full-party heal.
+    //   check-gloom-hud           GLOOM reaches a HUD surface at last. It is
+    //                             the B-Side's whole damage-over-time
+    //                             mechanic — it ticks, accrues, kills and
+    //                             prints call-outs — and until this round
+    //                             `kaizoGloomBarSegment` was called by nothing
+    //                             but its own check.
+    //   check-snowflake-art       spr_icespell_snowflake and bg_snowfall are
+    //                             VANILLA art that no pack carried, so the
+    //                             SnowGrave drawer was a faithful translation
+    //                             with nothing to paint. The check pins their
+    //                             provenance so the publish gate stays honest.
+    //   check-sideb-ending        the ~595-line B-Side epilogue (G-15) and
+    //   check-ralsei-fakeout      the 1-in-100 fakeout inside it (G-17).
+    //
+    // TWO THINGS THESE LAST TWO DO NOT YET PROVE, found by review and left
+    // recorded rather than quietly carried: the epilogue's "exactly eight u32
+    // draws" is asserted against the module's OWN tally and not against
+    // `state.gmlRng.idx`, so a real extra draw passes green (it was injected
+    // and it did); and SB_TERMINAL_AT drives the machine AND is the expected
+    // value in section E, so it is the one ladder number no assertion can
+    // falsify. Both are being turned into measurements.
+    'check-gameover-sideb', 'check-endfight-teardown', 'check-gloom-hud',
+    'check-snowflake-art', 'check-sideb-ending', 'check-ralsei-fakeout',
+    // WIRED 2026-09-12 — THE PARTY IS THE ROSTER, NOT THE SLOT. A player
+    // reported that Noelle "just has susies" everything on the Weird Route,
+    // and she did: sim/damage.js held a THREE-ENTRY SLOT-INDEXED table, so
+    // slot 1 answered SUSIE / 190 / at 18 for whoever stood in it, and
+    // render/fightbar.js's CHARCOLOR gave her Susie's fuchsia. global.hpcolor[]
+    // is CHARACTER-indexed and four long — hpcolor[3] is Noelle's yellow.
+    //
+    // Her stats come from the MOD'S OWN OVERRIDE and the checks read them out
+    // of the dump rather than trusting a constant:
+    //   scr_gamestart_chapter_override.gml:55-59   maxhp 120, at 5, mag 13, df 1
+    // The VANILLA Chapter 4+ Noelle is a DIFFERENT character (scr_gamestart.gml
+    // :166-169 — 90 / 3 / 11 / 1) and check-party-seam pins both so the two can
+    // never be confused. DF 1 is the one they agree on and the easy one to miss:
+    // every other member carries the base 2.
+    //
+    //   check-party-seam   the four accessors, and that state.partyMaxhp is read
+    //                      on EVERY path — it used to be honoured by
+    //                      scr_party_hpaverage and ignored by damage scaling,
+    //                      Kris's doomtype-4 mercy, the heal cap and the revive
+    //                      fractions, so the answer depended on which path asked.
+    //   check-charcolour   the HUD takes the character, not the slot.
+    'check-party-seam', 'check-charcolour',
+    // WIRED 2026-09-12 — THE EPILOGUE REACHES THE PAGE. It was 2,007 lines
+    // imported by nothing but its own two checks while web/kaizo.js played the
+    // A-Side knighting on a Weird Route win: the WRONG cutscene, played with
+    // full confidence, which is worse than a missing one.
+    //   check-ending-driver       the production wire — createVictoryScene()
+    //                             appears exactly once and only in the else of
+    //                             the route test — and that the registry, the
+    //                             roster and the mod's own fork all descend
+    //                             from ONE expression, so a version letter and
+    //                             global.flag[456] can no longer disagree.
+    //   check-ending-sprite-pack  the 36 names the epilogue draws resolve for
+    //                             real. check-sprites scans for 'spr_x' in
+    //                             SINGLE quotes and the table was written in
+    //                             backticks, so an ENFORCED gate was green
+    //                             because of a quoting style. The names are
+    //                             quoted properly now and the art is packed.
+    //
+    // WHAT THESE DO NOT CLAIM: nothing paints the epilogue's visuals, and
+    // `board_ocean` — the loop the scene parks on at sb_con 99 — has no file
+    // in this repo, so its music is silent. Both are labelled at the call site
+    // rather than left for a player to discover.
+    'check-ending-driver', 'check-ending-sprite-pack',
+    // WIRED 2026-09-12 — BOTH ENDS OF THE WEIRD ROUTE, which is what the fight
+    // was missing either side of itself.
+    //   check-prefight-modeselect  con 3.2 -> 3.7, the four-option menu the mod
+    //                              raises before the fight (Practice / No Hit /
+    //                              Standard / Return). Its fall-through is
+    //                              load-bearing: with practice off, con 3.2's
+    //                              else sets choice 2 and con 3.4, whose block
+    //                              sits BELOW it, so the dispatch runs in the
+    //                              SAME frame and no menu ever flashes.
+    //   check-prefight-music       kaizo_set_music, all five branches, with a
+    //                              real file-existence predicate rather than a
+    //                              constant. The page's music decision now runs
+    //                              through it instead of a hardcoded override
+    //                              that was one of those five branches frozen.
+    //   check-kaizo-victory        G-14/G-16: the mod deletes the knighting and
+    //                              puts a third slash there. A won fight used to
+    //                              play the VANILLA cutscene on both routes.
+    //   check-ending-draw          the B-Side epilogue is PAINTED. It ran,
+    //                              sequenced and sounded for a whole round while
+    //                              every visual sat on state.kaizo.ending.marks
+    //                              with no reader.
+    //
+    // ASSERTION J2 IN check-ending-draw IS THE ONE TO KEEP. Its sibling J
+    // asserts Susie paints before the Knight at the clash jump — and she is
+    // CREATED before him, so creation order satisfies it and J stayed green with
+    // the depth sort deleted, while the painted order moved on ~983 of 1734
+    // frames. J2 requires the Knight to paint both BEFORE and AFTER Kris across
+    // the run (depth kr+1, then kr-1 at t 166), which a constant order cannot
+    // do. Verified by reproducing the sabotage: J2 fails, J does not.
+    'check-prefight-modeselect', 'check-prefight-music',
+    'check-kaizo-victory', 'check-ending-draw',
+    // WIRED 2026-09-12 — ENDERCAT8 IS CREDITED. This build is a recreation of
+    // their mod; the vanilla Roaring Knight simulator is a recreation of
+    // nothing of theirs, so the row belongs to THIS build and not to the
+    // shared constant. `titleCredits(title)` returns the installed list or the
+    // vanilla one BY IDENTITY, and every read goes through it — including the
+    // cursor wrap, because drawing four rows while wrapping on three leaves
+    // the last one unreachable.
+    //
+    // ITS OWN SABOTAGE TEST CAUGHT A BUG IN ITSELF. Section E first scanned
+    // web/kaizo.js as raw text, so commenting the assignment out left the
+    // check GREEN — the regex matched the comment. It strips comment lines
+    // before asserting now, and fails on both a commented-out and a deleted
+    // writer. A source scan that cannot tell code from a note about code is
+    // the same defect the check exists to catch.
+    'check-credits',
+    // WIRED 2026-09-12 — THE MENU, AFTER A PLAYER SAID THE MOVES DID NOT WORK.
+    // A read-only lane DROVE every button on both routes and found 18 defects;
+    // these are the gates over the ones that were fixed. Two results are worth
+    // keeping in front of whoever reads this next:
+    //
+    // X-SLASH WAS NEVER BROKEN. It greys out and refuses confirm while a
+    // partner still stands, which is exactly obj_knight_enemy Step_0:42-53.
+    // What was missing was the TELLING: xslashGridHeads computed the whole
+    // partner-head strip — the heads with crosses through them, the game's own
+    // way of saying why — and had ZERO readers, and the ACT grid drew no TP
+    // cost at all because the '% TP' readout was gated to the MAGIC grid. The
+    // player saw a grey row with no price and no reason. Do not "fix" the gate.
+    //
+    // THE PARTNER ACT ROWS (N-Action / S-Action / R-Action) ARE STILL
+    // UNREACHABLE, and that is deliberate. A lane built the fix, measured it
+    // against the whole-fight recording, and backed it out — the recording
+    // moved, and a recording of the real game outranks a GML reading. It is an
+    // open gap, not an oversight, and check-actgrid-tpcost's section D asserts
+    // the list AS IT IS so the check can actually go green.
+    //
+    //   check-ally-picker     the presence table and its four clamps, in the
+    //                         original's non-obvious 2->0, 0->1, 1->0, 0->2
+    //                         order; the cursor can no longer rest on — or
+    //                         confirm on — the Weird Route's empty third slot.
+    //   check-items-kaizo     the phantom party member is gone: heal-all and
+    //                         revive-all skip a slot with no character, the way
+    //                         scr_healall's own `global.char[i] != 0` does.
+    //                         A Spincake used to resurrect nobody, at Ralsei's
+    //                         140, and hand them a menu panel next turn.
+    //   check-xslash-heads    the head strip is DRAWN, asserted against a stub
+    //                         canvas rather than by grepping for a consumer —
+    //                         a grep would have passed on the very bug this
+    //                         closes.
+    //   check-actgrid-tpcost  the ACT grid prints its price, at 500, with GML
+    //                         round-half-to-even on the percentage.
+    'check-ally-picker', 'check-items-kaizo', 'check-xslash-heads',
+    'check-actgrid-tpcost',
     // WIRED 2026-09-10 with k_hpscene, the MAX-HP SHEAR — the fourth
     // turn-hijacking scene (obj_knight_enemy Step_0:54-63 arms it,
     // :1771-1929 plays it) and THE ONLY ONE THAT IS NOT B-SIDE GATED. Its
