@@ -93,6 +93,7 @@ const SUITES = [
   ['verify-contact-coverage.mjs', 'contact coverage — every attack can actually hit'],
   ['verify-titlemenu.mjs', 'title navigation — stages, X back, the GRAPHICS toggles'],
   ['verify-battlemsg.mjs', 'the battle message box — 15 lines, phase 4 gates, down messages'],
+  ['verify-actmodel.mjs', 'the ACT table — per enemy, per character, five parallel fields'],
   // The whole-fight diff. Skips loudly without ~/knight-research/traces, so on
   // CI this reports SKIP rather than a green tick it has not earned.
   ['verify-hp.mjs', 'party HP, targeting and the swoon values (the no-keep-alive half)'],
@@ -104,9 +105,11 @@ const SUITES = [
 ['verify-selectflash.mjs', 'enemy selection flash — the game curve, not a halo'],
 ['verify-render-smoke.mjs', 'the renderer survives a real fight without throwing'],
 ['verify-touch.mjs', 'the touch binder — pad sectors, latch, two thumbs'],
+['verify-bindings.mjs', 'rebindable controls — three profiles, detection, capture'],
 ['verify-windowsize.mjs', 'SMALL is the window size obj_time would pick'],
 ['verify-replay.mjs', 'replay tokens — round-trip and reproduce a live run'],
 ['verify-determinism.mjs', 'byte-identical across 10 runs'],
+['verify-rafloop.mjs', 'the frame loop + rAF watchdog — one chain across tab switches'],
 ];
 
 // EVERY suite file must be in the table. A suite that exists and is never run

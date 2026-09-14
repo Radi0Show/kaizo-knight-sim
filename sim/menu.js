@@ -20,13 +20,14 @@ import { scrTensionheal } from './tension.js';
 import { cue } from './audio.js';
 import { useItem, takeItem, applyItem, ITEMS } from './items.js';
 import {
-  spellInfo, spellListFor, actsFor, canAfford, spellCost, castSpell, holdBreath,
+  spellInfo, spellListFor, actsFor, actUsable, canAfford, spellCost, castSpell, holdBreath,
 } from './spells.js';
 import {
   FACE_IDLE, FACE_ATTACK, FACE_SPELL, FACE_ITEM, FACE_DEFEND, FACE_ACT,
   HERO_SPELL, HERO_ITEM, HERO_ACT, heroAct,
 } from './heroes.js';
 import { ACT_PAGES } from './dialogue.js';
+import { mergeColor } from './gml.js';
 
 // Every key the menu edge-detects, refreshed as a set each open frame (and
 // seeded from prevInput at openMenu) — polling must never decide which keys'
@@ -151,6 +152,28 @@ export const HPCOLOR = [
  * same number and this is what `charColorFor` returns.
  */
 export const CHAR_COLOR = HPCOLOR.slice(0, 3);
+
+/**
+ * `hpcolorsoft` — the SAME four lines of obj_battlecontroller's Create that
+ * `HPCOLOR` above comes from (:230-237), halfway to white:
+ *
+ *     for (i = 0; i < 4; i++) hpcolorsoft[i] = merge_color(hpcolor[i], c_white, 0.5);
+ *
+ * Derived rather than written out, so the two cannot disagree about a channel.
+ * `mergeColor` rounds, which is the answer `sim/dmgnumbers.js` already carries
+ * for `merge_color(c_aqua, c_white, 0.5)` — [128, 255, 255], not 127.
+ *
+ * ITS ONE READER IN THE GAME IS THE ACT ROW'S COLOUR. Draw_0:955-958 paints a
+ * spell-list row in `hpcolorsoft[global.char[thischar] - 1]` when
+ * `global.battlespellspecial[...] >= 1`, which `scr_spellmenu_setup` sets on
+ * exactly the rows that came out of a `canact*` array — so S-Action draws in
+ * Susie's soft fuchsia, R-Action in Ralsei's soft lime, N-Action in Noelle's
+ * soft yellow, and Kris's Check / HoldBreath in soft aqua. Draw_0:806 paints
+ * the same colour on the act name the `bmenuno == 13` picker shows beside each
+ * enemy. sim/spells.js's ACT_SPECIAL_BY_CHAR carries the `battlespellspecial`
+ * half and the note on why this engine does not yet place those rows.
+ */
+export const HP_COLOR_SOFT = HPCOLOR.map((c) => mergeColor(c, [255, 255, 255], 0.5));
 
 /**
  * `global.char[slot]` — SLOT to CHARACTER ID, and the whole bridge between the
@@ -628,15 +651,36 @@ export function listRows(state) {
     // the list is empty, and opening an empty list is the `snd_error` the
     // confirm handler already plays.
     //
-    // `usable` and `cost` come from the row when a character-keyed table
-    // supplies them (obj_battlecontroller's `canpress` / `cant` gates and
-    // `acttpcost[]`, Step_0:1097-1170, Draw_0:1223); the vanilla rows have
-    // neither, so they stay always-usable and free.
+    // `usable` is `cant`, INVERTED — Draw_0:1140-1246, and `actUsable` is
+    // where its gates live now, so a row that carries one (a character-keyed
+    // table computing `canpress` live) still wins and a row that does not gets
+    // the game's own answer from its `actor` and `cost` rather than a blanket
+    // `true`. `cost` is `acttpcost[]` (Step_0:1097-1170, Draw_0:1223); every
+    // vanilla row is actor 1, cost 0, so vanilla is greyed nowhere and spends
+    // nothing.
+    //
+    // `simul` and `actor` ride along because the row is the only place the
+    // draw and `scr_actselect` can read them from — `actsimul[arg1]` is what
+    // `scr_actselect` copies into `global.actingsimul`, and `actactor` is the
+    // `chartime` render/menu.js draws the portrait strip from. Flattening them
+    // out here is what made the ACT rows indistinguishable from bag rows.
+    //
+    // THE ONE-USE FILTER IS KEYED BY CHARACTER, NOT BY SLOT. `susieUsed` is
+    // SUSIE'S flag (`global.canactsus[myself][0] = 0`), and slot 1 is only
+    // Susie while `global.char` is this fight's [1, 2, 3]; a party that seats
+    // somebody else there had their row disappear because Susie had acted.
+    const susieSlot = charIdForSlot(state, c) === 2;
     return (actsFor(state, c) ?? [])
       .map((a, i) => ({
-        label: a.name, descb: a.descb, id: i, usable: a.usable ?? true, cost: a.cost ?? 0,
+        label: a.name,
+        descb: a.descb,
+        id: i,
+        usable: actUsable(state, c, a),
+        cost: a.cost ?? 0,
+        simul: a.simul ?? 0,
+        actor: a.actor ?? 1,
       }))
-      .filter(() => !(c === 1 && state.actCounts?.susieUsed));
+      .filter(() => !(susieSlot && state.actCounts?.susieUsed));
   }
   return [];
 }

@@ -17,6 +17,7 @@ import { VERSION } from '../web/version.js';
 import {
   MODES, SETTINGS_PAGES, TITLE_EXTRAS, titleCredits, ITEM_PICKER, GEAR_PAGES,
   pocketOf, previewStats, wornBy, partyTabs, unusedRowStyle,
+  controlRows, deviceName,
 } from '../sim/modes.js';
 import { ITEMS, INVENTORY_SIZE } from '../sim/items.js';
 import { difficultyBlurb } from '../sim/scenes/single.js';
@@ -582,12 +583,56 @@ function drawSettings(ctx, title, sprites, font) {
     const rows = [
       { name: 'SCREEN SIZE', value: title.scaling === 'fit' ? 'FULL' : 'SMALL' },
       { name: 'SCREEN SHAKE', value: title.shake ? 'ON' : 'OFF' },
-      // The on-screen Z/X layout (sim/modes.js `swapZX`), shown as the order
-      // the two buttons sit in. Drawn on every device — the page has no way
-      // to know about the pointer and a row that vanished would be stranger
-      // than one that does nothing on a desktop.
-      { name: 'TOUCH BUTTONS', value: title.swapZX ? 'X / Z' : 'Z / X' },
+      // TOUCH BUTTONS used to be the third row here and is now the first row
+      // of CONTROLS — the order two buttons sit in is a control, not a
+      // picture. `sim/modes.js`'s ROWS constant came down to 2 with it.
     ];
+    for (let i = 0; i < rows.length; i++) {
+      const y = 190 + i * 60;
+      const on = i === s.cursor;
+      if (on && heart) drawSpriteExt(ctx, heart, 0, 110 + bob, y + 4, 1, 1, 0, null, 1);
+      drawText(ctx, font, rows[i].name, 140, y, { color: rgb(on ? HILITE : c_white) });
+      drawText(ctx, font, rows[i].value, 420, y, { color: rgb(on ? HILITE : c_white) });
+    }
+    centred(ctx, font, 'arrows  toggle      X  back', 448, DIM, 0.75);
+    return;
+  }
+
+  if (s.page === 'controls') {
+    centred(ctx, font, 'CONTROLS', 60, c_white, 1.4);
+    const c = s.controls ?? { stage: 'rows', bind: 0 };
+    const b = title.bindings;
+
+    // ---- the binding list ---------------------------------------------------
+    if (c.stage === 'bind' && b) {
+      const list = b.devices?.[b.device] ?? [];
+      // The device sits where a page title's subtitle would, with the arrows
+      // that change it either side — the only cue that left and right do
+      // something different here than on every other settings page.
+      centred(ctx, font, `<  ${deviceName(b.device)}  >`, 110, HILITE, 1);
+      const PITCH = 42;
+      for (let i = 0; i < list.length; i++) {
+        const y = 160 + i * PITCH;
+        const on = i === c.bind;
+        if (on && heart) drawSpriteExt(ctx, heart, 0, 90 + bob, y + 4, 1, 1, 0, null, 1);
+        // A row waiting for a press says so IN ITS VALUE COLUMN — the place
+        // the binding it is about to replace was a moment ago, so the thing
+        // that changes is the thing you were looking at.
+        const capturing = b.capture && b.capture.action === list[i].action
+          && b.capture.device === b.device;
+        const value = capturing ? '. . .' : list[i].value;
+        const colour = capturing ? HILITE : (list[i].fixed ? DIM : (on ? HILITE : c_white));
+        drawText(ctx, font, list[i].label, 120, y, { color: rgb(list[i].fixed ? DIM : (on ? HILITE : c_white)) });
+        drawText(ctx, font, value, 400, y, { color: rgb(colour) });
+      }
+      centred(ctx, font, b.capture
+        ? 'press a button      X  cancel'
+        : 'arrows  choose      Z  set      X  back', 448, DIM, 0.75);
+      return;
+    }
+
+    // ---- the page's own rows ------------------------------------------------
+    const rows = controlRows(title);
     for (let i = 0; i < rows.length; i++) {
       const y = 190 + i * 60;
       const on = i === s.cursor;

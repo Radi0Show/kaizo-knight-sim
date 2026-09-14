@@ -21,7 +21,7 @@ import {
 import { scrKaizoTarget, kaizoKnightTarget, kaizoDamageHooks } from '../party/damage.js';
 import { kaizoAdvanceBalloon } from '../party/freeze.js';
 import { createKaizoHeroes } from '../party/heroes.js';
-import { installKaizoMenu } from '../party/spells.js';
+import { installKaizoMenu, installKaizoActPages } from '../party/spells.js';
 import { VC_TABLE, VD_TABLE, VC_KNIGHT } from '../versions/vc-script.js';
 import { tensionbarDraw } from '../party/tensionbar.js';
 import { ensureEnding, FLAG_WEIRD_ROUTE } from './kaizo-ending.js';
@@ -751,6 +751,15 @@ export function buildKaizoScene(state, { version = 'A', mode, gear } = {}) {
   // doing it afterwards would build a three-person scene and then contradict
   // it. It also re-stamps state.kaizo, hence the marker being merged back in
   // rather than assigned before.
+  // THE ACT PAGES GO IN FOR EVERY KAIZO VERSION, not just the one with a
+  // roster. The block below is party-gated and correctly so — it installs a
+  // character table built FROM the roster — but the act pages are keyed by
+  // character id and need no roster at all, and leaving them inside the gate
+  // put the mod's S-Action rewrite where no player could reach it: V-C has the
+  // Susie who performs it and never installed the hook; V-D installed it and
+  // has no Susie.
+  installKaizoActPages(state);
+
   let roster = null;
   if (v.party) {
     const marker = state.kaizo;

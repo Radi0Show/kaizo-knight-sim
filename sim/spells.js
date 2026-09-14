@@ -76,22 +76,213 @@ export const SPELLS = {
 /** `global.spell[char]`, by PARTY SLOT (slot + 1 is the character id here). */
 export const SPELL_LIST = [[7], [4, 11], [3, 2]];
 
+// ── THE ACT TABLE IS FIVE PARALLEL ARRAYS, PICKED BY THE ACTING CHARACTER ──
+//
+// `obj_battlecontroller`'s Draw, the `bmenuno == 9` fill (Draw_0:1059-1096),
+// is the authority on the shape. It does NOT read one list — it reads one of
+// FOUR sets of five parallel arrays, chosen by `global.char[global.charturn]`,
+// and every one of them is indexed `[thisenemy][__acti]`:
+//
+//     actcoord = global.bmenucoord[9][global.charturn];
+//     for (__acti = 0; __acti < 6; __acti++) {
+//         canact[__acti] = 0;
+//         if (global.char[global.charturn] == 1) {
+//             canact[__acti]    = global.canact[thisenemy][__acti];
+//             acttpcost[__acti] = global.actcost[thisenemy][__acti];
+//             actsimul[__acti]  = global.actsimul[thisenemy][__acti];
+//             actname[__acti]   = global.actname[thisenemy][__acti];
+//             actdesc[__acti]   = global.actdesc[thisenemy][__acti];
+//         }
+//         if (global.char[global.charturn] == 2) { ...canactsus / actcostsus /
+//             actsimulsus / actnamesus / actdescsus... }
+//         if (global.char[global.charturn] == 3) { ...*ral... }
+//         if (global.char[global.charturn] == 4) { ...*noe... }
+//     }
+//
+// So the menu shows the ACTING CHARACTER'S OWN acts against the TARGETED
+// enemy. Two dimensions, not one — and the previous model here was a flat
+// per-slot list of `{name, descb}` with neither, no cost, no simul, and no
+// character 4 at all.
+//
+// THE ARRAY IS `canactnoe`, WITH NO TRAILING L. Grepping `canactnoel` returns
+// zero files across the whole dump and reads as "Noelle has no act row
+// anywhere", which is false — the field exists for every enemy and
+// `scr_spellmenu_setup` has a `global.char[__i] == 4` branch for it.
+//
+// A SIXTH FIELD RIDES ALONG: `global.actactor[thisenemy][i]`, read at
+// Draw_0:1145 as `chartime` — and read ONLY under `global.char[charturn] == 1`,
+// so a partner's own rows never draw a portrait marker. It is not one of the
+// five the fill copies; it is read straight out of the global. Its default is
+// 1 (see ACT_ROW_DEFAULT) and `scr_actselect` branches on 2/3/4/5 to mark the
+// extra performers. `render/menu.js` carries the 11 case.
+//
+// `actactorsus` / `actactorral` / `actactornoe` DO NOT EXIST as a mechanism.
+// `obj_knight_enemy`'s Step has the single line `global.actactorsus[myself][0]
+// = 0` and that is the ONLY occurrence of any of the three spellings in the
+// entire dump — no initialiser in `scr_monster_actreset`, no reader anywhere.
+// ORIGINAL BUG: a write-only variable, the same family as `splitbox` and
+// `slice_delay`. It is not modelled and must not be "restored".
+
 /**
- * `scr_monstersetup`, monstertype 104 — the Knight's ACT list.
+ * `scr_monster_actreset(arg0)` — what every row of every enemy's table holds
+ * before `scr_monstersetup` writes anything. Byte-identical between the mod
+ * and its comparison tree, so this is the vanilla default too.
  *
- * Kris gets two, Susie and Ralsei one each, and the party ACTs really are
- * named `S-Action` and `R-Action` in the dump. They look like placeholders and
- * they are not: those are the strings the game draws. Renaming them to
- * something that reads better would be inventing content.
+ *     global.canact[arg0][__fj]     = 0;
+ *     global.actname[arg0][__fj]    = " ";
+ *     global.actactor[arg0][__fj]   = 1;
+ *     global.actdesc[arg0][__fj]    = " ";
+ *     global.actcost[arg0][__fj]    = 0;
+ *     global.actsimul[arg0][__fj]   = 0;
+ *     ...and the sus / ral / noe quintuplets, minus actactor.
+ *
+ * THE DEFAULT NAME AND DESCRIPTION ARE A SINGLE SPACE, not the empty string.
+ * It draws the same (a space inks nothing), but it is what the array holds,
+ * and a row the setup block leaves alone keeps it — which is why HoldBreath's
+ * description below is `' '`: the monstertype-104 block writes `actdesc[0]`
+ * and never `actdesc[1]`.
  */
-export const ACTS = [
-  [
-    { name: 'Check', descb: 'Useless#analysis' },
-    { name: 'HoldBreath', descb: '' },
-  ],
-  [{ name: 'S-Action', descb: '' }],
-  [{ name: 'R-Action', descb: '' }],
-];
+export const ACT_ROW_DEFAULT = Object.freeze({
+  canact: 0, name: ' ', actor: 1, descb: ' ', cost: 0, simul: 0,
+});
+
+/**
+ * One row of a monstersetup block: the FIVE fields the Draw's fill copies,
+ * materialised, with `scr_monster_actreset`'s value for any the block leaves
+ * alone.
+ *
+ * `actactor` IS DELIBERATELY NOT MATERIALISED HERE. It is not one of the five
+ * — the fill never touches it, and Draw_0:1145 reads `global.actactor[...][i]`
+ * straight out of the global, only under `global.char[charturn] == 1`. So a
+ * row carries `actor` when its setup block WRITES one (the mod's X-Slash
+ * writes 11) and otherwise carries nothing, and every reader takes
+ * `ACT_ROW_DEFAULT.actor` — the 1 `scr_monster_actreset` puts there. Writing a
+ * literal 1 onto every vanilla row would say "this block assigned an actor",
+ * which none of them do.
+ */
+const actRow = (r) => Object.freeze({
+  canact: 1,
+  name: ACT_ROW_DEFAULT.name,
+  descb: ACT_ROW_DEFAULT.descb,
+  cost: ACT_ROW_DEFAULT.cost,
+  simul: ACT_ROW_DEFAULT.simul,
+  ...r,
+});
+
+/**
+ * `scr_monstersetup`, the `global.monstertype[myself] == 104` block — THE
+ * KNIGHT'S WHOLE ACT TABLE, keyed by CHARACTER ID (1 Kris, 2 Susie,
+ * 3 Ralsei, 4 Noelle) exactly as the Draw's four `if`s key it.
+ *
+ * `obj_knight_enemy`'s Other_22 calls `scr_monstersetup()`, and
+ * `scr_encountersetup`'s `case 115` sets `global.monstertype[0] = 104` with
+ * `global.monsterinstancetype[0] = obj_knight_enemy`, so the Knight really
+ * does take this block and really is enemy slot 0 — `thisenemy` is 0 for the
+ * whole fight.
+ *
+ *     global.canact[myself][0]    = 1;  actname "Check"
+ *                                       actdesc "Useless#analysis"
+ *     global.canact[myself][1]    = 1;  actname "HoldBreath"
+ *     global.canactsus[myself][0] = 1;  actnamesus "S-Action"  actsimulsus 0
+ *     global.canactral[myself][0] = 1;  actnameral "R-Action"  actsimulral 0
+ *
+ * **NOELLE HAS NO ROW HERE, AND THAT IS A MEASURED ABSENCE, NOT A GAP IN THE
+ * READING.** The v1.05 comparison tree's 104 block writes `canact`,
+ * `canactsus` and `canactral` and never once touches `canactnoe`, so with
+ * `scr_monster_actreset`'s 0 still in place her list is EMPTY. She is not in
+ * the vanilla party either. Kaizo's mod build is where `canactnoe[myself][0] =
+ * 1` ("N-Action") appears, and that belongs to the kaizo side's hook, not
+ * here. An empty array is the answer, not a missing key: `actsFor` must be
+ * able to say "this character has no acts against this enemy" and be right.
+ *
+ * `S-Action` and `R-Action` are the GAME'S strings, not placeholders we chose.
+ * They are byte-identical in both dumps. Two further sites treat them as a
+ * generic label and neither is reachable in this fight — see ACT_GENERIC_NAMES.
+ */
+export const ACT_TABLES = Object.freeze({
+  104: Object.freeze({
+    1: Object.freeze([
+      actRow({ name: 'Check', descb: 'Useless#analysis' }),
+      actRow({ name: 'HoldBreath' }),
+    ]),
+    2: Object.freeze([actRow({ name: 'S-Action' })]),
+    3: Object.freeze([actRow({ name: 'R-Action' })]),
+    4: Object.freeze([]),
+  }),
+});
+
+/** `global.monstertype[0]` for this fight — scr_encountersetup case 115. */
+export const KNIGHT_MONSTERTYPE = 104;
+
+/**
+ * The three names the game itself treats as "this enemy has nothing specific
+ * for you". `obj_battlecontroller`'s Draw_0:794-805, inside the `bmenuno ==
+ * 13` arm of the enemy picker, replaces each of them with the literal
+ * `"Standard"` before drawing it beside the enemy's name:
+ *
+ *     var __actname = stringsetloc("Standard", ...);
+ *     var __plainactname = __actname;
+ *     if (global.char[global.charturn] == 2) __actname = global.actnamesus[i][...];
+ *     ...3 -> actnameral, 4 -> actnamenoe...
+ *     if (__actname == "S-Action") __actname = __plainactname;
+ *     if (__actname == "R-Action") __actname = __plainactname;
+ *     if (__actname == "N-Action") __actname = __plainactname;
+ *     draw_set_color(hpcolorsoft[global.char[global.charturn] - 1]);
+ *
+ * NOT REACHED BY THIS FIGHT, and the export exists so the fact has one home
+ * rather than being rediscovered as "the sim invented S-Action". bmenuno 13 is
+ * the target picker a PARTNER's act row opens out of the spell list, and the
+ * spell list is not where this engine puts act rows — see the note on
+ * `scr_spellmenu_setup` under ACT_SPECIAL_BY_CHAR.
+ */
+export const ACT_GENERIC_NAMES = Object.freeze(['S-Action', 'R-Action', 'N-Action']);
+
+/**
+ * `global.battlespellspecial[__i][__fj]` — `scr_spellmenu_setup` stamps 1 on
+ * Kris's act rows, 2 on Susie's, 3 on Ralsei's, 4 on Noelle's (:30, :54, :78,
+ * :98), and obj_battlecontroller's Draw_0:955-958 is the only reader:
+ *
+ *     draw_set_color(c_white);
+ *     if (global.battlespellspecial[thischar][...] >= 1)
+ *         draw_set_color(hpcolorsoft[global.char[thischar] - 1]);
+ *
+ * so an ACT row sitting in a character's SPELL list draws in that character's
+ * own soft HP colour instead of white — the "special colours" of S-Action,
+ * R-Action and N-Action. The colour itself is `HP_COLOR_SOFT` in sim/menu.js,
+ * derived there from the `HPCOLOR` that file already carries, because
+ * `hpcolorsoft` and `hpcolor` are the SAME four lines of
+ * obj_battlecontroller's Create (:230-237) and splitting them across two
+ * modules is how one of them drifts.
+ *
+ * `c_gray` STILL WINS over the character colour: the draw sets the soft colour
+ * first and the `global.tension < battlespellcost || _cant` test overwrites it
+ * (:966-969). An unaffordable S-Action is grey, not a dim fuchsia.
+ *
+ * **THIS ENGINE DOES NOT PUT ACT ROWS IN THE SPELL LIST, AND THAT IS A
+ * MEASURED POSITION RATHER THAN AN OVERSIGHT.** `scr_spellmenu_setup` is
+ * byte-identical between the mod and the comparison tree and does build them —
+ * `canactsus[0][0] == 1` becomes `battlespell[slot][0] = -1`, pushing Rude
+ * Buster to index 1. Landing that in this engine has now cost the kaizo byte
+ * gate 3,763 frames TWICE (`_rev1` trace f12492 -> f8729, first group TURN /
+ * `mnfight`: the oracle leaves the menu and the sim does not). `_rev1` is a
+ * recording of the real thing, and a recording outranks a GML reading. The
+ * table and the colour rule are recorded here; the row placement is not
+ * modelled until a recording says where the rows go.
+ */
+export const ACT_SPECIAL_BY_CHAR = Object.freeze({ 1: 1, 2: 2, 3: 3, 4: 4 });
+
+/**
+ * THE SLOT-ORDERED VIEW, for this fight's fixed party only.
+ *
+ * Kept because it is the shape every existing reader and check already knows,
+ * and derived from ACT_TABLES so there is still one source. `global.char` is
+ * [1, 2, 3] here, so slot i holds character i + 1 — the identity bridge, and
+ * the ONLY arrangement in which a slot-indexed act table is correct at all.
+ * Anything that fields a different party reads `actsFor`, which resolves the
+ * character id first.
+ */
+export const ACTS = [1, 2, 3].map((id) =>
+  ACT_TABLES[KNIGHT_MONSTERTYPE][id].map((r) => ({ name: r.name, descb: r.descb })));
 
 // ── THE CHARACTER-TABLE SEAM ────────────────────────────────────────────────
 //
@@ -116,13 +307,15 @@ export const ACTS = [
 //                               ADD ids this table lacks (8, 9, 10) and never
 //                               needs to restate the ones it has
 //   spellListFor(state, slot)   `global.spell[global.char[slot]]`
-//   actsFor(state, slot)        the canact/actname/actdesc fill for that
-//                               slot's character. A hook's row may carry
-//                               `usable` (the mod's `canpress`/`cant` gates,
-//                               computed live) and `cost` (`actcost`, TP
-//                               spent at the grid's confirm); listRows and
-//                               the confirm handler read both, and a vanilla
-//                               row has neither, so vanilla spends nothing.
+//   actsFor(state, slot)        the canact/actcost/actsimul/actname/actdesc
+//                               fill, for the CHARACTER the slot holds and
+//                               the enemy the fight is against. A hook's row
+//                               may carry `usable` (the mod's `canpress` /
+//                               `cant` gates, computed live) and `cost`
+//                               (`actcost`, TP spent at the grid's confirm);
+//                               listRows and the confirm handler read both,
+//                               and a vanilla row's cost is 0, so vanilla
+//                               spends nothing.
 //   spellCost / castSpell / resolveActPages take a hook the same way: it
 //   answers, or returns undefined (pages: a falsy value) to hand the id
 //   back to the vanilla body below.
@@ -134,8 +327,110 @@ export function spellListFor(state, c) {
   return state?.kaizo?.hooks?.spellList?.(state, c) ?? SPELL_LIST[c];
 }
 
+/**
+ * `global.monstertype[thisenemy]` — which enemy's table the grid reads. This
+ * fight has exactly one monster and it is slot 0 (scr_encountersetup case 115
+ * fills `monstertype[0]` and zeroes 1 and 2), so `thisenemy` is 0 and the type
+ * is 104. `state.monsterType` is the override a scene may publish; nothing in
+ * `sim/` writes it, which is what keeps the vanilla answer constant.
+ */
+export function enemyMonsterType(state) {
+  return state?.monsterType ?? KNIGHT_MONSTERTYPE;
+}
+
+/**
+ * `global.char[global.charturn]` — the character id in a party SLOT.
+ *
+ * The same two state fields `sim/menu.js`'s `charIdForSlot` reads, written out
+ * here rather than imported: `sim/menu.js` already imports this module, and
+ * the file's own note about `sim/actors.js` records that the cycle is not
+ * worth untangling for an accessor. `tools/verify-actmodel.mjs` asserts the
+ * two agree on every slot of every party, so the duplication cannot drift.
+ *
+ * ONE DELIBERATE DIFFERENCE, AND IT IS THE EMPTY SLOT. `charIdForSlot` answers
+ * `slot + 1` for a `global.char` of 0, because its caller is a COLOUR lookup
+ * and "must never be the thing that throws" — its own note says so. The ACT
+ * fill has no such licence: `global.char[global.charturn] == 0` matches none
+ * of the Draw's four `if`s, so `canact[__acti]` keeps the 0 the loop wrote and
+ * the grid is EMPTY. Returning 0 here and letting `actsFor` answer `[]` is
+ * that behaviour; falling back would hand an unoccupied slot the rows of
+ * whoever the vanilla party seats there, which on the Weird Route
+ * (`global.char = [1, 4, 0]`) gave the empty third slot Ralsei's R-Action.
+ * Found by check-act-selector, section C.
+ */
+function charIdOfSlot(state, slot) {
+  const ids = state?.partyCharIds ?? state?.kaizo?.globalChar;
+  if (Array.isArray(ids)) return ids[slot] > 0 ? ids[slot] : 0;
+  return slot + 1;
+}
+
+/**
+ * THE DRAW'S OWN SELECTOR, in one function: the acting character's rows
+ * against the targeted enemy.
+ *
+ * `obj_battlecontroller` Draw_0:1059-1096 picks the quintuplet by
+ * `global.char[global.charturn]` and indexes it `[thisenemy][__acti]`. So the
+ * argument is a SLOT and the table is keyed by CHARACTER — the two coincide
+ * only while `global.char` is [1, 2, 3], which is this fight and nothing else.
+ *
+ * A character with no row for this enemy gets `[]`, not `undefined`: the fill
+ * zeroes `canact[__acti]` before every branch, so "no rows" is a real, drawn
+ * answer (an empty grid, which the confirm handler already turns into
+ * `snd_error`) and not a missing lookup.
+ */
 export function actsFor(state, c) {
-  return state?.kaizo?.hooks?.actList?.(state, c) ?? ACTS[c];
+  const hooked = state?.kaizo?.hooks?.actList?.(state, c);
+  if (hooked) return hooked;
+  const table = ACT_TABLES[enemyMonsterType(state)];
+  return table?.[charIdOfSlot(state, c)] ?? [];
+}
+
+/**
+ * `cant` — the ACT grid's grey, computed from the row rather than supplied.
+ *
+ * obj_battlecontroller Draw_0:1140-1246 walks six gates and any one of them
+ * sets `cant = 1`, which swaps `draw_set_color(c_white)` for `c_gray` and
+ * makes the confirm refuse. Two of the six are enemy-specific (monstertype 59
+ * with `flag[1044] < 150`, and monstertype 103's Tenna score) and neither
+ * enemy is in this fight, so they are not modelled. The four that generalise:
+ *
+ *     chartime == 2 || chartime == 4 -> havechar[1] == 0 || global.hp[2] <= 0
+ *     chartime == 3 || chartime == 4 -> havechar[2] == 0 || global.hp[3] <= 0
+ *     chartime == 5                  -> havechar[3] == 0 || global.hp[4] <= 0
+ *     global.tension < acttpcost[i]
+ *
+ * — a row performed WITH somebody needs that somebody present and standing,
+ * and any row needs its TP. `chartime` is `actactor`, so `actor` 4 is the
+ * both-of-them case and is tested twice, which is why it is two conditions
+ * here rather than a switch.
+ *
+ * `actor` 11 is the mod's own and INVERTS the test — the row is usable only
+ * once every partner is DOWN (Draw_0:1173-1192). It is listed here so the
+ * vanilla values 1..5 are not mistaken for the whole set; the 11 case is a
+ * kaizo row and arrives with its own `usable`, which wins below.
+ *
+ * VANILLA IS INERT THROUGH THIS: every row of monstertype 104 has `actor` 1
+ * and `cost` 0, so nothing is ever greyed and the answer is always true.
+ */
+export function actUsable(state, slot, row) {
+  if (!row) return false;
+  if (row.usable !== undefined) return row.usable;
+  const actor = row.actor ?? ACT_ROW_DEFAULT.actor;
+  // `havechar[n] == 0 || global.hp[c] <= 0` — the partner has to be IN the
+  // party and STANDING. `charIdOfSlot` answers 0 for an unoccupied slot, which
+  // no character id matches, so the presence half needs no second test.
+  const upById = (id) => {
+    for (let s = 0; s < 3; s++) {
+      if (charIdOfSlot(state, s) !== id) continue;
+      return (state?.partyHp?.[s] ?? 0) > 0;
+    }
+    return false;
+  };
+  if (actor === 2 || actor === 4) { if (!upById(2)) return false; }
+  if (actor === 3 || actor === 4) { if (!upById(3)) return false; }
+  if (actor === 5) { if (!upById(4)) return false; }
+  if ((state?.tension ?? 0) < (row.cost ?? ACT_ROW_DEFAULT.cost)) return false;
+  return true;
 }
 
 /**

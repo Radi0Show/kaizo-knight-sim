@@ -30,14 +30,61 @@
 // taking the finger for a scroll or a gesture) clears it without firing
 // either job: a stray restart is exactly what the hold exists to prevent.
 
+// REBINDABLE SINCE v1.0.52, with one honest limitation. A touch profile
+// (input/bindings.js, `DEFAULT_BINDINGS.touch`) assigns actions to SLOTS —
+// `pad`, `btnZ`, `btnX`, `btnR` — because that is what a finger can actually
+// choose between on an overlay with four targets. Pass `profile` plus `slots`
+// and the button wiring below is derived from it; pass `buttons` directly and
+// it is used verbatim, which is what web/main.js and the suites do today.
+//
+// THE PAD'S DIRECTIONS ARE GEOMETRIC, NOT REBINDABLE. Its eight sectors emit
+// left/right/up/down by angle; the `pad` code stands for all four at once.
+// Any non-direction action a profile puts on `pad` is ignored rather than
+// silently half-wired — a slot that reports "confirm" from a sector has no
+// sensible meaning, and pretending otherwise is the half-bound state the
+// binding model exists to prevent.
+
 import { createInput } from './state.js';
+import { ACTIONS, SIM_ACTIONS, DEFAULT_BINDINGS } from './bindings.js';
+import { NO_METHOD } from './method.js';
+
+const SIM = new Set(SIM_ACTIONS);
+const DIRECTIONS = new Set(['left', 'right', 'up', 'down']);
+
+/**
+ * Invert a touch profile into the `buttons` list this binder runs.
+ * `slots` maps a slot id to its element; a slot with no element is skipped.
+ */
+export function buttonsFromProfile(profile, slots = {}) {
+  const prof = profile ?? DEFAULT_BINDINGS.touch;
+  const out = [];
+  for (const [code, el] of Object.entries(slots)) {
+    if (code === 'pad' || !el) continue;
+    const actions = [];
+    for (const a of ACTIONS) {
+      if (!(prof[a] ?? []).includes(code)) continue;
+      if (DIRECTIONS.has(a)) continue; // see "THE PAD'S DIRECTIONS", above.
+      actions.push(a);
+    }
+    if (actions.length) out.push({ el, actions, code });
+  }
+  return out;
+}
 
 const DEAD_ZONE = 0.28; // fraction of the pad's radius; inside it, no input.
 /** How long R is held before the tap becomes an exit. */
 const HOLD_MS = 600;
 
-export function bindTouch({ pad, buttons = [], onReset, onExit, onAction, holdMs = HOLD_MS } = {}) {
+export function bindTouch({
+  pad, buttons = null, slots = null, profile = null,
+  onReset, onExit, onAction, holdMs = HOLD_MS, method = NO_METHOD,
+} = {}) {
+  // `buttons` wins when both are given: an explicit list is a caller that
+  // knows exactly what it wants, and the shipped page still passes one.
+  const wiring = buttons ?? (slots || profile ? buttonsFromProfile(profile, { ...slots, pad: null }) : []);
   const held = new Set();
+  /** `{ onCode }` while a rebind capture is armed; null otherwise. */
+  let capture = null;
   const pressedSinceRead = new Set();
   /** pointerId -> Set of actions that pointer is holding. */
   const byPointer = new Map();
@@ -100,9 +147,11 @@ export function bindTouch({ pad, buttons = [], onReset, onExit, onAction, holdMs
   // gone — a finger lifted in the same tick, or a synthetic event. The
   // capture is a nicety (it keeps a drag that wanders off the element from
   // orphaning its release); losing it must never cost the press itself.
-  const capture = (el, id) => { try { el.setPointerCapture(id); } catch { /* gone */ } };
+  const grab = (el, id) => { try { el.setPointerCapture(id); } catch { /* gone */ } };
   const onPadDown = (ev) => {
-    capture(pad, ev.pointerId);
+    method.note('touch');
+    if (capture) { ev.preventDefault(); const cb = capture; capture = null; cb.onCode('pad'); return; }
+    grab(pad, ev.pointerId);
     onPadMove(ev);
   };
   const onPadUp = (ev) => {
@@ -117,12 +166,21 @@ export function bindTouch({ pad, buttons = [], onReset, onExit, onAction, holdMs
   }
 
   // ---- the buttons --------------------------------------------------------
-  for (const { el, actions } of buttons) {
-    if (!el) continue;
+  // MUTABLE ENTRIES so `setProfile` can rewire without tearing down the
+  // listeners (and without orphaning a pointer that is mid-press). Each
+  // handler reads `entry.actions` at event time, never a closed-over copy.
+  const entries = wiring.filter((b) => b.el).map((b) => ({ el: b.el, actions: [...b.actions], code: b.code ?? null }));
+  for (const entry of entries) {
+    const { el, code } = entry;
     el.addEventListener('pointerdown', (ev) => {
       ev.preventDefault();
-      capture(el, ev.pointerId);
+      method.note('touch');
+      // CAPTURE COMES FIRST and swallows the tap, exactly as on the keyboard:
+      // assigning a slot must not also press the row behind the prompt.
+      if (capture) { const cb = capture; capture = null; cb.onCode(code); return; }
+      grab(el, ev.pointerId);
       el.classList.add('down');
+      const actions = entry.actions;
       if (actions.includes('reset')) {
         // Arm the hold. The timer fires the EXIT and forgets the pointer, so
         // the release that follows finds nothing and restarts nothing; a
@@ -166,13 +224,58 @@ export function bindTouch({ pad, buttons = [], onReset, onExit, onAction, holdMs
   }
 
   return {
-    /** Snapshot for one simulated frame. Clears the tap latch. */
+    /**
+     * Snapshot for one simulated frame. Clears the tap latch.
+     *
+     * DRIVER ACTIONS ARE FILTERED OUT here as on the keyboard: the object the
+     * sim is handed must keep exactly the shape input/state.js produces. In
+     * practice `reset`/`exit` never reach the latch anyway (the R button
+     * returns before press(), splitting the two by duration), but a profile
+     * that puts one on another slot must not be able to widen the object.
+     */
     read() {
       const over = {};
-      for (const a of held) over[a] = true;
-      for (const a of pressedSinceRead) over[a] = true;
+      for (const a of held) if (SIM.has(a)) over[a] = true;
+      for (const a of pressedSinceRead) if (SIM.has(a)) over[a] = true;
       pressedSinceRead.clear();
       return createInput(over);
     },
+
+    /**
+     * Rewire the slots from a new touch profile. Held state is dropped: a
+     * finger down on a button that just changed meaning is ambiguous, and a
+     * stuck action is worse than a missed one.
+     *
+     * AN ENTRY WITH NO SLOT ID IS LEFT ALONE. The legacy `buttons` API carries
+     * no `code`, so a profile has nothing to say about it; clearing those
+     * would silently unwire the shipped page's overlay the first time anyone
+     * called this on it.
+     */
+    setProfile(next) {
+      const withCode = entries.filter((e) => e.code !== null);
+      const wanted = buttonsFromProfile(next, Object.fromEntries(withCode.map((e) => [e.code, e.el])));
+      const byCode = new Map(wanted.map((w) => [w.code, w.actions]));
+      for (const e of withCode) e.actions = byCode.get(e.code) ?? [];
+      held.clear();
+      pressedSinceRead.clear();
+      byPointer.clear();
+    },
+
+    /**
+     * REBIND CAPTURE. Reports the SLOT the next touch lands on — `pad`,
+     * `btnZ`, `btnX`, `btnR` — because a slot is what a touch profile binds.
+     * The tap is swallowed. Reports `null` when cancelled.
+     */
+    captureNext(onCode) {
+      if (capture) capture.onCode(null);
+      capture = { onCode };
+      const mine = capture;
+      return () => { if (capture === mine) { capture = null; mine.onCode(null); } };
+    },
+
+    capturing() { return capture !== null; },
+
+    /** The slots this binder actually has elements for. */
+    slots() { return entries.map((e) => e.code).filter((c) => c !== null); },
   };
 }

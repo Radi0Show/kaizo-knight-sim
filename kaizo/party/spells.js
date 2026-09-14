@@ -821,6 +821,96 @@ export const NOELLE_HOLDBREATH_PAGES = {
   again: ['* Noelle held her breath in panic..^1.&* But nothing seemed to happen.'],
 };
 
+/**
+ * S-ACTION — Step_0:1152-1167 (`_susieact == 1 && actconsus == 1`), and the
+ * mod CUT ITS LAST PAGE. This is the one act-text delta the 104 block does
+ * not show, because it lives in the knight's Step and not in monstersetup.
+ *
+ * The block is byte-identical to `gml_vanilla_v105`'s (Step_0:818-826) for
+ * its first six `msg` writes, and then the two trees part:
+ *
+ *     v105  scr_anyface_next("none", 0);
+ *           msgnextloc("* (Susie will not ACT any more.)/%", "..._gml_432_0");
+ *     mod   global.msg[6] = string_replace_all(global.msg[6], "/", "/%");
+ *
+ * `msgset(0, s)` writes `msg[0]`; `scr_anyface_next` is `global.msgno++`
+ * followed by `scr_susface(msgno, e)`, which writes a CONTROL-ONLY page
+ * (`"\TX \F0 \E~1 \FS \TS %"` — gml_GlobalScript_scr_susface.gml:3, a `%`
+ * auto-advance that shows no text) into `msg[1]`; the five `msgnext` calls
+ * then fill `msg[2..6]`. So `msg[6]` IS the mod's last written page, "Then
+ * we'll just. Have to do things the hard way.", and the replace re-terminates
+ * it from `/` (page halt, more to come) to `/%` (halt and end).
+ *
+ * THE MOD'S S-ACTION IS THEREFORE THE VANILLA LIST MINUS ITS FINAL PAGE —
+ * `sim/dialogue.js`'s `ACT_PAGES.susie.slice(0, -1)`, which the check asserts
+ * BOTH ways so a correction to the vanilla text cannot silently desync this
+ * one. It is written out in full here because this file's other page tables
+ * are (CHECK_PAGES, NACTION_PAGES), and because "* (Susie will not ACT any
+ * more.)" is a line a reader will look for and must be able to find absent.
+ *
+ * The `\EJ`/`\EV`/`\EW`/`\EX` face codes are stripped exactly as
+ * `sim/dialogue.js` strips them: the sim draws no battle portraits.
+ */
+export const SACTION_PAGES = [
+  '* Susie talked to the Knight!',
+  "* I don't know what the hell you are, but...",
+  '* Leave Toriel alone! You hear me!?',
+  '* ...',
+  "* ... Fine, you don't wanna listen?",
+  '* Then we\'ll just. Have to do things the hard way.',
+];
+
+/**
+ * THE KRIS-LESS FALLBACK ROWS, all three of them. `scr_monstersetup`'s 104
+ * block ends with `if (!scr_havechar(1))`, which replaces slot 0 of Susie's,
+ * Ralsei's AND Noelle's act list with "HoldBreath"
+ * (scr_monstersetup.gml:1869-1880 — the mod's own addition; the block does not
+ * exist in `gml_vanilla_v105`). The knight's Step_0 answers it with a matching
+ * `_xact = 2` arm per character (Step_0:933-946 sets the 2; the arms are
+ * :1190-1205 Susie, :1235-1250 Ralsei, :1276-1291 Noelle) and all three are
+ * the SAME shape:
+ *
+ *     if (holdbreathcount == 0) { <first>;  holdbreathcount++; }
+ *     else                      { <again>; }
+ *
+ * — the KNIGHT's one shared `holdbreathcount` (`state.knight.holdbreathcount`,
+ * the same counter `sim/spells.js`'s `holdBreath` clamps for Kris), tested at
+ * ZERO rather than Kris's `<= 1`, and NEVER clamped back.
+ *
+ * NOTHING HERE CLEARS THE ROW. `global.canactsus[myself][0] = 0` is inside the
+ * `_susieact == 1` arm only, so the fallback HoldBreath is REPEATABLE where
+ * S-Action is once-only — which is why the Susie branch below must not set
+ * `susieUsed` on this path.
+ *
+ * UNREACHABLE IN BOTH SHIPPING ROUTES, and translated anyway because the rows
+ * exist: `scr_havechar(1)` is party MEMBERSHIP, not survival, and Kris is in
+ * `global.char` for the Normal Route ([1, 2, 3]) and the Weird Route
+ * ([1, 4, 0]) alike. `kaizoActsForRoster` already builds the names for a
+ * Kris-less roster; without these the row would be LABELLED HoldBreath and
+ * play S-Action's six-page monologue.
+ */
+export const SUSIE_HOLDBREATH_PAGES = {
+  first: ['* Susie kept her breath held in focus..^1.&* The SOUL now moves faster.'],
+  again: ['* Susie kept her breath held in focus..^1.&* But nothing seemed to happen.'],
+};
+export const RALSEI_HOLDBREATH_PAGES = {
+  first: ['* Ralsei held his breath to stay calm..^1.&* The SOUL now moves faster.'],
+  again: ['* Ralsei held his breath to stay calm..^1.&* But nothing seemed to happen.'],
+};
+
+/**
+ * The `_xact == 2` arm, once. Returns `first` while the knight's shared
+ * `holdbreathcount` is 0 (incrementing it), `again` forever after.
+ */
+function companionHoldBreath(state, pages) {
+  const kn = state.knight;
+  if ((kn.holdbreathcount ?? 0) === 0) {
+    kn.holdbreathcount = 1;
+    return pages.first;
+  }
+  return pages.again;
+}
+
 /** `* Kris used X-Slash!/%` — Step_0:984, one page. */
 export const XSLASH_PAGES = ['* Kris used X-Slash!'];
 
@@ -849,25 +939,27 @@ export function kaizoResolveActPages(state, slot, actId) {
     }
     return undefined;
   }
+  // `if (!scr_havechar(1)) { _susieact = 2; _ralseiact = 2; _noelleact = 2; }`
+  // — Step_0:933-946, ALL THREE companions at once and before any of the arms
+  // below is tested. See SUSIE_HOLDBREATH_PAGES for the whole receipt.
+  const krisAbsent = !havechar(state, CHAR_KRIS);
+
   if (charId === CHAR_SUSIE) {
-    // `global.canactsus[myself][0] = 0` — one performance (sim/spells.js).
+    // `_susieact == 2` does NOT clear the row, so `susieUsed` stays unset and
+    // the fallback HoldBreath can be taken every turn.
+    if (krisAbsent) return companionHoldBreath(state, SUSIE_HOLDBREATH_PAGES);
+    // `global.canactsus[myself][0] = 0` — one performance (Step_0:1167).
     n.susieUsed = true;
-    return ACT_PAGES.susie;
+    return SACTION_PAGES;
   }
   if (charId === CHAR_RALSEI) {
+    if (krisAbsent) return companionHoldBreath(state, RALSEI_HOLDBREATH_PAGES);
     n.ralsei = (n.ralsei ?? 0) + 1;
     return ACT_PAGES[n.ralsei <= 1 ? 'ralsei' : 'ralsei_again'];
   }
   if (charId === CHAR_NOELLE) {
-    if (!havechar(state, CHAR_KRIS)) {
-      // `_noelleact = 2` — the HoldBreath fallback row.
-      const kn = state.knight;
-      if ((kn.holdbreathcount ?? 0) === 0) {
-        kn.holdbreathcount = (kn.holdbreathcount ?? 0) + 1;
-        return NOELLE_HOLDBREATH_PAGES.first;
-      }
-      return NOELLE_HOLDBREATH_PAGES.again;
-    }
+    // `_noelleact = 2` — the HoldBreath fallback row.
+    if (krisAbsent) return companionHoldBreath(state, NOELLE_HOLDBREATH_PAGES);
     const nact = n.nact ?? 0;
     n.nact = nact + 1;
     if (nact === 0 && side === 'a') return NACTION_PAGES.first_a;
@@ -1154,6 +1246,31 @@ export function ensureSpellController(state) {
  * so a check that wraps one to prove it fired is not silently replaced
  * (the same courtesy kaizo-fight.js extends knightTarget).
  */
+/**
+ * THE ACT PAGES, INSTALLED WITHOUT A ROSTER.
+ *
+ * `installKaizoMenu` below is roster-gated by construction — kaizo-fight.js
+ * calls it inside `if (v.party)`, and `party` is defined on version D alone.
+ * That was right for everything it installs EXCEPT the act pages, and the
+ * exception made the S-Action rewrite unreachable in every shipping version:
+ * V-C is the only one with a Susie to perform it and never installed the hook,
+ * while V-D installed it and has no Susie. A player saw the vanilla seven
+ * pages, ending on "(Susie will not ACT any more.)", which the mod deletes.
+ *
+ * `kaizoResolveActPages` is CHARACTER-keyed — it opens with
+ * `charIdOf(state, slot)` and reads nothing the roster provides — so it is
+ * installable on its own. Everything else in installKaizoMenu genuinely does
+ * need the roster and stays behind the gate.
+ *
+ * `??=` so a version that installs the full menu afterwards is not replaced.
+ */
+export function installKaizoActPages(state) {
+  state.kaizo = state.kaizo ?? {};
+  const hooks = state.kaizo.hooks = state.kaizo.hooks ?? {};
+  hooks.resolveActPages ??= kaizoResolveActPages;
+  return hooks;
+}
+
 export function installKaizoMenu(state) {
   state.kaizo = state.kaizo ?? {};
   const hooks = state.kaizo.hooks = state.kaizo.hooks ?? {};

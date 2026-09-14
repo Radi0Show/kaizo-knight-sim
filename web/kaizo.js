@@ -541,8 +541,18 @@ try {
   if (typeof saved?.shake === 'boolean') title.shake = saved.shake;
   if (saved?.scaling === 'fit' || saved?.scaling === 'pixel') title.scaling = saved.scaling;
   // TOUCH BUTTONS (the Z/X swap). A missing field is simply false — no `v`
-  // bump needed, nothing older can have set it.
+  // bump needed, nothing older can have set it. The field keeps its name now
+  // that the row is edited on the CONTROLS page instead of GRAPHICS.
   if (typeof saved?.swapZX === 'boolean') title.swapZX = saved.swapZX;
+  // HOLDBREATH SPEED (settings -> CONTROLS). Same rule: absent is false, and
+  // false is the no-op. BOTH PAGES OR NEITHER — this build and the real
+  // fight's have separate keys precisely because they share an origin in
+  // production, so a setting added to one and forgotten in the other is a
+  // setting that vanishes when the player crosses between them.
+  if (typeof saved?.holdBreath === 'boolean') title.holdBreath = saved.holdBreath;
+  // THE BINDINGS, AS AN OPAQUE BLOB — the input layer owns the contents; this
+  // only carries it across a reload. See web/main.js for the same two lines.
+  if (saved?.bindings && typeof saved.bindings === 'object') title.bindingsSaved = saved.bindings;
   // `global.kaizo_practice` — see kaizoPractice below.
   if (saved?.prac) kaizoPracticeSaved = 1;
 } catch { /* a corrupt entry falls back to the defaults */ }
@@ -903,6 +913,11 @@ function persistSettings() {
       shake: title.shake,
       scaling: title.scaling,
       swapZX: title.swapZX,
+      // CONTROLS page: the Single Attack soul speed, and the input layer's own
+      // binding blob. `?? undefined` keeps the key out of the entry on a build
+      // that never armed bindings.
+      holdBreath: title.holdBreath,
+      bindings: title.bindings?.custom ?? undefined,
       // `global.kaizo_practice`, which the mod persists to dr.ini the same
       // way (`kaizo_settings_save()`, "Prac"). `?prac=` wins for a session
       // and is remembered from here on, which is what the settings sign's
@@ -1189,7 +1204,7 @@ function frame(now) {
     ctx.fillRect(0, 0, renderer.VIEW_W, renderer.VIEW_H);
     drawBackground(ctx, state, renderer.sprites);
     drawTitle(ctx, title, renderer.sprites, ATTACK_MENU, { title: KAIZO_WORDMARK() });
-    requestAnimationFrame(frame);
+    scheduleFrame();
     return;
   }
 
@@ -1311,7 +1326,7 @@ function frame(now) {
     ctx.fillRect(0, 0, renderer.VIEW_W, renderer.VIEW_H);
     drawBackground(ctx, state, renderer.sprites);
     drawTitle(ctx, title, renderer.sprites, ATTACK_MENU, { title: KAIZO_WORDMARK() });
-    requestAnimationFrame(frame);
+    scheduleFrame();
     return;
   }
 
@@ -1374,7 +1389,7 @@ function frame(now) {
       introSeq = null;
       maskHeldInput();
     }
-    requestAnimationFrame(frame);
+    scheduleFrame();
     return;
   }
 
@@ -1437,7 +1452,7 @@ function frame(now) {
       maskHeldInput();
       tvOff = createTvTurnoff();
     }
-    requestAnimationFrame(frame);
+    scheduleFrame();
     return;
   }
 
@@ -1501,7 +1516,7 @@ function frame(now) {
       maskHeldInput();
       tvOff = createTvTurnoff();
     }
-    requestAnimationFrame(frame);
+    scheduleFrame();
     return;
   }
 
@@ -1524,7 +1539,7 @@ function frame(now) {
     // Back to the menu by the same door Escape uses — exitRun() nulls tvOff
     // and masks whatever is held (it used to do all of that inline here).
     if (tvOff.done) exitRun();
-    requestAnimationFrame(frame);
+    scheduleFrame();
     return;
   }
 
@@ -1604,7 +1619,7 @@ function frame(now) {
     }
     renderer.draw(state);
     if (over) drawGameOver(ctx, over, renderer.sprites);
-    requestAnimationFrame(frame);
+    scheduleFrame();
     return;
   }
 
@@ -1830,7 +1845,7 @@ function frame(now) {
   // (render/title.js draws web/version.js), and KAIZO_NOTE reaches the
   // console. Nothing of ours is drawn over the 640x480 frame — it is the
   // game's own art.
-  requestAnimationFrame(frame);
+  scheduleFrame();
 }
 
 // THE LOOP, plus a WATCHDOG for browsers that starve requestAnimationFrame.
@@ -1843,26 +1858,94 @@ function frame(now) {
 // double-step — the accumulator absorbs it.
 let lastFrameRun = performance.now();
 boot('starting…');
-requestAnimationFrame(frame);
+
+// ONE CHAIN, NOT ONE PER CALLER. Every exit path of frame() asks for the next
+// animation frame, and for years that was a bare `requestAnimationFrame(frame)`
+// — correct while rAF is the only thing that ever calls frame(), and a leak the
+// moment anything else does.
+//
+// MEASURED on this driver and on knight-sim's identical loop, in a real browser
+// with a virtual monitor standing in for the compositor. knight-sim's numbers —
+// kaizo/tools/checks/check-rafloop.mjs carries this page's own, and runs the
+// same loop headlessly:
+//
+//   before a tab switch      60.1 frame()/s    1 live rAF(frame) chain
+//   after one switch        490.5 frame()/s    8 chains
+//   after two               886.8 frame()/s   15 chains
+//   after three            1314.7 frame()/s   28 chains
+//
+// The watchdog's fallback armed for 272ms, 280ms and 524ms on those switches and
+// DISARMED itself correctly every time — it was never stuck. But it had called
+// frame() 7, 7 and 13 times, and each of those calls ended in a
+// `requestAnimationFrame(frame)` that no rAF callback was consuming. Chains =
+// 1 + every fallback-driven call ever made, to the unit. They never retire, so
+// the page draws 8x, 15x, 28x per paint until a reload — "lags super bad until
+// you refresh the page".
+//
+// A single handle fixes it structurally: whoever drives frame(), at most one
+// request is ever outstanding, so the loop cannot fork no matter how the
+// watchdog behaves.
+let rafId = 0;
+function scheduleFrame() {
+  if (rafId) cancelAnimationFrame(rafId);
+  rafId = requestAnimationFrame(frame);
+}
+scheduleFrame();
 // A probe rAF, separate from the game loop, is the liveness signal; the
 // fallback is a 33ms interval driving frame() at full rate. It ARMS when the
 // probe has been silent half a second with the page visible, and DISARMS the
 // moment real rAF ticks return, so a browser that merely throttled catches
 // back up without ever running both for long.
 let rafTick = performance.now();
-const rafProbe = () => { rafTick = performance.now(); requestAnimationFrame(rafProbe); };
-requestAnimationFrame(rafProbe);
+let probeId = 0;
+const rafProbe = () => { rafTick = performance.now(); probeId = requestAnimationFrame(rafProbe); };
+function scheduleProbe() {
+  if (probeId) cancelAnimationFrame(probeId);
+  probeId = requestAnimationFrame(rafProbe);
+}
+scheduleProbe();
 let fallback = null;
+function disarmFallback() {
+  if (fallback) {
+    clearInterval(fallback);
+    fallback = null;
+  }
+}
 setInterval(() => {
   const stale = performance.now() - rafTick > 500;
   const visible = document.visibilityState === 'visible';
   if (stale && visible && !fallback) {
     fallback = setInterval(() => frame(performance.now()), 33);
-  } else if (!stale && fallback) {
-    clearInterval(fallback);
-    fallback = null;
+  } else if (!stale) {
+    disarmFallback();
   }
 }, 250);
+
+// A HIDDEN TAB IS NOT A STARVED BROWSER, and the watchdog cannot tell the two
+// apart on its own. A backgrounded tab gets no animation frames at all, so the
+// probe stops and `rafTick` goes as stale as Opera GX's would; the only thing
+// keeping the fallback from arming while you are away is the `visible` term.
+// On the way back there is a window where the page is already visible and the
+// first animation frame has not landed yet — a browser resumes an overdue timer
+// before it resumes rendering — and the poller firing inside that window is
+// what armed the fallback on all three measured switches.
+//
+// So: on becoming visible, say so directly. Refresh the liveness stamp (nothing
+// was starved, nothing needs rescuing), re-arm the probe and the loop in case
+// either request was dropped rather than merely deferred, and clear any
+// fallback that did arm. On becoming hidden, clear it too — nothing should be
+// driving frame() for a tab nobody is looking at.
+//
+// The watchdog keeps its job: `rafTick` still goes stale on a VISIBLE page
+// whose rAF is genuinely dead, which is the Opera GX case it was written for.
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') {
+    rafTick = performance.now();
+    scheduleProbe();
+    scheduleFrame();
+  }
+  disarmFallback();
+});
 
 // THE APP SHELL. The service worker is what turns add-to-home-screen into a
 // standalone app (and keeps the fight loadable offline). Registration failing

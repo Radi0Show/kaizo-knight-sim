@@ -95,8 +95,22 @@ assert(typeof simSpells.spellInfo === 'function' && typeof simSpells.spellListFo
   const c = createState({ seed: 5, traceBulletSlots: 8 });
   buildKaizoScene(c, { version: 'C' });
   const h = c.kaizo.hooks ?? {};
-  assert(!h.spellList && !h.actList && !h.spellInfo && !h.castSpell && !h.resolveActPages,
-    'V-C installs none of the menu hooks (the A-Side keeps the slot tables)');
+  // V-C INSTALLS EXACTLY ONE HOOK, AND THIS ASSERTION USED TO FORBID IT.
+  //
+  // It read `!h.resolveActPages` too, pinning the state in which the mod's
+  // S-Action rewrite reached NO player: `installKaizoMenu` is party-gated and
+  // `party` is version D alone, so V-C — the only version with a Susie to
+  // perform S-Action — never installed it, and V-D installed it with no Susie.
+  // The act pages are character-keyed (`charIdOf`) and need no roster, so they
+  // are installed for every kaizo version now.
+  //
+  // What the A-Side must still NOT have is everything the roster feeds. That
+  // is the real invariant and it is what is asserted here — a widened install
+  // that dragged the slot tables in with it fails this line.
+  assert(typeof h.resolveActPages === 'function',
+    'V-C installs the act-pages hook (character-keyed, needs no roster)');
+  assert(!h.spellList && !h.actList && !h.spellInfo && !h.castSpell,
+    'V-C installs NO roster-fed hook (the A-Side keeps the slot tables)');
   assertDeep(simSpells.spellListFor(c, 1), simSpells.SPELL_LIST[1], 'V-C slot 1 spell list is the vanilla table');
   assertDeep(simSpells.actsFor(c, 1).map((a) => a.name), ['S-Action'], 'V-C slot 1 ACT is S-Action');
   assertEq(simSpells.spellCost(c, 1, 4), 125, 'V-C Rude Buster still costs 125 through the seam');

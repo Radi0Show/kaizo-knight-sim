@@ -297,8 +297,12 @@ const director = {
 /**
  * @param opts.attack      an id from ATTACK_MENU
  * @param opts.difficulty  one of that entry's difficulties
+ * @param opts.holdBreath  arm Kris's HoldBreath before the drill starts
  */
-export function buildSingleAttackScene(state, { seed = 12345, attack = 'stars', difficulty = 0 } = {}) {
+export function buildSingleAttackScene(
+  state,
+  { seed = 12345, attack = 'stars', difficulty = 0, holdBreath = false } = {},
+) {
   const m = menuEntry(attack);
   // The practice scene skips the menu (it drills ONE attack on repeat), but
   // the renderer always draws the charboxes, so the state has to exist.
@@ -315,6 +319,24 @@ export function buildSingleAttackScene(state, { seed = 12345, attack = 'stars', 
     name: m.name,
     difficulty: m.difficulties.includes(difficulty) ? difficulty : m.difficulties[0],
   };
+  // HOLDBREATH, WHICH THIS MODE CANNOT OTHERWISE REACH.
+  //
+  // The drill has no menu, so it has no ACT, so `holdbreathcount` is 0 for
+  // every run and the soul walks at 4 — while the fight the drill is practice
+  // FOR is very often being played at 5, because HoldBreath is free, permanent
+  // and the first thing Kris's ACT list offers. Practising a pattern at the
+  // wrong speed is practising a different pattern.
+  //
+  // ARMED THE WAY THE ACT ARMS IT, not by writing a speed: `holdbreathcount`
+  // is exactly what `scr` sets (spells.js `holdBreath`, the dump's
+  // `holdbreathcount++` then clamp to 1), and `soulSpeed` reads it for the 5
+  // and, while ROARING is on screen, the 6. No number is invented here and the
+  // ROARING bump comes along for free.
+  //
+  // FALSE LEAVES THE COUNT AT createKnight()'s OWN 0 — not merely equivalent
+  // to today, IDENTICAL to it, which is what the recorded-fight byte gates
+  // require of a default.
+  if (holdBreath) state.knight.holdbreathcount = 1;
   state.phase = m.name;
 
   spawn(state, knightActor, { x: KNIGHT.x, y: KNIGHT.ystart });

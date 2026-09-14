@@ -81,11 +81,63 @@ export const ITEM_PICKER = [0, ...ITEM_IDS];
 export const SETTINGS_PAGES = [
   { id: 'audio', name: 'MUSIC / SFX' },
   { id: 'graphics', name: 'GRAPHICS' },
+  // CONTROLS sits with the other REAL pages, above the two odd rows. It is
+  // where everything about how the player drives the soul now lives — the
+  // on-screen button layout (which used to be GRAPHICS' third row and is a
+  // control, not a picture), the Single Attack soul speed, and, on a build
+  // whose driver arms `title.bindings`, the per-device binding list.
+  { id: 'controls', name: 'CONTROLS' },
   // SHARE is not a page — confirming on it copies a link and stays put, which
   // is why it returns `out.share` instead of setting `s.page`.
   { id: 'share', name: 'SHARE SETUP' },
   { id: 'unused', name: 'UNUSED' },
 ];
+
+/**
+ * THE CONTROLS PAGE'S ROWS — the count the cursor wraps on AND the list the
+ * renderer draws, so the two cannot disagree.
+ *
+ * Returning name and value together (the way `render/title.js` already builds
+ * its graphics and audio rows inline) is what lets the third row appear and
+ * disappear with `title.bindings` without a second length rule living in the
+ * handler. The strings are the ones the player reads; nothing here explains
+ * itself on screen.
+ */
+export function controlRows(title) {
+  const rows = [
+    // Moved intact from GRAPHICS: same flag, same two captions, same meaning
+    // (the ORDER the on-screen buttons sit in, never a remap — the letters
+    // travel with the buttons).
+    { id: 'touch', name: 'TOUCH BUTTONS', value: title.swapZX ? 'X / Z' : 'Z / X' },
+    // SINGLE ATTACK ONLY, AND THE ROW SAYS SO IN ITS OWN NAME. The full fight
+    // has the ACT, which is where the buff is meant to be earned, so this
+    // switch is read at `buildSingleAttackScene` and nowhere else — and a live
+    // control that silently does nothing in three of the four modes would be
+    // worse than one whose first word names the mode it belongs to.
+    { id: 'holdbreath', name: 'SINGLE HOLDBREATH', value: title.holdBreath ? 'ON' : 'OFF' },
+  ];
+  // Only on a build whose driver armed the binding table. `>` on the count
+  // rather than a plain truthiness test: an armed-but-empty table is a driver
+  // bug, and a row that opens onto nothing is worse than no row.
+  const devices = Object.keys(title.bindings?.devices ?? {});
+  if (devices.length) {
+    // THE VALUE IS THE DETECTED DEVICE, which is the whole of what detection
+    // owes the player: open the page on a controller and the row already says
+    // CONTROLLER, so the list behind it is the one they meant.
+    rows.push({ id: 'bindings', name: 'BUTTONS', value: deviceName(title.bindings.device) });
+  }
+  return rows;
+}
+
+/** The player-facing name of an input device id. */
+export function deviceName(id) {
+  // 'gamepad' is the Gamepad API's word and 'CONTROLLER' is the player's; the
+  // page says the player's.
+  if (id === 'gamepad') return 'CONTROLLER';
+  if (id === 'touch') return 'TOUCH';
+  if (id === 'keyboard') return 'KEYBOARD';
+  return String(id ?? '').toUpperCase();
+}
 
 // ---------------------------------------------------------------------------
 // THE UNUSED ROW'S SECOND LIFE — an OPT-IN state machine, off by default.
@@ -743,8 +795,71 @@ export function createTitle() {
      * is always what it does. Persisted with shake and scaling, and like
      * them kept OUT of the share token: it is how a person holds a phone,
      * not a setup.
+     *
+     * EDITED ON THE CONTROLS PAGE, not GRAPHICS. It was a graphics row until
+     * the CONTROLS page existed; the flag, its three consumers in the driver
+     * and its persisted name are all unchanged, only the page that edits it
+     * moved.
      */
     swapZX: false,
+    /**
+     * HOLDBREATH SPEED, in SINGLE ATTACK only. Requested feature (user item
+     * 4); it is not a GML option, but the SPEED it grants is entirely the
+     * game's own.
+     *
+     * WHAT HOLDBREATH MECHANICALLY IS. `obj_knight_enemy`'s Step reassigns the
+     * soul's walk speed every frame off `holdbreathcount`:
+     *
+     *     if (holdbreathcount > 0 && i_ex(obj_heart))                wspeed = 5;
+     *     if (holdbreathcount > 0 && i_ex(obj_knight_roaring2) ...)  wspeed = 6;
+     *
+     * so it is a RATE — the soul's pixels-per-frame on each axis — of 4 with
+     * the ACT unused, 5 once it has landed, and 6 for as long as ROARING is on
+     * screen. `sim/spells.js` soulSpeed() is that verbatim and is the only
+     * reader; `sim/soul.js` polls it per frame.
+     *
+     * WHY IT NEEDS A SETTING AT ALL. Single Attack has no menu and therefore
+     * no ACT, so the buff is unreachable there — you can practise a pattern at
+     * 4 but never at the 5 you will actually dodge it at in a real fight where
+     * Kris held their breath. The setting arms `holdbreathcount` at build and
+     * the existing machinery supplies the rate, ROARING's 6 included; no new
+     * number is invented and nothing about the full fight changes.
+     *
+     * FALSE IS A NO-OP AND MUST STAY ONE. The byte gate replays recorded
+     * fights frame by frame, and a soul that moves 5 instead of 4 diverges on
+     * the first held direction.
+     */
+    holdBreath: false,
+    /**
+     * THE PER-DEVICE BINDING TABLE, or null for "not armed" — the same idiom
+     * `unused` uses, and for the same reason: a build whose driver never arms
+     * it cannot tell this code exists, and the CONTROLS page simply does not
+     * list the row. Detection and capture belong to the input layer; all this
+     * module does is draw the rows it is handed and say which one was chosen.
+     *
+     * The shape, when armed:
+     *
+     *     {
+     *       device:  'keyboard' | 'gamepad' | 'touch',   // last device used
+     *       devices: { <device>: [ { action, label, value, fixed? }, ... ] },
+     *       capture: null | { device, action },          // a rebind in flight
+     *       custom:  <anything>,                         // persisted verbatim
+     *       beginCapture(req),                           // optional; see below
+     *     }
+     *
+     * `custom` is whatever the input layer wants carried across a reload; the
+     * drivers write it and read it back without ever looking inside.
+     * `beginCapture` is how the driver hears about a rebind: confirming a
+     * binding row returns `out.rebind = { device, action }` and the web driver
+     * hands it straight to this method. Both are the input layer's, and the
+     * menu calls neither — it only sets `capture` so the row can show that it
+     * is listening.
+     *
+     * `action` is the input-state key the sim polls, `label` and `value` are
+     * already-formatted strings (this module never formats a key name), and
+     * `fixed` marks a row that cannot be rebound on that device.
+     */
+    bindings: null,
     /**
      * THE UNUSED ROW'S STATE, or null for "not armed" — which is the default
      * and is what every vanilla build stays on. See `armUnused` above; a
@@ -769,6 +884,9 @@ function openSettings(title) {
     shared: 0,
     equip: { stage: 'char', char: 0, row: 0, pocket: 0 },
     items: { stage: 'slots', slot: 0, pick: 0 },
+    // CONTROLS is two-stage like the items page: its own rows, and — only on
+    // a build that armed `title.bindings` — the binding list underneath.
+    controls: { stage: 'rows', bind: 0 },
   };
 }
 
@@ -1005,13 +1123,18 @@ function stepSettings(title, pressed) {
     return out;
   }
 
-  // ---- graphics: three toggles ----
+  // ---- graphics: two toggles ----
   if (s.page === 'graphics') {
-    // Three rows since TOUCH BUTTONS joined SCREEN SIZE and SCREEN SHAKE, so
-    // the old `1 - cursor` flip became a wrap. Each key is polled ONCE —
-    // `pressed()` latches, so `up || down` would leave a same-frame down
-    // unrecorded (the trap verify-titlemenu's header describes).
-    const ROWS = 3;
+    // TWO rows: SCREEN SIZE and SCREEN SHAKE. It was three while TOUCH BUTTONS
+    // lived here; that row is a CONTROL, not a picture, and moved to the
+    // CONTROLS page — so this constant came back down with it. THE CONSTANT IS
+    // THE ROW COUNT AND NOTHING ELSE READS IT: leave it at 3 with two rows and
+    // the wrap walks the cursor onto a row that does not exist and cannot be
+    // drawn. Each key is polled ONCE — `pressed()` latches, so `up || down`
+    // would leave a same-frame down unrecorded (the trap verify-titlemenu's
+    // header describes), which is why the wrap is kept rather than reverted to
+    // the `1 - cursor` flip two rows would also allow.
+    const ROWS = 2;
     if (pressed('up')) { s.cursor = (s.cursor + ROWS - 1) % ROWS; out.moved = true; }
     if (pressed('down')) { s.cursor = (s.cursor + 1) % ROWS; out.moved = true; }
     const flipL = pressed('left');
@@ -1019,12 +1142,100 @@ function stepSettings(title, pressed) {
     const flipC = pressed('confirm');
     if (flipL || flipR || flipC) {
       if (s.cursor === 0) title.scaling = title.scaling === 'fit' ? 'pixel' : 'fit';
-      else if (s.cursor === 1) title.shake = !title.shake;
-      else title.swapZX = !title.swapZX;
+      else title.shake = !title.shake;
       title.dirty = true;
       out.moved = true;
     }
     if (pressed('cancel')) { leavePage(); out.moved = true; }
+    return out;
+  }
+
+  // ---- controls: the toggles, and the bindings underneath -------------------
+  //
+  // TWO ROWS ALWAYS, THREE WHEN THE DRIVER ARMED BINDINGS. `controlRows` is
+  // the single source for both the count and the draw, so the page cannot wrap
+  // onto a row the renderer does not know about — the defect the graphics
+  // constant above is one edit away from at all times.
+  if (s.page === 'controls') {
+    // Tolerate a settings object built by an opener that predates this page:
+    // CONTROLS is only reachable from the hub, but a stale `s` must not throw.
+    const c = s.controls ?? (s.controls = { stage: 'rows', bind: 0 });
+    const rows = controlRows(title);
+
+    if (c.stage === 'rows') {
+      if (pressed('up')) { s.cursor = (s.cursor + rows.length - 1) % rows.length; out.moved = true; }
+      if (pressed('down')) { s.cursor = (s.cursor + 1) % rows.length; out.moved = true; }
+      const row = rows[s.cursor] ?? rows[0];
+      const left = pressed('left');
+      const right = pressed('right');
+      const confirm = pressed('confirm');
+      if (row.id === 'bindings') {
+        // The only row that OPENS something rather than toggling.
+        if (confirm) { c.stage = 'bind'; c.bind = 0; out.selected = true; }
+      } else if (left || right || confirm) {
+        if (row.id === 'touch') title.swapZX = !title.swapZX;
+        else title.holdBreath = !title.holdBreath;
+        title.dirty = true;
+        out.moved = true;
+      }
+      if (pressed('cancel')) { leavePage(); out.moved = true; }
+      return out;
+    }
+
+    // ---- the binding list ---------------------------------------------------
+    //
+    // WHOSE LIST IT IS: `bindings.device` is written by the input layer from
+    // the last device that actually produced input, so opening this while
+    // holding a controller shows the controller. LEFT and RIGHT step that
+    // selection by hand, because a player rebinding a keyboard should not have
+    // the page jump away the moment they brush a stick.
+    const b = title.bindings;
+    if (!b) { c.stage = 'rows'; return out; }
+    const devices = Object.keys(b.devices ?? {});
+    if (!devices.length) { c.stage = 'rows'; return out; }
+    if (!devices.includes(b.device)) b.device = devices[0];
+    const list = b.devices[b.device] ?? [];
+
+    // A CAPTURE IN FLIGHT SWALLOWS EVERY KEY BUT CANCEL. The next press is the
+    // new binding, and it belongs to the input layer — if this handler also
+    // read it, confirming a row would immediately rebind that row to confirm.
+    if (b.capture) {
+      if (pressed('cancel')) { b.capture = null; out.moved = true; }
+      return out;
+    }
+
+    if (pressed('left')) {
+      b.device = devices[(devices.indexOf(b.device) + devices.length - 1) % devices.length];
+      c.bind = 0;
+      out.moved = true;
+    }
+    if (pressed('right')) {
+      b.device = devices[(devices.indexOf(b.device) + 1) % devices.length];
+      c.bind = 0;
+      out.moved = true;
+    }
+    // The device may have changed on this very frame, so re-read the list
+    // before the cursor is clamped against it.
+    const live = b.devices[b.device] ?? list;
+    if (c.bind >= live.length) c.bind = 0;
+    if (live.length) {
+      if (pressed('up')) { c.bind = (c.bind + live.length - 1) % live.length; out.moved = true; }
+      if (pressed('down')) { c.bind = (c.bind + 1) % live.length; out.moved = true; }
+    }
+    if (pressed('confirm')) {
+      const entry = live[c.bind];
+      // `fixed` rows exist because touch has nothing to capture: the overlay's
+      // buttons are where they are, and the layout toggle above is the only
+      // thing that moves them. Refusing is the honest answer, and `out.error`
+      // is what the driver already sounds for one.
+      if (!entry || entry.fixed) out.error = true;
+      else {
+        b.capture = { device: b.device, action: entry.action };
+        out.rebind = { device: b.device, action: entry.action };
+        out.selected = true;
+      }
+    }
+    if (pressed('cancel')) { c.stage = 'rows'; out.moved = true; }
     return out;
   }
 
@@ -1195,6 +1406,7 @@ export function stepTitle(title, input, attacks) {
     return {
       moved: false, chosen: false, selected: false, error: false,
       link: null, share: false, proceed: done, press: 0, shatter: false,
+      rebind: null,
     };
   }
 
@@ -1217,6 +1429,12 @@ export function stepTitle(title, input, attacks) {
       link: r.link ?? null, share: r.share ?? false,
       proceed: r.proceed ?? false, press: r.press ?? 0,
       shatter: r.shatter ?? false,
+      // `rebind` is the CONTROLS page's one outbound intent: "the player chose
+      // this action on this device, start listening". The menu deliberately
+      // cannot read the next press itself — if it did, confirming a row would
+      // bind that row to confirm — so the whole feature is dead unless this
+      // name is carried through the whitelist above.
+      rebind: r.rebind ?? null,
     };
   }
 

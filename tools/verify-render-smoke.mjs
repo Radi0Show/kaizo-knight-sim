@@ -58,6 +58,33 @@ globalThis.document = {
 globalThis.window = globalThis;
 globalThis.devicePixelRatio = 1;
 
+// A FONT THAT RESOLVES, INSTALLED BEFORE THE FIRST RENDER IMPORT.
+//
+// `drawTitle` returns on its second line when `loadFont()` is not ready, and
+// under this harness `fetch` cannot reach the font files — so EVERY page this
+// file claimed to draw was returning before it drew anything, and a throw
+// inside any settings page was invisible here. Found by sabotage: breaking a
+// page's draw on purpose left the suite green.
+//
+// `loadFont` caches per name, so the stub has to be in place before anything
+// calls it. The metrics are synthetic (the real glyph table is not what a
+// smoke test is about); what matters is that `ready` becomes true and every
+// draw path below actually executes.
+{
+  const META = {
+    page: { w: 1520, h: 24 },
+    glyphs: Array.from({ length: 96 }, (_, i) => ({
+      c: 32 + i, x: i * 16, y: 0, w: 12, h: 24, shift: 14, offset: 0,
+    })),
+  };
+  globalThis.fetch = async () => ({ json: async () => META });
+  globalThis.Image = class {
+    constructor() { this.width = 1520; this.height = 24; }
+    set src(v) { this._src = v; queueMicrotask(() => this.onload && this.onload()); }
+    get src() { return this._src; }
+  };
+}
+
 const { createState, stepFrame } = await import('../sim/index.js');
 const { buildPracticeScene } = await import('../sim/scenes/practice.js');
 const { createRenderer } = await import('../render/canvas.js');
@@ -132,7 +159,7 @@ try {
   const { drawTitle } = await import('../render/title.js');
   const { createTitle } = await import('../sim/modes.js');
   const ctx2 = mkCtx();
-  const pages = [null, 'gearhub', 'equip', 'items', 'audio', 'graphics', 'credits'];
+  const pages = [null, 'gearhub', 'equip', 'items', 'audio', 'graphics', 'controls', 'credits'];
   for (const page of pages) {
     const t = createTitle();
     if (page !== undefined && page !== 'title') {
@@ -142,12 +169,39 @@ try {
         cursor: 0,
         equip: { stage: 'char', char: 0, row: 0, pocket: 0 },
         items: { stage: 'slots', slot: 0, pick: 0 },
+        controls: { stage: 'rows', bind: 0 },
       };
     }
     try {
       drawTitle(ctx2, t, renderer.sprites, []);
     } catch (err) {
       failures.push(`drawTitle threw on page ${JSON.stringify(page)}: ${err.message}`);
+    }
+  }
+
+  // THE CONTROLS PAGE'S SECOND STAGE, which the loop above cannot reach: the
+  // binding list only exists on a build whose driver armed `title.bindings`,
+  // and `createTitle()` leaves that null. Both halves are drawn — the list
+  // idle, and the list with a capture in flight, which swaps one row's value
+  // for the waiting cue and is therefore its own branch.
+  for (const capture of [null, { device: 'keyboard', action: 'left' }]) {
+    const t = createTitle();
+    t.bindings = {
+      device: 'keyboard',
+      devices: {
+        keyboard: [
+          { action: 'left', label: 'LEFT', value: 'ARROW LEFT' },
+          { action: 'confirm', label: 'CONFIRM', value: 'Z' },
+        ],
+        touch: [{ action: 'left', label: 'LEFT', value: 'ON SCREEN', fixed: true }],
+      },
+      capture,
+    };
+    t.settings = { page: 'controls', root: false, cursor: 2, controls: { stage: 'bind', bind: 0 } };
+    try {
+      drawTitle(ctx2, t, renderer.sprites, []);
+    } catch (err) {
+      failures.push(`drawTitle threw on the binding list (capture ${!!capture}): ${err.message}`);
     }
   }
 }

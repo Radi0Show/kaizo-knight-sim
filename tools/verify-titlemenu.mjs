@@ -27,10 +27,13 @@
 
 import {
   createTitle, stepTitle, MODES, SETTINGS_PAGES, TITLE_EXTRAS, CREDITS, creditLink,
-  ITEM_PICKER, GEAR_PAGES, pocketOf, wornBy,
+  ITEM_PICKER, GEAR_PAGES, pocketOf, wornBy, controlRows,
   armUnused, unusedRowStyle, UNUSED_PRESSES, UNUSED_SHATTER, UNUSED_SHAKE,
   partyTabs, previewStats,
 } from '../sim/modes.js';
+import { createState, stepFrame, traceHeader, traceRow } from '../sim/index.js';
+import { buildSingleAttackScene } from '../sim/scenes/single.js';
+import { soulSpeed } from '../sim/spells.js';
 import { canEquip } from '../sim/equipment.js';
 import { mergeColor } from '../sim/gml.js';
 import {
@@ -246,12 +249,17 @@ function atRoster() {
   check(t.settings === null, 'X did not close SETTINGS');
 }
 
-// ---- the GRAPHICS page: three toggles, all persisted through `dirty` -------
+// ---- the GRAPHICS page: TWO toggles, both persisted through `dirty` --------
+//
+// It was three until TOUCH BUTTONS moved to the CONTROLS page. The row count
+// is a CONSTANT in the handler (`ROWS`) and nothing else reads it, so a
+// constant left behind walks the cursor onto a row that does not exist and
+// cannot be drawn — which is the exact defect these wrap assertions exist to
+// catch, and why they are re-stated at 2 rather than deleted.
 {
   const t = createTitle();
   check(t.scaling === 'fit', `the default scaling should fill the window, got ${t.scaling}`);
   check(t.shake === true, 'the shake should default ON, as the game has it');
-  check(t.swapZX === false, 'the touch buttons should default to Z / X, as shipped');
   for (let i = 0; i < extraAt('settings'); i++) tap(t, 'down');
   tap(t, 'confirm');
   const gfx = SETTINGS_PAGES.findIndex((p) => p.id === 'graphics');
@@ -264,28 +272,202 @@ function atRoster() {
   check(t.scaling === 'pixel', 'the first row should toggle the screen size');
   check(t.dirty === true, 'a graphics change must mark the settings dirty to persist');
   tap(t, 'down');
-  tap(t, 'right');
-  check(t.shake === false, 'the second row should toggle the shake');
-  // TOUCH BUTTONS — the Z/X swap, the third row. A layout switch the driver
-  // turns into a CSS class; all the menu owns is the flag and that it is
-  // persisted like the other two.
-  tap(t, 'down');
   t.dirty = false;
   tap(t, 'right');
-  check(t.swapZX === true, 'the third row should swap the touch buttons');
-  check(t.dirty === true, 'the swap must mark the settings dirty to persist');
-  tap(t, 'left');
-  check(t.swapZX === false, 'and toggle back');
-  // The cursor WRAPS over the three rows, both ways — the page used to flip
-  // `1 - cursor`, which a third row silently breaks.
+  check(t.shake === false, 'the second row should toggle the shake');
+  check(t.dirty === true, 'the shake must mark the settings dirty to persist');
+  // THE TOUCH SWAP IS NOT REACHABLE FROM HERE ANY MORE. Two rows means the
+  // second one wraps, and a third press of `down` lands back on row 0 — if a
+  // stale `ROWS = 3` survived, this walks onto the phantom row and the touch
+  // flag moves, which is what the assertion below refuses.
+  const swapBefore = t.swapZX;
   tap(t, 'down');
   check(t.settings.cursor === 0,
-    `down from the third row should wrap to the first, got ${t.settings.cursor}`);
+    `down from the second row should wrap to the first, got ${t.settings.cursor}`);
   tap(t, 'up');
-  check(t.settings.cursor === 2,
-    `up from the first row should wrap to the third, got ${t.settings.cursor}`);
+  check(t.settings.cursor === 1,
+    `up from the first row should wrap to the second, got ${t.settings.cursor}`);
+  tap(t, 'right');
+  tap(t, 'down');
+  tap(t, 'right');
+  check(t.swapZX === swapBefore,
+    'GRAPHICS must not be able to move TOUCH BUTTONS any more — it lives on CONTROLS');
   tap(t, 'cancel');
   check(t.settings.page === null, 'X did not return to the settings hub');
+}
+
+// ---- the CONTROLS page ----------------------------------------------------
+//
+// The page the touch layout moved ONTO, plus the Single Attack HoldBreath
+// switch and — only on a build whose driver armed `title.bindings` — the
+// per-device binding list. Requested features (the user asked for each by
+// name), so they are checked the way every other page here is: drive the
+// menu, assert the flag.
+//
+// `controlRows` is the single source for both the row count and the draw, so
+// the wrap is asserted against ITS length rather than a literal — the graphics
+// constant one block up is the standing demonstration of what a second,
+// hand-maintained count does.
+{
+  const t = createTitle();
+  const pages = SETTINGS_PAGES.map((p) => p.id);
+  const ctl = pages.indexOf('controls');
+  check(ctl >= 0, 'there is no CONTROLS page');
+  // ORDER: the two ODD rows stay at the end. SHARE is not a page at all (it
+  // copies a link and stays put) and UNUSED is the PROCEED ramp, so CONTROLS
+  // belongs above both, beside the pages that are really pages.
+  check(ctl > pages.indexOf('graphics'), 'CONTROLS should sit after GRAPHICS');
+  check(ctl < pages.indexOf('share') && ctl < pages.indexOf('unused'),
+    'CONTROLS must sit ABOVE the two odd rows (SHARE, UNUSED)');
+
+  check(t.swapZX === false, 'the touch buttons should default to Z / X, as shipped');
+  check(t.holdBreath === false, 'HOLDBREATH must default OFF — OFF is the byte-gate no-op');
+  check(t.bindings === null, 'bindings start unarmed, like `unused`');
+
+  // The rows an unarmed build has: TOUCH BUTTONS and SINGLE HOLDBREATH, in
+  // that order, and NO binding row.
+  const rows = controlRows(t);
+  check(rows.length === 2, `an unarmed build should list two control rows, got ${rows.length}`);
+  check(rows[0].id === 'touch' && rows[1].id === 'holdbreath',
+    `the control rows should be touch then holdbreath, got ${rows.map((r) => r.id).join()}`);
+  check(!rows.some((r) => r.id === 'bindings'),
+    'an unarmed build must not offer the binding row');
+  // The captions are the player's, and the HoldBreath row names its mode: it
+  // does nothing outside SINGLE, and a row that reads as global would be a
+  // control that silently does nothing in three modes out of four.
+  check(rows[1].name.includes('SINGLE'),
+    `the holdbreath row should name the mode it belongs to, got ${rows[1].name}`);
+  check(rows[1].value === 'OFF', `an unset holdbreath row should read OFF, got ${rows[1].value}`);
+
+  for (let i = 0; i < extraAt('settings'); i++) tap(t, 'down');
+  tap(t, 'confirm');
+  for (let i = 0; i < ctl; i++) tap(t, 'down');
+  tap(t, 'confirm');
+  check(t.settings.page === 'controls', `CONTROLS did not open, got ${t.settings.page}`);
+  check(t.settings.cursor === 0, 'CONTROLS should open on its first row');
+
+  // ROW 0 — TOUCH BUTTONS, the row that moved. Same flag, same two captions.
+  t.dirty = false;
+  tap(t, 'right');
+  check(t.swapZX === true, 'the first control row should swap the touch buttons');
+  check(t.dirty === true, 'the swap must mark the settings dirty to persist');
+  check(controlRows(t)[0].value === 'X / Z',
+    `a swapped layout should read X / Z, got ${controlRows(t)[0].value}`);
+  tap(t, 'left');
+  check(t.swapZX === false, 'and toggle back');
+
+  // ROW 1 — SINGLE HOLDBREATH, a boolean, in the style of SCREEN SHAKE.
+  tap(t, 'down');
+  check(t.settings.cursor === 1, `down should reach the holdbreath row, got ${t.settings.cursor}`);
+  t.dirty = false;
+  tap(t, 'right');
+  check(t.holdBreath === true, 'the holdbreath row should switch it ON');
+  check(t.dirty === true, 'the holdbreath switch must mark the settings dirty to persist');
+  check(controlRows(t)[1].value === 'ON', 'and the row should read ON');
+  tap(t, 'confirm');
+  check(t.holdBreath === false, 'Z toggles it the same way left and right do');
+  tap(t, 'left');
+  check(t.holdBreath === true, 'and left toggles it back');
+  tap(t, 'right');
+  check(t.holdBreath === false, 'leaving it OFF, which is the default');
+
+  // The cursor wraps over exactly the rows `controlRows` reports.
+  tap(t, 'down');
+  check(t.settings.cursor === 0,
+    `down from the last control row should wrap to the first, got ${t.settings.cursor}`);
+  tap(t, 'up');
+  check(t.settings.cursor === controlRows(t).length - 1,
+    `up from the first row should wrap to the last, got ${t.settings.cursor}`);
+  tap(t, 'cancel');
+  check(t.settings.page === null, 'X did not return to the settings hub from CONTROLS');
+}
+
+// ---- CONTROLS with the binding table armed --------------------------------
+//
+// The input layer owns detection, capture and every string in the list; the
+// menu owns the cursor, which device the list is FOR, and handing the driver
+// an `out.rebind` when a row is confirmed. Driven here with a hand-built table
+// so this file stays free of `input/`.
+{
+  const t = createTitle();
+  t.bindings = {
+    device: 'keyboard',
+    devices: {
+      keyboard: [
+        { action: 'left', label: 'LEFT', value: 'ARROW LEFT' },
+        { action: 'confirm', label: 'CONFIRM', value: 'Z' },
+      ],
+      gamepad: [
+        { action: 'left', label: 'LEFT', value: 'DPAD LEFT' },
+      ],
+      touch: [
+        { action: 'left', label: 'LEFT', value: 'ON SCREEN', fixed: true },
+      ],
+    },
+    capture: null,
+  };
+  const rows = controlRows(t);
+  check(rows.length === 3, `an armed build should list three control rows, got ${rows.length}`);
+  check(rows[2].id === 'bindings', 'the binding row should be last');
+  // DETECTION SURFACES AS THE ROW'S VALUE, which is the whole of what the
+  // player is owed by it: open the page holding a controller and the row
+  // already says CONTROLLER.
+  check(rows[2].value === 'KEYBOARD', `the row should name the live device, got ${rows[2].value}`);
+  t.bindings.device = 'gamepad';
+  check(controlRows(t)[2].value === 'CONTROLLER',
+    'the Gamepad API says "gamepad"; the menu says CONTROLLER');
+  t.bindings.device = 'keyboard';
+
+  const ctl = SETTINGS_PAGES.findIndex((p) => p.id === 'controls');
+  for (let i = 0; i < extraAt('settings'); i++) tap(t, 'down');
+  tap(t, 'confirm');
+  for (let i = 0; i < ctl; i++) tap(t, 'down');
+  tap(t, 'confirm');
+  tap(t, 'down');
+  tap(t, 'down');
+  check(t.settings.cursor === 2, `could not reach the binding row, got ${t.settings.cursor}`);
+  // The binding row OPENS; it does not toggle.
+  tap(t, 'confirm');
+  check(t.settings.controls.stage === 'bind', 'Z on the binding row should open the list');
+
+  // LEFT and RIGHT change WHOSE list it is, by hand — a player rebinding a
+  // keyboard must not have the page jump away because they brushed a stick.
+  tap(t, 'right');
+  check(t.bindings.device === 'gamepad', `right should step the device, got ${t.bindings.device}`);
+  tap(t, 'right');
+  check(t.bindings.device === 'touch', 'and keep stepping');
+  tap(t, 'right');
+  check(t.bindings.device === 'keyboard', 'wrapping back round');
+
+  // A REBIND GOES OUT TO THE DRIVER and arms a capture; the menu never reads
+  // the next press itself, or confirming a row would rebind that row to
+  // confirm.
+  const out = stepTitle(t, { ...NONE, confirm: true }, ROSTER);
+  stepTitle(t, { ...NONE }, ROSTER);
+  check(out.rebind?.device === 'keyboard' && out.rebind?.action === 'left',
+    `confirming a binding row should ask the driver to capture, got ${JSON.stringify(out.rebind)}`);
+  check(t.bindings.capture?.action === 'left', 'and a capture should be in flight');
+  // While it is in flight every key but X is swallowed.
+  tap(t, 'down');
+  check(t.settings.controls.bind === 0, 'a capture in flight must swallow the cursor keys');
+  tap(t, 'cancel');
+  check(t.bindings.capture === null, 'X should cancel the capture');
+  check(t.settings.controls.stage === 'bind', '...without leaving the list');
+
+  // A FIXED ROW REFUSES. Touch has nothing to capture — the overlay's buttons
+  // are where they are, and TOUCH BUTTONS above is the only thing that moves
+  // them — so the answer is the error the driver already sounds.
+  tap(t, 'left');
+  check(t.bindings.device === 'touch', `expected the touch list, got ${t.bindings.device}`);
+  const refused = stepTitle(t, { ...NONE, confirm: true }, ROSTER);
+  stepTitle(t, { ...NONE }, ROSTER);
+  check(refused.error === true, 'a fixed binding should refuse rather than capture');
+  check(t.bindings.capture === null, 'and must not arm a capture');
+
+  tap(t, 'cancel');
+  check(t.settings.controls.stage === 'rows', 'X should leave the list for the page');
+  tap(t, 'cancel');
+  check(t.settings.page === null, 'X again should leave the page for the hub');
 }
 
 // ---- THE POCKET LISTS EVERYTHING, worn or not -----------------------------
@@ -1037,6 +1219,67 @@ function idle(t) {
   globalThis.fetch = prevFetch;
   globalThis.Image = prevImage;
   globalThis.document = prevDoc;
+}
+
+// ---- WHAT THE HOLDBREATH SWITCH ACTUALLY DOES, AND WHAT OFF COSTS ---------
+//
+// The switch is a settings row; the MECHANISM is the game's. `obj_knight_enemy`'s
+// Step reassigns the soul's walk speed off `holdbreathcount` every frame —
+// `wspeed = 5` with the ACT landed, `wspeed = 6` while ROARING is on screen —
+// and `sim/spells.js` soulSpeed() is that verbatim, polled by sim/soul.js. So
+// arming `holdbreathcount = 1` at build is exactly what Kris's ACT does, and
+// the rate comes from the dump rather than from this feature.
+//
+// TWO THINGS ARE PINNED HERE, and the second one is the one that matters:
+//
+//   1. ON moves the soul FASTER. A switch wired to nothing passes every menu
+//      assertion above — the settings model cannot tell the difference — so
+//      the flag is followed all the way to a stepped frame.
+//   2. OFF IS BIT-FOR-BIT WHAT THE MODE ALREADY DID. The recorded-fight byte
+//      gates replay real fights through these scenes, and a default that moves
+//      the soul one pixel differently moves the gate. Asserted as an exact
+//      string diff of a full trace against the option being ABSENT, which is
+//      the call shape every existing caller uses.
+{
+  const frames = 240;
+  // Hold right and down: every frame of this run is a frame where wspeed is
+  // the only thing deciding where the soul ends up. A still soul would make
+  // both halves of this block vacuous.
+  const held = { left: false, right: true, up: false, down: true, confirm: false, cancel: false };
+
+  const runDrill = (opts) => {
+    const st = createState({ seed: 4242 });
+    buildSingleAttackScene(st, { seed: 4242, attack: 'stars', difficulty: 0, ...opts });
+    const rows = [traceHeader(st)];
+    for (let i = 0; i < frames; i++) {
+      stepFrame(st, held);
+      rows.push(traceRow(st));
+    }
+    return { text: rows.join('\n'), state: st };
+  };
+
+  const off = runDrill({ holdBreath: false });
+  const absent = runDrill({});
+  const on = runDrill({ holdBreath: true });
+
+  check(soulSpeed(absent.state) === 4,
+    `the drill's default walk speed is the dump's 4, got ${soulSpeed(absent.state)}`);
+  check(soulSpeed(on.state) === 5,
+    `HOLDBREATH ON should hand the soul the ACT's own 5, got ${soulSpeed(on.state)}`);
+  check(on.state.knight.holdbreathcount === 1,
+    'ON arms holdbreathcount the way scr_ does, rather than writing a speed');
+  check(absent.state.knight.holdbreathcount === 0,
+    'and OFF leaves createKnight()\'s own 0');
+
+  // THE NO-OP, exactly: same bytes, not merely the same outcome.
+  check(off.text === absent.text,
+    'HOLDBREATH OFF must be bit-for-bit the run the mode already produced');
+  // ...and the run is not vacuous: ON really does diverge, so the comparison
+  // above is capable of failing.
+  check(on.text !== absent.text,
+    'HOLDBREATH ON must actually change the fight — otherwise the no-op proof is empty');
+  check(off.text.split('\n').length === frames + 1,
+    `the no-op proof should cover ${frames} stepped frames`);
 }
 
 console.log('title navigation — modes, roster, difficulties, settings\n');
