@@ -38,6 +38,16 @@ export const FACE_ITEM = 3;
 export const FACE_DEFEND = 4;
 export const FACE_ACT = 6;
 export const FACE_DEFEAT = 9;
+/**
+ * `global.faceaction[charturn] = 10` — SPARE.
+ *
+ * IT DRAWS NOTHING, and that is the whole finding: obj_heroparent's Step has
+ * a branch for faceaction 1, 2, 3, 4 and 6, and none for 10, so the character
+ * keeps `idlesprite` through a mercy attempt. The value is a marker the
+ * command phase writes and the resolve phase reads, not a pose. It is named
+ * here so nobody later "fixes" the missing sprite lookup.
+ */
+export const FACE_SPARE = 10;
 
 /** `state`. 3 and 5 are unused by this fight; 8 is the Tenna card trick. */
 export const HERO_IDLE = 0;

@@ -6,8 +6,16 @@ script's header and CLAUDE.md).
 
 - source: D:\ShadowCrystal\knight-sim
 - commit: a2a27e88520b79241a174cdcfe12aa44c5e3b194
-- vendored: 2026-09-14
-- the mirrored directories were clean in the source tree
+- vendored: 2026-09-15
+- the source tree was DIRTY inside the mirrored directories; these uncommitted files were vendored as they stood:
+     M sim/heroes.js
+     M sim/menu.js
+     M sim/scenes/practice.js
+     M tools/verify-all.mjs
+    ?? tools/verify-actspare.mjs
+- also dirty in the source tree, OUTSIDE the mirrored directories (not vendored):
+     M web/sw.js
+     M web/version.js
 
 ## Pending port-backs
 

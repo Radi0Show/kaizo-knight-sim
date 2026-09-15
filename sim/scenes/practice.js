@@ -25,7 +25,7 @@ import { partyWiped, PARTY as PARTY_STATS, isUp, PARTY_POS} from '../damage.js';
 import { createFightBar, stepFightBar, fightTp } from '../fightbar.js';
 import { endTurnItems } from '../menu.js';
 import { applyItem } from '../items.js';
-import { createHeroes, stepHeroes, heroAct, HERO_ATTACK, HERO_IDLE, HERO_ITEM, HERO_SPELL } from '../heroes.js';
+import { createHeroes, stepHeroes, heroAct, HERO_ACT, HERO_ATTACK, HERO_IDLE, HERO_ITEM, HERO_SPELL } from '../heroes.js';
 import {
   advanceBalloon, advanceReply, clearDialogue, msgLines,
   textSoundChar,
@@ -890,6 +890,14 @@ const director = {
         // resolveActPages in sim/spells.js.
         a.pages = resolveActPages(state, a.c ?? 0, a.act ?? 0);
         a.w = { pos: 1, page: 0, halted: false, pmb: 0, automash: 0 };
+        // ...AND THE SWING STARTS HERE TOO, for the same reason the counts do.
+        // obj_heroparent's Step_0:9-12 enters `state = 6` only while
+        // `global.myfight == 3`, and scr_endturn:79-81 sets that phase once
+        // every character has committed. sim/menu.js used to start it at the
+        // ACT confirm, so the swing played while the next character was still
+        // choosing — reported from play, and the last piece of the act still
+        // landing at selection after its effects had already been moved.
+        heroAct(state, a.c ?? 0, HERO_ACT);
       }
       const w = a.w;
       const visible = msgLines(a.pages[w.page]).join('').length;

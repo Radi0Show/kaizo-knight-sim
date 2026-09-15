@@ -275,7 +275,12 @@ ok(fallback.warned.some((w) => /no branch draws submenu/.test(w)),
 // EVERY submenu sim/menu.js can assign. Hardcoding this list is the point:
 // it is the thing a new stage must be added to, and the assertion below is
 // what makes forgetting loud.
-const SUBMENUS = ['enemy', 'magic', 'item', 'actgrid', 'target', 'spellenemy', 'actpick'];
+// `spare` JOINED THE LIST when sim/menu.js grew SPARE's target stage — the
+// coverage guard below caught the new name the same session it appeared,
+// which is what it is for. render/menu.js had drawn that row all along
+// (its arm keys on the same five bmenunos the game tests together); what
+// was missing was the sim stage, so this now asserts BOTH halves exist.
+const SUBMENUS = ['enemy', 'magic', 'item', 'actgrid', 'target', 'spellenemy', 'actpick', 'spare'];
 for (const name of SUBMENUS) {
   const r = drawWith(name);
   ok(r.calls !== fallback.calls && r.warned.length === 0,

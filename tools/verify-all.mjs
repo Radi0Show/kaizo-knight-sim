@@ -110,6 +110,7 @@ const SUITES = [
 ['verify-replay.mjs', 'replay tokens — round-trip and reproduce a live run'],
 ['verify-determinism.mjs', 'byte-identical across 10 runs'],
 ['verify-rafloop.mjs', 'the frame loop + rAF watchdog — one chain across tab switches'],
+['verify-actspare.mjs', 'the ACT swing waits for the turn, and SPARE has a row'],
 ];
 
 // EVERY suite file must be in the table. A suite that exists and is never run

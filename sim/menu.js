@@ -23,8 +23,13 @@ import {
   spellInfo, spellListFor, actsFor, actUsable, canAfford, spellCost, castSpell, holdBreath,
 } from './spells.js';
 import {
-  FACE_IDLE, FACE_ATTACK, FACE_SPELL, FACE_ITEM, FACE_DEFEND, FACE_ACT,
-  HERO_SPELL, HERO_ITEM, HERO_ACT, heroAct,
+  // THE MENU SETS `faceaction`, NEVER A POSE. The four HERO_* state names and
+  // `heroAct` used to be imported here; all four are gone because none of the
+  // poses belong to the command phase. Spell and item moved to the resolve
+  // phase earlier and left their imports behind dead; the ACT swing followed
+  // them when obj_heroparent's Step_0:9-12 turned out to gate `state = 6` on
+  // `global.myfight == 3` rather than on the confirm.
+  FACE_IDLE, FACE_ATTACK, FACE_SPELL, FACE_ITEM, FACE_DEFEND, FACE_ACT, FACE_SPARE,
 } from './heroes.js';
 import { ACT_PAGES } from './dialogue.js';
 import { mergeColor } from './gml.js';
@@ -974,6 +979,35 @@ export function stepMenu(state, input) {
   // One line per living enemy: name, comment, and an HP bar. For the Knight
   // the NUMBER is replaced with "???" while the BAR still tracks the real
   // fraction — you can watch it move, you just are not told by how much.
+  // SPARE'S TARGET ROW. Same shape as the enemy row above — the game draws
+  // both from one test over five bmenunos — but its confirm commits a MERCY
+  // attempt rather than an attack: charaction 2 (the same value a spell
+  // commits, which is why obj_attackpress's Create classifies it as
+  // `charspell`) with charspecial 100 as the marker that separates it from an
+  // actual spell.
+  if (menu.submenu === 'spare') {
+    if (pressed('cancel')) {
+      menu.submenu = null;
+      setFace(state, c, FACE_IDLE);
+      moveNoise = true;
+    } else if (pressed('confirm')) {
+      menu.submenu = null;
+      menu.targetIndex = menu.gridIndex ?? 0;
+      state.charaction[c] = 2;
+      if (state.charspecial) state.charspecial[c] = 100;
+      cue(state, 'snd_select');
+      nextHero(menu, state);
+      if (!skipFallen(state)) {
+        menu.charturn = 0;
+        menu.open = false;
+        menu.justClosed = true;
+        menu.needsCommit = true;
+        return true;
+      }
+    }
+    return false;
+  }
+
   if (menu.submenu === 'enemy') {
     if (pressed('cancel')) {
       menu.submenu = null;
@@ -1187,9 +1221,35 @@ export function stepMenu(state, input) {
           // carry one.
           if (row.cost > 0) state.tension -= row.cost;
           menu.submenu = null;
-          // `state = 6` — the ACT swing plays NOW, and it outlasts the menu:
-          // the character is still mid-animation when the next one is choosing.
-          heroAct(state, c, HERO_ACT);
+          // THE SWING DOES NOT PLAY HERE, AND THIS USED TO SAY IT DID.
+          //
+          // The old line was `heroAct(state, c, HERO_ACT)` under a comment
+          // claiming `state = 6` fires at selection and outlasts the menu, so
+          // "the character is still mid-animation when the next one is
+          // choosing". It cited nothing, and the dump says otherwise:
+          //
+          //     if (global.myfight == 3 && global.faceaction[myself] == 6
+          //         && state != 8)
+          //         state = 6;
+          //     (obj_heroparent's Step_0:9-12)
+          //
+          // `state = 6` is gated on the FIGHT PHASE, not on the confirm, and
+          // `global.myfight = 3` is set by scr_endturn:79-81 — the script
+          // that runs once every character has committed, alongside
+          // `charturn = 3` (nobody is choosing any more) and
+          // `currentactingchar = 0`. So the acts play in their OWN phase
+          // after the command phase closes.
+          //
+          // What the confirm does set is `faceaction`, which is the READY
+          // pose — obj_heroparent's `state == 0` branch picks actreadysprite
+          // off it. Ready at selection, swing at resolution.
+          //
+          // REPORTED FROM PLAY: "the party immediately does the act animation
+          // instead of waiting for everyone elses actions". It is the same
+          // split this block's own header already made for the act's EFFECTS
+          // ("SELECTION QUEUES, RESOLUTION COUNTS") — the animation was the
+          // one piece still landing early. The swing now starts where the
+          // effects do: the writer's birth in sim/scenes/practice.js.
           selNoise = true;
           nextHero(menu, state);
           if (!skipFallen(state)) {
@@ -1355,6 +1415,32 @@ export function stepMenu(state, input) {
       menu.gridIndex = 0;
       menu.itemIndex = 0;
       setFace(state, c, isAct ? FACE_ACT : FACE_SPELL);
+      cue(state, 'snd_select');
+      return false;
+    }
+    // SPARE IS A TWO-PRESS COMMAND, exactly like FIGHT, and this build made it
+    // a one-press pass — the button fell through to `charaction = 0` below and
+    // the turn simply advanced. REPORTED FROM PLAY: "sparing doesn't have a
+    // menu".
+    //
+    //     if (global.bmenuno == 12) {
+    //         global.faceaction[global.charturn] = 10;
+    //         global.chartarget[global.charturn] = global.bmenucoord[12][global.charturn];
+    //         global.charaction[global.charturn] = 2;
+    //         global.charspecial[global.charturn] = 100;
+    //         scr_nexthero();
+    //     }
+    //     (obj_battlecontroller's Step_0, the bmenuno-12 confirm)
+    //
+    // The DRAW half has been here all along — render/menu.js already carries
+    // `spare` in the enemy-row arm, keyed on the same five bmenunos the game
+    // tests together, and its comment says in as many words that the stage was
+    // missing. This is that stage.
+    if (chosen === 'SPARE') {
+      menu.submenu = 'spare';
+      menu.gridIndex = 0;
+      menu.targetIndex = 0;
+      setFace(state, c, FACE_SPARE);
       cue(state, 'snd_select');
       return false;
     }
