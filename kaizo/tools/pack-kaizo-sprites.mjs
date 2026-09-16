@@ -44,11 +44,48 @@
 // ORIGINS ARE THE POINT. GameMaker draws every sprite relative to its origin;
 // art packed without one sits offset from the physics.
 
+// ── A FRAME SMALLER THAN ITS SPRITE, ON THIS SIDE TOO ─────────────────────
+//
+// The MAIN packer (tools/pack-sprites.mjs) copied every frame unread until
+// knight-sim 81811f9, and eleven short frames shipped under a green gate for
+// two weeks: `spr_battlemsg` 0-4 were 74x20 against a declared 83x20 — nine
+// columns missing from every battle message box — and six walk/laugh/caught
+// frames were one row short. GameMaker crops each frame's transparent margin
+// onto the texture page and remembers where the crop sits; an exporter that
+// writes the cropped bitmap and drops that offset produces a PNG smaller than
+// the sprite, and render/ blits it at `-(ox, oy)` at its natural size, so the
+// art draws SHORT and in the WRONG PLACE by exactly the margin that was cut.
+//
+// THIS TOOL STILL HAD THAT HOLE. It is the same `copyFileSync` the main packer
+// was hardened out of, over art the main pack cannot cover, and the overlay
+// OVERRIDES the main pack at load time (web/kaizo.js `sprites.set(name, …)`),
+// so a short overlay frame is strictly worse than a short vanilla one: it can
+// shadow a frame that is already correct.
+//
+// Nothing is short today — both dumps were re-extracted after
+// `extract_sprite.csx`'s includePadding fix, so every frame already matches
+// and is copied BYTE FOR BYTE, which is why adding this changed no packed
+// byte. That is luck, not a guarantee: the next re-extraction is one flag away
+// from trimming again, and the failure mode is silent. So the size is now
+// CHECKED, not assumed, exactly as the main packer checks it — a matching
+// frame is copied verbatim, a frame that is exactly its recorded trim rect is
+// composed onto a transparent canvas of the declared size at (tx, ty), and
+// anything else is REFUSED BY NAME with a non-zero exit rather than guessed
+// at, because placing a frame wrongly reintroduces the bug invisibly.
+//
+// The rect files are per-build and must follow the art: a mod-sourced frame
+// repads against the KAIZO rects, a vanilla-sourced one against the VANILLA
+// rects. Taking one side's offsets for the other side's pixels would move art
+// rather than restore it. Both are optional — absent rects is the normal case
+// for a padded dump, and then a short frame is simply refused.
+//
+//   UndertaleModCli load <data.win> -s tools/patches/sprite_frame_rects.csx
 import {
   readFileSync, writeFileSync, copyFileSync, existsSync, mkdirSync, readdirSync,
 } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { size as pngSize, decode as pngDecode, encode as pngEncode, pad as pngPad } from '../../tools/png.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const OUT = join(here, '..', 'assets', 'sprites');
@@ -58,6 +95,11 @@ const vanDump = process.argv[2] ?? 'D:/tmp/kzpack_van';
 const kzDump = process.argv[3] ?? 'D:/tmp/kzpack_kz';
 const vanillaMeta = JSON.parse(readFileSync(process.argv[4] ?? 'D:/tmp/sprite_meta_vanilla.json', 'utf8'));
 const kaizoMeta = JSON.parse(readFileSync(process.argv[5] ?? 'D:/tmp/sprite_meta_kaizo.json', 'utf8'));
+
+/** Per-frame trim rects, one file per build. Absent is the normal (padded) case. */
+const readRects = (p) => (existsSync(p) ? JSON.parse(readFileSync(p, 'utf8')) : {});
+const vanillaRects = readRects(process.argv[6] ?? process.env.KZ_RECTS_VANILLA ?? 'D:/tmp/sprite_frame_rects_vanilla.json');
+const kaizoRects = readRects(process.argv[7] ?? process.env.KZ_RECTS_KAIZO ?? 'D:/tmp/sprite_frame_rects_kaizo.json');
 
 /**
  * Sprites the overlay carries REGARDLESS of whether the mod changed them —
@@ -297,7 +339,10 @@ const masks = {};
 const missing = [];
 const replaced = [];
 const absentFromMod = [];
+/** Frames whose PNG is not the size the sprite declares and could not be repadded. */
+const short = [];
 let copied = 0;
+let repadded = 0;
 
 for (const name of candidates) {
   const inVanillaMeta = Object.prototype.hasOwnProperty.call(vanillaMeta, name);
@@ -354,11 +399,32 @@ for (const name of candidates) {
   // in the overlay — it would be a duplicate that can silently drift.
   if (source === 'vanilla' && mainManifest[name] && !WANT.includes(name)) continue;
 
+  // The trim rects that belong to the same build as the pixels — see "A FRAME
+  // SMALLER THAN ITS SPRITE, ON THIS SIDE TOO" in the header.
+  const rects = source === 'mod' ? kaizoRects : vanillaRects;
+
   const files = [];
   for (let i = 0; i < meta.frames; i++) {
     const png = `${name}_${i}.png`;
     if (!existsSync(join(from, png))) { missing.push(`${name}: frame ${i} missing from ${from}`); continue; }
-    copyFileSync(join(from, png), join(OUT, png));
+    // THE SIZE IS CHECKED, NOT ASSUMED. A frame that already matches is copied
+    // byte for byte, so a padded dump reproduces the previous overlay exactly.
+    const bytes = readFileSync(join(from, png));
+    const got = pngSize(bytes);
+    if (got.w === meta.w && got.h === meta.h) {
+      copyFileSync(join(from, png), join(OUT, png));
+    } else {
+      const r = rects[`${name}_${i}`];
+      // Only the RAW trim rect is repadded. A frame of any other odd size is
+      // refused rather than guessed at.
+      if (!r || got.w !== r.tw || got.h !== r.th) {
+        short.push(`${png} — PNG is ${got.w}x${got.h}, sprite declares ${meta.w}x${meta.h}`
+          + (r ? ` (trim rect says ${r.tw}x${r.th} at ${r.tx},${r.ty})` : ' (no trim rect available)'));
+        continue;
+      }
+      writeFileSync(join(OUT, png), pngEncode(pngPad(pngDecode(bytes), meta.w, meta.h, r.tx, r.ty)));
+      repadded += 1;
+    }
     files.push(png);
     copied += 1;
   }
@@ -413,7 +479,8 @@ writeFileSync(maskModule,
 
 const vanillaCount = Object.values(manifest).filter((e) => e.source === 'vanilla').length;
 const modCount = Object.values(manifest).length - vanillaCount;
-console.log(`kaizo sprite overlay: ${Object.keys(manifest).length} sprites, ${copied} frames`);
+console.log(`kaizo sprite overlay: ${Object.keys(manifest).length} sprites, ${copied} frames`
+  + (repadded ? `, ${repadded} repadded to the declared size` : ''));
 console.log(`  ${vanillaCount} vanilla-sourced · ${modCount} mod-sourced (PUBLISH-GATED)`);
 console.log(`  ${replaced.length} of those are sprites the mod REPLACED IN PLACE`);
 if (absentFromMod.length) {
@@ -421,8 +488,17 @@ if (absentFromMod.length) {
   for (const n of absentFromMod) console.log(`      ${n}`);
 }
 console.log(`  ${Object.keys(masks).length} precise masks -> masks.json`);
+// A SHORT FRAME FAILS THE RUN. It is reported before `missing` because the two
+// are different faults and this one is the quiet kind: a missing frame draws a
+// collision-mask outline somebody notices, a short frame draws real art nine
+// pixels out of place and looks fine.
+if (short.length) {
+  console.log(`\n${short.length} SHORT (not the size the sprite declares, and no usable trim rect):`);
+  for (const s of short.slice(0, 20)) console.log(`  ${s}`);
+  if (short.length > 20) console.log(`  ... and ${short.length - 20} more`);
+}
 if (missing.length) {
   console.log(`\n${missing.length} MISSING:`);
   for (const m of missing.slice(0, 20)) console.log(`  ${m}`);
-  process.exit(1);
 }
+if (short.length || missing.length) process.exit(1);

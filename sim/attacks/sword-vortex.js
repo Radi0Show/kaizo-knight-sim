@@ -30,6 +30,8 @@ import { spawn } from '../entity.js';
 import { lengthdirX, lengthdirY, lerp } from '../gml.js';
 import { scrBulletInit, collidebulletOther15 } from '../bullets/regularbullet.js';
 import { gmlChoose, gmlIrandom } from '../rng.js';
+// NO BULLET COOLDOWNS (tronic560) -- site D2; see sim/attacks/nbc.js.
+import { nbcOn, NBC_VORTEX_DAMAGE } from './nbc.js';
 
 const HEADINGS = [0, 45, 90, 135, 180, 225, 270, 315];
 
@@ -176,7 +178,21 @@ export const swordVortexManager = {
       inst.len = e.startinglen;
       inst.lenstart = inst.len;
       inst.shrinkrate = e.shrinkrate;
-      inst.damage = e.damage;
+      // NBC SITE D2 — obj_knight_enemy_Step_0.gml:500, tronic560's mod:
+      // `dc.damage = 206;` -> `103` on the ac-15 SWORD VORTEX dispatch (the
+      // line above the tracking-swords one in the same branch, which D1
+      // covers).
+      //
+      // Applied where the sword takes its damage rather than on the manager,
+      // because this attack has no `init`: `sim/scenes/fight.js` assigns the
+      // manager's `damage` after `create` has already returned, so there is
+      // no earlier hook in this lane's files.
+      //
+      // FLAGGED, because it is a real discrepancy and not this toggle's to
+      // fix: the dump gives BOTH ac-15 dispatches 206, while fight.js gives
+      // the vortex `CONTROLLER_DAMAGE` (KNIGHT_AT * 5 = 200). So vanilla here
+      // is 200 where the dump says 206; the mod's 103 is exact either way.
+      inst.damage = nbcOn(state) ? NBC_VORTEX_DAMAGE : e.damage;
       inst.target = e.target;
 
       e.swordcount += 1;

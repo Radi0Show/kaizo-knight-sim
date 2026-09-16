@@ -22,6 +22,8 @@ import { destroy } from '../entity.js';
 import { scrHeartclamp } from '../heartclamp.js';
 import { HEART_MASK, masksOverlap } from '../masks.js';
 import { gmlChoose } from '../rng.js';
+// NO BULLET COOLDOWNS (tronic560) -- site D5; see sim/attacks/nbc.js.
+import { nbcOn, NBC_SLASH_AOE_DAMAGE } from './nbc.js';
 
 /**
  * choose() for this attack.
@@ -124,7 +126,18 @@ export const roaringknightSlash = {
   other15(e, state) {
     e.damage = 206;
     if (e.aoe === true) {
-      e.damage = 75;
+      // NBC SITE D5 — obj_roaringknight_slash_Other_15.gml:4, tronic560's mod:
+      //
+      //     -  damage = 75;
+      //     +  damage = 69;
+      //
+      // THE AOE BRANCH ONLY. The `damage = 206` on the line above is the
+      // single-target value and the mod does not touch it — so a slash that
+      // hits one character still hits for 206 and one that hits all three
+      // does 69 each instead of 75. A six-point nerf that only applies on the
+      // wider hit; stated exactly because "the slash was nerfed" would be
+      // wrong about the common case.
+      e.damage = nbcOn(state) ? NBC_SLASH_AOE_DAMAGE : 75;
       e.target = 3;
       // with (obj_knight_enemy) aoedamage = true — no knight enemy in the
       // tester scenario; translate when the fight controller lands.

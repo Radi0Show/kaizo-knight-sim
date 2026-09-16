@@ -675,7 +675,19 @@ section('the shatter sheet exists, and the roar finale\'s pieces are painted');
 // against its source. Weak evidence for behaviour, strong evidence for absence.
 section('render/title.js draws the ramp and the glass');
 {
-  const src = readFileSync(join(REPO, 'render', 'title.js'), 'utf8');
+  // LINE ENDINGS NORMALISED BEFORE ANY OF THIS IS MATCHED.
+  //
+  // One wire below spans two lines, and it used to carry a literal CR+LF.
+  // render/title.js is VENDORED from knight-sim, it is committed with LF
+  // and checked out with CRLF, and a working tree can hold either — so the
+  // file this check reads is the same code with a different byte between
+  // those two lines, and the check reddened on a renderer that was correct.
+  //
+  // This is the project's own recurring trap (a regex anchored to CRLF;
+  // verify-rafloop's frame-body slice matching its own comments). A source
+  // scan asserts about CODE, and a line ending is not code.
+  const src = readFileSync(join(REPO, 'render', 'title.js'), 'utf8')
+    .split(String.fromCharCode(13, 10)).join(String.fromCharCode(10));
   const wires = [
     ["import { sliceShatter, drawShatterFragment } from './shatter.js';",
       'the SHARED drawer is the one the row uses — not a second copy'],
@@ -683,8 +695,6 @@ section('render/title.js draws the ramp and the glass');
       'the ramp walks from the old DIM to the shatter\'s own red by heat'],
     ['drawUnusedShatter(ctx, font, sprites, unusedStyle, title.unused?.shatter,',
       'the fragments are drawn'],
-    ['centred(ctx, font, \'Z  open      X  back\', 448, DIM, 0.75);\r\n    // LAST, OVER EVERYTHING',
-      'and they are drawn LAST, so nothing on the page cuts through the glass'],
     ['if (style.shattering) return;',
       'the intact row is NOT drawn under its own fragments'],
     ['`${style.presses} / ${style.total}`',
@@ -692,6 +702,36 @@ section('render/title.js draws the ramp and the glass');
   ];
   for (const [needle, why] of wires) {
     assert(src.includes(needle), `renderer: ${why}`);
+  }
+
+  // ── DRAWN LAST, AND THIS ASSERTS THE CODE RATHER THAN THE COMMENT ────────
+  //
+  // The previous version of this was a `wires` needle: the hint line followed
+  // by the `// LAST, OVER EVERYTHING` note. It could not fail. Moving the
+  // glass draw ABOVE the hint — the exact defect it names — left the hint and
+  // its comment adjacent, so the needle still matched and the check stayed
+  // green on a renderer that now cuts through the glass.
+  //
+  // A source scan that matches a COMMENT about an ordering is not a check on
+  // the ordering. So: find the glass draw, and assert nothing else draws
+  // between it and the `return` that closes the branch.
+  {
+    const at = src.indexOf('drawUnusedShatter(ctx, font, sprites, unusedStyle');
+    assert(at > 0, 'renderer: the glass draw is present at all');
+
+    const ret = src.indexOf('return;', at);
+    assert(ret > at, 'renderer: the glass draw sits in a branch that returns');
+
+    const after = src.slice(at, ret);
+    const draws = after.match(/(centred|drawText|drawSprite\w*|ctx\.fill\w*|ctx\.draw\w*)\(/g) ?? [];
+    assert(draws.length === 0,
+      `renderer: ${draws.length} draw call(s) after the glass — ${draws.join(', ')}`);
+
+    // POSITIVE, so this cannot pass by finding nothing: the hint the glass has
+    // to outrank must really be drawn in that branch, BEFORE it.
+    const hint = src.lastIndexOf("centred(ctx, font, 'Z  open      X  back'", at);
+    assert(hint > 0 && hint < at,
+      'renderer: the Z/X hint is drawn in that branch, ahead of the glass');
   }
 }
 

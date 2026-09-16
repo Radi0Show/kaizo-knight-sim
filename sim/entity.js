@@ -8,6 +8,12 @@
 // mutation in state.js.
 
 import { objectIndex } from './data/object-order.js';
+// THE BULLET MULTIPLIER'S TWO CONSTANTS AND NOTHING ELSE. `sim/dials.js` is a
+// leaf (it imports only sim/replay.js, which imports nothing), so this stays
+// acyclic — the dials module must never import `spawn`, and the copy loop
+// lives here rather than there for exactly that reason.
+import { bulletCopies, COPY_SPACING } from './dials.js';
+import { lengthdirX, lengthdirY } from './gml.js';
 
 export const ALARM_COUNT = 12;
 
@@ -227,6 +233,54 @@ export function spawn(state, type, vars = {}) {
       + 'the entity descriptor. Rename the GML variable (see sim/entity.js).',
     );
   }
+
+  // ── THE BULLET MULTIPLIER'S LINEAGE MARK (sim/dials.js) ─────────────────
+  //
+  // READ THE GUARD BEFORE CHANGING IT. `state.dials` is null or absent on
+  // every state this repo has ever produced except one armed by a scene
+  // builder that was handed dials — so on every verifier, every trace regen
+  // and every byte-gate run this is one property read that short-circuits,
+  // and not a single call below it happens. That is the requirement, stated
+  // as the first gate of this lane's brief: OFF must be the SAME CALLS IN THE
+  // SAME ORDER, because one extra entity draws RNG in its own Create and
+  // shifts the whole stream from that frame on.
+  //
+  // THE COPY ITSELF IS NOT MADE HERE, AND THAT WAS A MEASURED CORRECTION.
+  // The first version cloned inside `spawn` — call `spawn` again with the
+  // same `type` and `vars`, offset the result — and ROARING CRASHED at frame
+  // 176 with x/y NaN on six copied stars. The reason is this repo's universal
+  // spawner idiom: `fireRingStar` (sim/attacks/roaring.js) does
+  //
+  //     const d = spawn(state, roaringStar, { x: ..., y: ... });
+  //     d.spinspeed = 1;  d.direction = ...;  d.friction = -0.1;
+  //
+  // — the fields that make the object work are assigned AFTER `spawn` returns,
+  // so a copy born inside `spawn` gets `vars` and nothing else. `spinspeed`
+  // stayed undefined, `90 * spinspeed` was NaN, and the mask sampler read
+  // `px[NaN]`. That file's own comment already warns about exactly this
+  // variable, one line above the assignment.
+  //
+  // So the copies are made at END OF FRAME instead (`multiplyBullets`, below,
+  // called from `reap`), by which time every spawner has finished configuring
+  // its bullet. All that happens here is the LINEAGE MARK the sweep reads.
+  //
+  // ── ONLY TOP-LEVEL BULLETS ARE COPIED, AND THAT IS THE BOUND ────────────
+  //
+  // Also measured, also wrong the first time. With recursion depth as the only
+  // stop, the Stars drill at 3x peaked at **846 live bullets against a 1x peak
+  // of 79** — better than ten times — because a copied star spawns
+  // starchildren on a LATER frame, outside any reentrancy flag, and each of
+  // those was copied again. Three generations of a seven-hundred-frame attack
+  // is not 3x; it is the hang the dial's ceiling exists to prevent.
+  //
+  // The rule is therefore LINEAGE, not depth: a bullet spawned BY A BULLET is
+  // never copied. `state.dialSpawnBlock` is raised around each entity's
+  // handlers (runPhase / runAlarms below) and says "the thing spawning right
+  // now is itself a bullet". The copies still breed their own children
+  // normally — three copied stars make three sets of starchildren, which is
+  // exactly 3x — so the live count is bounded by `mult x vanilla` across the
+  // whole attack rather than by `mult ^ generations`.
+  if (state.dials && e.isBullet && state.dialSpawnBlock) e.dialFromBullet = true;
   return e;
 }
 
@@ -361,11 +415,22 @@ function drawList(state) {
 
 export function runPhase(state, phase) {
   state.eventPhase = phase;
+  // THE LINEAGE FLAG, and it costs an unarmed build one comparison per PHASE.
+  // `armed` is read once, outside the loop; with the dials off the `if (armed)`
+  // inside is a false test and nothing else happens — no write, no call, no
+  // change to the order anything runs in. See the multiplier's note in
+  // `spawn`: the flag says whether the entity currently running a handler is
+  // itself a bullet, which is what keeps the copies from breeding.
+  const armed = state.dials != null;
   for (const e of (phase === 'draw' ? drawList(state) : phaseList(state))) {
     if (!e.alive) continue;
+    if (armed) state.dialSpawnBlock = e.isBullet === true;
     const fn = e.type[phase];
     if (fn) fn(e, state);
   }
+  // Cleared on the way out so a spawn from OUTSIDE any handler — a scene
+  // builder, `launchAttack` — is never mistaken for a bullet's own.
+  if (armed) state.dialSpawnBlock = false;
 }
 
 /**
@@ -462,8 +527,13 @@ function alarmList(state) {
 // them.
 export function runAlarms(state) {
   state.eventPhase = 'alarm';
+  // The same lineage flag runPhase raises, for the same reason: a bullet's
+  // ALARM spawns bullets too (the underbox orbs' volleys), and a copy whose
+  // alarm bred more copies would compound exactly as the step path did.
+  const armed = state.dials != null;
   for (const e of alarmList(state)) {
     if (!e.alive) continue;
+    if (armed) state.dialSpawnBlock = e.isBullet === true;
 
     for (let i = 0; i < ALARM_COUNT; i++) {
       // AN ALARM READS 0 ON THE FRAME IT FIRES AND -1 THE FRAME AFTER. Measured,
@@ -491,10 +561,81 @@ export function runAlarms(state) {
       }
     }
   }
+  if (armed) state.dialSpawnBlock = false;
+}
+
+/**
+ * THE BULLET MULTIPLIER'S COPY SWEEP — every bullet born this frame, duplicated
+ * `mult - 1` times, AFTER its spawner has finished configuring it.
+ *
+ * WHY THIS IS A FIELD COPY AND NOT A SECOND `spawn`. See the long note in
+ * `spawn`: half this repo's bullets are configured by their spawner in the
+ * lines AFTER `spawn` returns (`d.spinspeed = 1`, `d.direction = ...`,
+ * `d.friction = -0.1`), so re-running Create reproduces a bullet that is
+ * missing exactly the fields that make it work. Duplicating the finished
+ * instance is the only version that cannot be half-built — and it draws NO
+ * RNG, where a second Create would, so the copies cost the stream nothing
+ * beyond their own existence.
+ *
+ * KNOWN AND ACCEPTED: the copy shares any object-valued field with its
+ * original by reference (a mask, a parent handle, a shared list). Masks and
+ * parent handles are read-only from the bullet's side, which is why this is
+ * safe in practice rather than in principle — and it is why the dial is a
+ * labelled practice aid rather than something the fight can reach.
+ *
+ * Returns the number of copies made, so a caller (and the suite) can assert
+ * that the sweep did something rather than merely ran.
+ */
+export function multiplyBullets(state) {
+  if (!state.dials) return 0;
+  const copies = bulletCopies(state);
+  if (copies <= 1) return 0;
+  // SNAPSHOT FIRST. The loop below pushes onto `state.entities`, and the
+  // copies are born on this same frame — iterating the live array would sweep
+  // them too and the multiplier would run away inside one frame.
+  const born = [];
+  for (const e of state.entities) {
+    if (e.alive && e.isBullet && e.bornFrame === state.frame
+        && !e.dialCopy && !e.dialFromBullet) born.push(e);
+  }
+  let made = 0;
+  for (const src of born) {
+    for (let k = 1; k < copies; k++) {
+      // The f32 built-ins are enumerable accessors, so the spread reads their
+      // VALUES; `installF32Builtins` then re-wraps them on the copy.
+      const c = { ...src };
+      c.seq = state.nextSpawnSeq++;
+      c.bornFrame = state.frame;
+      c.alarm = src.alarm.slice();
+      c.dialCopy = true;
+      // A copy never breeds copies, on this frame or any later one.
+      c.dialFromBullet = true;
+      installF32Builtins(c);
+      // The copies TRAIL along the original's own heading, one spacing each —
+      // the same picture as the attack having fired a few frames earlier. A
+      // perfect duplicate would be invisible: same place, same speed, forever.
+      const back = k * COPY_SPACING;
+      c.x = src.x - lengthdirX(back, c.direction);
+      c.y = src.y - lengthdirY(back, c.direction);
+      // `x = xstart` is how several attacks snap back to their spawn point, so
+      // the copy's start follows its position — otherwise the first snap would
+      // merge it with the original it was offset from.
+      c.xstart = c.x;
+      c.ystart = c.y;
+      state.entities.push(c);
+      made += 1;
+    }
+  }
+  return made;
 }
 
 /** Drop destroyed entities. Runs after End Step, before the trace row. */
 export function reap(state) {
+  // THE COPY SWEEP RUNS FIRST, and here rather than in sim/index.js because
+  // this is the one place that already sits after every handler and before the
+  // trace row. On an unarmed state it is a call that returns on its first
+  // line; `state.dials` is absent, so nothing below that line happens.
+  multiplyBullets(state);
   if (state.entities.some((e) => !e.alive)) {
     state.entities = state.entities.filter((e) => e.alive);
   }

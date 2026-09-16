@@ -45,6 +45,38 @@ const KEYS = Object.keys(BITS);
 
 export const TOKEN_VERSION = 'K1';
 
+// ---------------------------------------------------------------------------
+// MARKING A STATE AS A REPLAY — the flag, and where it has to live.
+//
+// A token is a PROMISE: this seed plus this input stream gives these frames
+// back, on any machine. Anything that changes the fight breaks that promise,
+// and the thing most likely to do it is a saved setting the reader never
+// chose — the practice dials (sim/dials.js) are the first, and a multiplier
+// left on 2x three days ago would quietly reproduce a DIFFERENT bug than the
+// one the reporter was looking at.
+//
+// So the mark lives HERE rather than in the driver: the module that decodes
+// the token is the module that knows a replay is running, and every consumer
+// asks it. `sim/dials.js`'s `applyDials` refuses on a marked state, which
+// makes the refusal a property of the sim rather than of a `if (!replay)`
+// the browser driver could forget on the next branch.
+//
+// It is one-way on purpose. There is no `unmarkReplay`: a state that has ever
+// been a replay stays one for its whole life, because the alternative is a
+// clear-then-arm ordering bug that nothing would catch until a report came
+// back irreproducible.
+
+/** Mark a state as replaying a token. One-way; there is no inverse. */
+export function markReplay(state) {
+  if (state) state.replaying = true;
+  return state;
+}
+
+/** True while `state` is reproducing a replay token. */
+export function isReplaying(state) {
+  return state != null && state.replaying === true;
+}
+
 /** Pack one input object into a byte. */
 export function packInput(input) {
   let b = 0;

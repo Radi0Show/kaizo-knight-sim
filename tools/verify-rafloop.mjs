@@ -38,12 +38,32 @@
 // forks" and "the loop never runs" look identical to a test that only counts
 // chains. Every scenario below carries a POSITIVE assertion that frame() ran.
 
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const DRIVER = join(here, '..', 'web', 'main.js');
+// ── WHICH DRIVER, and why this is not just `web/main.js` ───────────────────
+//
+// This suite is VENDORED. kaizo-knight-sim mirrors tools/ wholesale, and that
+// repo's page driver is `web/kaizo.js`, not `web/main.js` — so a hardcoded
+// path did not fail an assertion there, it threw ENOENT and took the whole
+// suite down. A suite that cannot run is not a suite that passes.
+//
+// Both names are tried and the one that exists is read. If NEITHER exists the
+// suite fails loudly rather than skipping: a driverless repo means the vendor
+// step is broken, which is exactly what this is here to notice.
+function findDriver(root) {
+  for (const name of ['main.js', 'kaizo.js']) {
+    const p = join(root, 'web', name);
+    if (existsSync(p)) return { path: p, name: `web/${name}` };
+  }
+  console.log(`  FAIL  no page driver found — tried web/main.js and web/kaizo.js under ${root}`);
+  process.exit(1);
+  return null;
+}
+const DRIVER_FILE = findDriver(join(here, '..'));
+const DRIVER = DRIVER_FILE.path;
 const src = readFileSync(DRIVER, 'utf8');
 
 let failed = 0;
@@ -78,7 +98,7 @@ console.log('frame() reschedules through exactly one place');
   // than on the wrong change. Normalised once, here.
   const flat = src.split(String.fromCharCode(13) + String.fromCharCode(10)).join(String.fromCharCode(10));
   const start = flat.indexOf('\nfunction frame(now) {');
-  ok(start >= 0, 'frame(now) found in web/main.js');
+  ok(start >= 0, `frame(now) found in ${DRIVER_FILE.name}`);
   const end = flat.indexOf('\n}\n', start);
   ok(end > start, 'frame() body delimited');
   const body = flat.slice(start, end);
@@ -220,7 +240,7 @@ function load(region, env) {
   return api;
 }
 
-const region = extractRegion(src, 'web/main.js');
+const region = extractRegion(src, DRIVER_FILE.name);
 
 // --- steady state ----------------------------------------------------------
 console.log('\na visible tab, left alone');

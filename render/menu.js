@@ -25,6 +25,8 @@ import { spellCost, spellInfo, actsFor } from '../sim/spells.js';
 import { gmlRound } from '../sim/gml.js';
 import { MAX_TENSION } from '../sim/tension.js';
 import { KNIGHT_MAXHP } from '../sim/knight.js';
+// NO BULLET COOLDOWNS (tronic560) -- site T1; see sim/attacks/nbc.js.
+import { knightName } from '../sim/attacks/nbc.js';
 import { drawSpriteText, FONTS } from './text.js';
 import { loadFont, drawText, textWidth, textHeight, styleColors } from './font.js';
 
@@ -535,7 +537,16 @@ function drawEnemyRow(ctx, state, sprites, font) {
   // (`scr_monster_statreset`) and only ever becomes "(Tired)" or "(Warned)",
   // neither of which this fight can produce. A first pass here invented a
   // flavour line, which is exactly what rule 5 forbids.
-  drawText(ctx, font, 'Knight', 80, 375, { color: '#ffffff' });
+  //
+  // NBC SITE T1 — obj_knight_enemy_Step_0.gml:36 and :590. tronic560's mod
+  // rewrites the same assignment in both places to "Roaring Knight", and
+  // again to "Roaring Fraud" once `global.monsterhp[myself] < 5840`. The
+  // threshold is the code's, not the changelog's, and it is the fight's one
+  // real number — 80% of 7300, already the phase-4 gate here.
+  //
+  // `knightName` returns the bare 'Knight' whenever the toggle is off, which
+  // is the literal this line used to hold.
+  drawText(ctx, font, knightName(state), 80, 375, { color: '#ffffff' });
 
   ctx.fillStyle = MAROON;
   ctx.fillRect(420, 380, 80, 15);

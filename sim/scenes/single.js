@@ -12,6 +12,7 @@
 // options.
 
 import { spawn, destroy } from '../entity.js';
+import { applyDials } from '../dials.js';
 import { battlebox, settleBox } from '../battlebox.js';
 import { gmlCreate } from '../rng.js';
 import { knightActor, partyActor, PARTY, KNIGHT, BOX } from '../actors.js';
@@ -20,6 +21,7 @@ import { createMenu } from '../menu.js';
 import { freshParty, scrRevive, partyWiped } from '../damage.js';
 import { cueLoop } from '../audio.js';
 import { COMBO_ATTACKS } from '../attacks/combination.js';
+import { SPRITE_MASKS } from '../masks.js';
 
 /** The objects a combination turn can hand itself to. */
 const COMBO_SEGMENT_NAMES = new Set(Object.values(COMBO_ATTACKS).map((a) => a.name));
@@ -84,7 +86,41 @@ export function difficultyBlurb(ac, diff) {
   return `phase ${phases.join(' & ')}`;
 }
 
-const GAP = 45;
+/**
+ * THE WAIT BETWEEN RUNS, AND WHERE IT WENT. Measured before it was touched,
+ * because "feels long" is not a number.
+ *
+ * A drill run is `launch -> the attack's own turn clock -> drain -> reset ->
+ * gap -> launch`. There is NO menu, NO writer, NO FIGHT bar and NO scene
+ * rebuild in this loop — those belong to the fight director (practice.js) and
+ * this mode never builds them, so none of the wait was ever there. The whole
+ * wait is the last two terms, and one cycle of every attack in ATTACK_MENU was
+ * timed frame by frame:
+ *
+ *   gap    45 frames, every attack, every run, flat — all 18 of them.
+ *   drain  the FULL 90 for ELEVEN attacks; 0 for five; and two in between
+ *          (Stars 25, Swordslash 11), which are the only two where the number
+ *          was ever the bullets' doing.
+ *
+ * `GAP` WAS 45 AND 33 OF THOSE FRAMES WERE NOTHING AT ALL. The board is torn
+ * down at the reset and rebuilt on the next frame as a settled placeholder; the
+ * arena does not open until `gap == RTIMER_SPAWN`, and the soul is not
+ * delivered until eight frames after that. So frames 45 down to 13 are a still
+ * box, no soul, no bullets, nothing to read and nothing to do — 1.1 seconds of
+ * it, forty times over in a drill session.
+ *
+ * The last 12 are NOT dead: they are the fight's own `rtimer == 12` beat, and
+ * they are load-bearing twice over (Swordslash reads `box.sprite_height` once
+ * at con 0, and the soul flies in at gap 4 through a ring that has to enclose
+ * the drop point). They stay exactly as they were. 16 keeps them, plus three
+ * frames for the placeholder box the next frame's `step` spawns to exist
+ * before `openArena` looks for it.
+ *
+ * THE WHOLE-FIGHT PATH IS UNTOUCHED BY THIS. `practice.js` has its own
+ * director with its own constants; this file is reached only by
+ * `buildSingleAttackScene`, which is the single-attack mode and nothing else.
+ */
+const GAP = 16;
 const DRAIN = 90;
 /** `rtimer == 12` — the beat between the board opening and the attack. */
 const RTIMER_SPAWN = 12;
@@ -174,8 +210,64 @@ const director = {
         if (next) e.owner = next;
       }
       const ownerAlive = e.owner && e.owner.alive;
+      // A SPAWN MANAGER IS NOT A BULLET, AND IT WAS HOLDING THE DRAIN OPEN
+      // FOR THE FULL 90 FRAMES.
+      //
+      // `scr_bullet_init` stamps `isBullet` on everything it touches, managers
+      // included, so this test used to count them — and they never leave,
+      // because they were never going anywhere. Measured across one cycle of
+      // every entry in ATTACK_MENU: for ac 11, 13, 14 and 17 the ONLY thing
+      // alive through the ENTIRE drain is one parked
+      // `obj_tracking_swords_manager` / `obj_sword_tunnel_manager` sitting at
+      // y 0, above the arena, with no bullet on screen anywhere; their drains
+      // now end on the clock. ac 16 is the partial case — 24 frames of real
+      // bullets, then 65 of manager alone — and it keeps exactly the 24.
+      //
+      // The bullet count does not rise again in those windows either, so
+      // nothing is still being spawned; tools/verify-single-tempo.mjs proves
+      // that separately by pinning the drain open to its old full length and
+      // watching for a bullet that never comes. The drill sat there for three
+      // seconds after every run of two of the five attacks the real fight
+      // actually uses (ac 11 and 13).
+      //
+      // THE TEST IS PER-FRAME AND EXACT, NOT A NAME LIST, and it asks the two
+      // questions the player actually cares about: can I see it, and can it
+      // hit me. A thing that fails both is not something anyone is waiting to
+      // clear.
+      //
+      // CAN I SEE IT — a bullet with neither its own `mask` nor a sprite in
+      // SPRITE_MASKS resolves to null in `grazes` (sim/index.js:316 does this
+      // exact lookup and bails), in `spriteMaskHit`, and in the renderer's
+      // mask fallback, so it draws no shape and cannot graze.
+      //
+      // CAN IT HIT ME — and this half is NOT implied by the first, which is
+      // the trap. The collision phase's default path is `spriteMaskHit`, which
+      // a maskless bullet fails; but a type may OVERRIDE the test, and one in
+      // this fight does while maskless. `obj_roaringknight_splitslash` (ac 2,
+      // Flurry) carries `scr_precise_hit` and an Other_15 and runs for 480
+      // frames of a two-run cycle with no mask resolved — measured, not
+      // reasoned. Dropping it on the mask test alone would have let the drill
+      // sweep a bullet that was still live and still damaging. Flurry happens
+      // to keep its full drain today because its teeth are masked, so this
+      // would have been an invisible hole with a green suite over it.
+      //
+      // So the exclusion requires BOTH: no mask AND no custom collision path.
+      // `maskOff` is `mask_index = spr_nomask`, which the collision loop skips
+      // outright, so it cannot hit either way.
+      //
+      // Live, not fixed per object: splitslash later acquires
+      // `spr_rk_quickslash`, and either half being true holds the drain open
+      // for exactly as long as it is real.
+      //
+      // What this deliberately does NOT do is shorten the drain for the attacks
+      // whose bullets ARE still in the arena. ac 15, 12, 4 and 20 have real
+      // bullets overlapping the board at drain frame 88; they keep all 90.
       const bulletsLeft = state.entities.some(
-        (x) => x.alive && x.isBullet && x.type.name !== 'obj_heart',
+        (x) => x.alive && x.isBullet && x.type.name !== 'obj_heart'
+          && (
+            (x.mask ?? SPRITE_MASKS[x.sprite_index] ?? null) !== null
+            || (!!x.type.collides && !!x.type.other15 && !x.maskOff)
+          ),
       );
       // Same rule as the fight: the clock decides, with a short drain so
       // bullets can leave on their own before the sweep.
@@ -298,11 +390,20 @@ const director = {
  * @param opts.attack      an id from ATTACK_MENU
  * @param opts.difficulty  one of that entry's difficulties
  * @param opts.holdBreath  arm Kris's HoldBreath before the drill starts
+ * @param opts.dials       the two practice bars (sim/dials.js), or null
  */
 export function buildSingleAttackScene(
   state,
-  { seed = 12345, attack = 'stars', difficulty = 0, holdBreath = false } = {},
+  {
+    seed = 12345, attack = 'stars', difficulty = 0, holdBreath = false,
+    dials = null,
+  } = {},
 ) {
+  // THE DIALS ARM FIRST, before a single spawn — same rule as the fight scene
+  // (see buildPracticeScene's note). `if (dials)` so that the omitted case is
+  // a truthiness test and nothing more: this drill is what verify-titlemenu
+  // and half a dozen other suites build, and none of them may change shape.
+  if (dials) applyDials(state, dials);
   const m = menuEntry(attack);
   // The practice scene skips the menu (it drills ONE attack on repeat), but
   // the renderer always draws the charboxes, so the state has to exist.

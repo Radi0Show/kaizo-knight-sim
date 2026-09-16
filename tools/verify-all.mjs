@@ -92,6 +92,7 @@ const SUITES = [
   ['verify-share.mjs', 'shareable setups — ?cfg= round trip and hostile tokens'],
   ['verify-contact-coverage.mjs', 'contact coverage — every attack can actually hit'],
   ['verify-titlemenu.mjs', 'title navigation — stages, X back, the GRAPHICS toggles'],
+  ['verify-endless.mjs', 'ENDLESS per phase — the stage list, the loop, the untouched NORMAL path'],
   ['verify-battlemsg.mjs', 'the battle message box — 15 lines, phase 4 gates, down messages'],
   ['verify-actmodel.mjs', 'the ACT table — per enemy, per character, five parallel fields'],
   // The whole-fight diff. Skips loudly without ~/knight-research/traces, so on
@@ -111,6 +112,12 @@ const SUITES = [
 ['verify-determinism.mjs', 'byte-identical across 10 runs'],
 ['verify-rafloop.mjs', 'the frame loop + rAF watchdog — one chain across tab switches'],
 ['verify-actspare.mjs', 'the ACT swing waits for the turn, and SPARE has a row'],
+['verify-practice.mjs', 'PRACTICE — the effective-HP threshold, and a retry that costs the attack'],
+['verify-single-tempo.mjs', 'single-attack tempo — the wait cut, the content kept'],
+['verify-nbc.mjs', 'NO BULLET COOLDOWNS (tronic560) — OFF is a no-op, ON fires'],
+['verify-nbc-knighthunks.mjs', 'NBC — the red arena, and the three Knight hunks NOT taken'],
+['verify-nbc-tunnel.mjs', 'the sword tunnel under NBC — denser, not shorter, and why it measured backwards'],
+['verify-dials.mjs', 'the practice bars — clamp, stay silent, reach the spawn path, default to nothing'],
 ];
 
 // EVERY suite file must be in the table. A suite that exists and is never run

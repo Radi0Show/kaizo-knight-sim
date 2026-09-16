@@ -1,6 +1,7 @@
-import { mergeColor, gmlRound } from './gml.js';
+import { mergeColor, makeColorHsv, gmlRound } from './gml.js';
 import { spawn } from './entity.js';
 import { afterimage } from './fx.js';
+import { nbcOn } from './attacks/nbc.js';
 // The battle box — obj_growtangle at steady state.
 //
 // obj_growtangle's parent object is obj_battlesolid, so the box itself is
@@ -88,7 +89,36 @@ export const battlebox = {
     //
     // c_green is RGB(0,128,0) and c_lime is RGB(0,255,0) — GameMaker packs
     // colours BGR, so both have a zero red and blue channel.
-    e.image_blend = mergeColor([0, 128, 0], [0, 255, 0], 0.5);
+    //
+    // NBC SITE V1 — obj_growtangle_Create_0.gml line 8, tronic560's mod
+    // REPLACES this one line:
+    //
+    //     -  image_blend = merge_color(c_green, c_lime, 0.5);
+    //     +  image_blend = make_color_hsv(0, 255, 255);
+    //
+    // Hue 0 at full saturation and full value is RGB(255,0,0), so the arena
+    // is RED under the mod instead of green. It is the mod's own art
+    // direction, taken as the mod has it and behind the same flag as every
+    // other site — not a label, not a notice, and nothing this repo invented.
+    //
+    // IT REACHES FURTHER THAN THE BORDER, which is the reason the whole
+    // fight reads differently rather than just its frame:
+    //
+    //   * the grow-in echo — Step_0 line 63, `d.image_blend = image_blend;`,
+    //     the afterimage this module spawns ~200 lines down;
+    //   * the split organism — obj_knight_split_growtangle's Create line 1 is
+    //     `image_blend = obj_growtangle.image_blend;`, so both halves of every
+    //     box-splitter cut carry it (sim/attacks/split-growtangle.js), and
+    //   * the split EFFECT, which that object hands its own blend to.
+    //
+    // Nothing downstream needed a change: all three already read this field.
+    //
+    // OFF IS THE ORIGINAL EXPRESSION, character for character — the same
+    // single `mergeColor` call with the same three arguments. `makeColorHsv`
+    // is only ever reached with the flag on.
+    e.image_blend = nbcOn(state)
+      ? makeColorHsv(0, 255, 255)
+      : mergeColor([0, 128, 0], [0, 255, 0], 0.5);
     e.keep = 0;
     e.megakeep = 0;
     // GML built-ins: creation position. The slash's box jitter re-bases off

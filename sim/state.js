@@ -51,6 +51,14 @@ export function createState({ seed, traceBulletSlots = 0, bag = null } = {}) {
     turntimer: 999, // global.turntimer — gates attack close-out
     invc: 1, // global.invc — invincibility multiplier (inv resets to invc*30)
 
+    // NO BULLET COOLDOWNS — tronic560's mod, off unless a driver turns it on.
+    // Declared here so the default is one visible literal rather than an
+    // absent field, and so `nbcOn` has something to read on every state the
+    // sim builds. See sim/attacks/nbc.js for what it changes and whose work
+    // it is; the whole point of the flag is that FALSE runs the code this
+    // file's callers ran before it existed, call for call.
+    noBulletCooldown: false,
+
     // Oracle parity switch. Some oracle patches replace obj_collidebullet's
     // Other_15 with a pure recorder, because letting the party die ends the
     // run and loses the trace. Scenes mirroring such a run set this false:

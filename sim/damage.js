@@ -671,6 +671,11 @@ export function scrDamage(state, damage, target, opts = {}) {
   }
 
   hp[target] -= t;
+  // PRACTICE COUNTS WHAT YOU TOOK. Guarded on `state.practice`, which is
+  // undefined everywhere except a practice run — the byte gate builds this
+  // scene with no options, so on every recorded fight this is a property read
+  // that finds nothing and never touches the RNG.
+  if (state && state.practice) state.practiceDamage = (state.practiceDamage ?? 0) + t;
   if (hp[target] <= 0) {
     // KRIS AND THE OTHERS SWOON DIFFERENTLY, and the numbers are the point:
     //
@@ -809,6 +814,45 @@ export function partyWiped(state) {
 }
 
 /**
+ * EFFECTIVE PARTY HP — the left-hand side of Bad Time Simulator's practice
+ * threshold, translated.
+ *
+ * BTS tests `HP - KR < PracticeTargetTest` every tick (`Event sheets/
+ * Battle.xml`). **`KR` HAS NO COUNTERPART IN THIS FIGHT AND NONE IS INVENTED.**
+ * It is Undertale's Karmic Retribution — Sans-only poison that sits on the
+ * player as damage not yet applied, so BTS subtracts it to ask "what will you
+ * have when this finishes". DELTARUNE has no karma, the Roaring Knight has no
+ * lingering damage, and `scr_damage` applies its whole number on the frame it
+ * lands. The subtrahend is zero here, so the expression reduces to `HP`.
+ *
+ * WHAT IS NOT TRIVIAL is that BTS has one HP pool and this fight has three.
+ * Two things break a naive sum:
+ *
+ *   * A SWOONED MEMBER SITS AT -999, not 0 (`scr_damage`'s doomtype block;
+ *     Kris goes to `round(-maxhp / 2)` and the others to -999). Summing raw
+ *     `partyHp` reads -1758 with two members still standing, which would fire
+ *     any positive threshold instantly.
+ *   * THE ROSTER IS NOT ALWAYS THREE. `partySize()` is the authority — slot 2
+ *     on a two-member roster is nobody, and `state.partyHp[2]` is `undefined`
+ *     there, which arithmetic turns into NaN and every comparison into false.
+ *
+ * So each slot is clamped at zero and only occupied slots are counted. The
+ * consequence worth stating: at a target of 1 this is EXACTLY `partyWiped()`
+ * — zero is the only sum that is less than one — so the default threshold
+ * reproduces the existing death condition and any larger target is strictly
+ * earlier. Nothing about the fight's arithmetic changes; this only reads it.
+ */
+export function effectivePartyHp(state) {
+  const n = partySize(state);
+  let hp = 0;
+  for (let i = 0; i < n; i++) {
+    const h = state.partyHp[i];
+    if (h > 0) hp += h;
+  }
+  return hp;
+}
+
+/**
  * `scr_damage_maxhp(fraction, ignoreDefend, cannotFell)` — THE SECOND DAMAGE
  * ENTRY POINT, and this build did not have it at all.
  *
@@ -893,6 +937,11 @@ export function scrDamageMaxhp(state, fraction, ignoreDefend = false, cannotFell
   if (t < 0) t = 0;
 
   hp[target] -= t;
+  // ...AND THE MAX-HP PATH COUNTS TOO. scr_damage_maxhp is how the ROARING
+  // catch and the phase-4 fractions land, so a practice run that watched only
+  // scr_damage would let the biggest hits in the fight pass the allowance
+  // untouched — the turns most worth practising.
+  if (state && state.practice) state.practiceDamage = (state.practiceDamage ?? 0) + t;
   if (hp[target] <= 0) {
     // THE SAME FELL AS scr_damage, AND IT HAS TO BE. This path had its own
     // half-copy: it set the HP hole but never called scr_dead, and it drew

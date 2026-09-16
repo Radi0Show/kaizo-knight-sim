@@ -32,6 +32,8 @@ import { scrChildbulletCopy } from '../childbullet.js';
 import { scrBulletInit, collidebulletOther15 } from '../bullets/regularbullet.js';
 import { scrDamageAll } from '../damage.js';
 import { pointingStarchild } from './pointing-starchild.js';
+// NO BULLET COOLDOWNS (tronic560) -- site D3; see sim/attacks/nbc.js.
+import { nbcOn, NBC_POINTING_DAMAGE } from './nbc.js';
 
 export const pointingStar = {
   name: 'obj_knight_pointing_star',
@@ -272,7 +274,16 @@ export const pointingStar = {
  */
 export function starOther15(e, state) {
   if (e.active !== 1 && e.active !== true) return;
-  e.damage = 75;
+  // NBC SITE D3 — obj_knight_pointing_star_Other_15.gml:2, tronic560's mod:
+  //
+  //     -  damage = 75;
+  //     +  damage = 100;
+  //
+  // A BUFF, not a nerf, and the only place in the mod where the Stars attack
+  // changes at all. It is party-wide (`target = 3` -> scr_damage_all), so
+  // this is +25 to every living member per contact. Its child bullets carry
+  // the same number — site D4, sim/attacks/pointing-starchild.js.
+  e.damage = nbcOn(state) ? NBC_POINTING_DAMAGE : 75;
   e.target = 3;
   scrDamageAll(state, e.damage, { aoe: true, element: 5 });
   // `destroy` takes THE ENTITY — `destroy(state, e)` marked the state object

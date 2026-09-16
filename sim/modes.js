@@ -16,14 +16,23 @@
 //   NORMAL    the real fight, the real order, and it ends when it ends
 //   HITLESS   one hit and it restarts — the practice loop for learning a
 //             pattern, and the reason most people open a tool like this
-//   ENDLESS   never stops; the phase order wraps back to the start, so you
-//             can stay in the fight as long as you like
+//   ENDLESS   never stops. Confirming it opens a second list (ENDLESS_STAGES
+//             below): the whole fight on a loop, or ONE PHASE repeating
 //   SINGLE    one attack on repeat, chosen from the roster
+//   PRACTICE  the real fight, but a wipe rewinds the attack instead of
+//             ending the run
 //
 // HITLESS is the mode this project has been implicitly built for the whole
 // time — a deterministic sim with instant restart is exactly the shape a
 // hitless practice loop wants — and it was the one thing the UI could not
 // express.
+//
+// PRACTICE IS LAST IN THE ARRAY ON PURPOSE. `stepTitle` branches on
+// `MODES[title.index].id` but `TITLE_EXTRAS` is positioned by `MODES.length`,
+// and the ENDLESS row's own submenu work indexes from where ENDLESS sits —
+// so a new row appended at the end shifts nothing that already exists. It
+// reads last in the menu too, which is right: it is the mode you drop to
+// once one of the four above has shown you which attack keeps killing you.
 
 export const MODES = [
   {
@@ -39,14 +48,129 @@ export const MODES = [
   {
     id: 'endless',
     name: 'ENDLESS',
-    blurb: 'It never stops. The order loops.',
+    blurb: 'The whole fight, or one phase, on a loop.',
   },
   {
     id: 'single',
     name: 'SINGLE ATTACK',
     blurb: 'One attack, on repeat.',
   },
+  {
+    id: 'practice',
+    name: 'PRACTICE',
+    blurb: 'A wipe rewinds the attack, not the run.',
+  },
 ];
+
+/**
+ * THE MODE ROWS **THIS BUILD** OFFERS — `MODES` unless a driver narrows it.
+ *
+ * WHY THIS EXISTS. The engine is VENDORED into other pages (kaizo-knight-sim
+ * mirrors sim/ and render/ wholesale), and those pages build their fights with
+ * their OWN scene. `MODES` is a shared constant that both the navigation and
+ * render/title.js read directly, so a row appended here appears on every page
+ * that vendors the engine — INCLUDING the pages whose scene does not implement
+ * it. That is how the kaizo build came to show a PRACTICE row whose blurb
+ * promises "a wipe rewinds the attack" over a director that never reads
+ * `runMode === 'practice'` and therefore just plays a normal run.
+ *
+ * A menu row that lies is worse than a missing feature, and this repo has a
+ * standing pattern of exactly this defect — a value written where nothing
+ * reads it, counted seven times in the ledger. So a driver may hand the title
+ * its own list: `title.modes = MODES.filter(...)`.
+ *
+ * NOT A FILTER ON `MODES` ITSELF. The share token (`?cfg=`) encodes a mode as
+ * an INDEX INTO `MODES`, and a token has to mean the same thing on every page
+ * that can open it. Drivers keep mapping tokens through the full array; only
+ * what the SCREEN offers narrows.
+ *
+ * @param title  the title state, or nothing
+ * @returns the rows to show, never empty
+ */
+export function modeRows(title) {
+  const own = title && Array.isArray(title.modes) ? title.modes : null;
+  return own && own.length > 0 ? own : MODES;
+}
+
+/**
+ * ENDLESS's SECOND LIST — which stage repeats.
+ *
+ * TAKEN, in shape, from Bad Time Simulator. Its `Globals.xml` carries a global
+ * `EndlessStage` beside `SimulatorMode`, and `MainMenu.xml`'s MenuModeEndless
+ * block builds the list with a plain loop:
+ *
+ *     For "" 0 to 1:
+ *       CreateMenuItem(0, 192, 96 + loopindex*32, loopindex,
+ *                      "Phase " & (loopindex + 1), "MenuEndless")
+ *     On function "MenuEndless":
+ *       Set EndlessStage = MenuStack.At(MenuStack.Width-2)
+ *       Go to layout BattleScreen
+ *
+ * So the row's own index IS the value, and `Battle.xml` reads it back on entry
+ * (`EndlessStage == 1` pre-spends Sans's `HitAttempts` to 15 — the state his
+ * second half starts in). **`EndlessStage` IS ZERO-BASED: 0 is "Phase 1".**
+ * The literal `0` and `1` writes elsewhere in MainMenu.xml are NOT a
+ * whole-fight case — they are the deep-link paths, `?mode=endless1` -> 0 and
+ * `?mode=endless2` -> 1, the same two rows reached by URL. BTS has no
+ * whole-fight endless at all; that row is this project's, asked for by name
+ * ("a mode for whole fight endless that just loops"), and it is FIRST because
+ * it is what ENDLESS already did before this list existed — so a player who
+ * never touches the new row gets the mode they had.
+ *
+ * `phase` is the number the director locks to, or **0 for "do not lock"**,
+ * which is the whole fight. The rows are indices into this array exactly as
+ * the SINGLE roster's are into `ATTACK_MENU`; the driver resolves the index to
+ * `phase` and hands the sim that number, the same way it resolves the
+ * difficulty stage's index to the selector's raw value.
+ *
+ * THE PHASES ARE THE FIGHT'S OWN, from `sim/scenes/fight.js`'s FIGHT_TABLE,
+ * which is read out of the knight's selector. Nothing here invents a phase
+ * model: 1-3 are five turns, 4 is three, and the blurbs name what is in them.
+ */
+export const ENDLESS_STAGES = [
+  {
+    id: 'all',
+    name: 'WHOLE FIGHT',
+    phase: 0,
+    blurb: 'Every phase, then back to the start.',
+  },
+  {
+    id: 'phase1',
+    name: 'PHASE 1',
+    phase: 1,
+    blurb: 'Five turns. Tracking Swords.',
+  },
+  {
+    id: 'phase2',
+    name: 'PHASE 2',
+    phase: 2,
+    blurb: 'Five turns. Sword Vortex.',
+  },
+  {
+    id: 'phase3',
+    name: 'PHASE 3',
+    phase: 3,
+    blurb: "Five turns. The fight's own loop.",
+  },
+  {
+    id: 'phase4',
+    name: 'PHASE 4',
+    phase: 4,
+    blurb: 'Three turns. Charge-up, then ROARING.',
+  },
+];
+
+/**
+ * The phase number behind a stage row, or 0 for the whole fight.
+ *
+ * ONE READER OF THE TABLE, so a row inserted at the top cannot silently mean
+ * something else: every caller passes the cursor index and gets the phase, and
+ * an index from a stale saved entry or a hostile URL lands on 0 — the whole
+ * fight — rather than on `undefined` reaching the director's `FIGHT_TABLE[n]`.
+ */
+export function endlessPhase(index) {
+  return ENDLESS_STAGES[index | 0]?.phase ?? 0;
+}
 
 // ---------------------------------------------------------------------------
 // SETTINGS — a hub below the modes (player request): the equip menu, an items
@@ -63,6 +187,13 @@ import { WEAPONS, ARMOR, canEquip, statsOf } from './equipment.js';
 import { WEAPON_REFUSALS, ARMOR_REFUSALS } from './equip-refusals.js';
 import { DEFAULT_GEAR, PARTY } from './damage.js';
 import { ITEMS, ITEM_IDS, DEFAULT_BAG, INVENTORY_SIZE } from './items.js';
+// THE TWO PRACTICE BARS. The dial table, the clamp and the stepper all live in
+// sim/dials.js so the settings page, the renderer, the driver's persistence
+// and the spawn path cannot disagree about a range — which is the failure the
+// GRAPHICS page's hand-typed `ROWS` constant is still one edit away from.
+import {
+  DIALS, freshDials, clampDial, stepDial,
+} from './dials.js';
 // THE UNUSED ROW'S SHATTER reaches for four leaf helpers and nothing else:
 // `mergeColor` so the ramp's red is an EXPRESSION rather than a typed constant,
 // `lengthdirX/Y` for GameMaker's speed/direction motion, and the WELL512 stream
@@ -115,7 +246,50 @@ export function controlRows(title) {
     // control that silently does nothing in three of the four modes would be
     // worse than one whose first word names the mode it belongs to.
     { id: 'holdbreath', name: 'SINGLE HOLDBREATH', value: title.holdBreath ? 'ON' : 'OFF' },
+    // NO BULLET COOLDOWNS — tronic560's mod, translated in sim/attacks/nbc.js
+    // and credited there and in the CREDITS list, not here. THE ROW IS PLAIN:
+    // it is the mod's own name and an ON/OFF, and it does not editorialise
+    // about itself. The one thing it must not do is look like a difficulty
+    // setting this project invented.
+    { id: 'nbc', name: 'NO BULLET COOLDOWNS', value: title.noBulletCooldown ? 'ON' : 'OFF' },
   ];
+  // ── THE TWO PRACTICE BARS, BUILT FROM THE DIAL TABLE ────────────────────
+  //
+  // A player request in their own words: "Can you add little bars to turn the
+  // bullet multiplier and bullet cooldown for the fight?" They are BARS —
+  // `slider` is what `render/title.js` draws as a trough and a fill, the same
+  // three fillRects the MUSIC / SFX page uses — and they carry `fraction` and
+  // `off` so the renderer never has to know a dial's range.
+  //
+  // `off: false` on a row is the LABEL, not a style choice: CLAUDE.md's fourth
+  // law is that nothing invented ships unlabelled, and a dial off its default
+  // means the fight you are about to play is not the real one — and the ROW
+  // ITSELF, carrying the dial's name and its current value, is that label. It
+  // is NOT recoloured: a revision painted these rows blue and the user rejected
+  // it along with the banner.
+  //
+  // DEFENSIVE `?? freshDials()`: CONTROLS is reachable from a `title` built by
+  // an opener that predates these rows (the same tolerance `s.controls` has
+  // below), and a page that throws is worse than one that shows defaults.
+  const dials = title.dials ?? freshDials();
+  for (const d of DIALS) {
+    const v = clampDial(d.id, dials[d.id]);
+    rows.push({
+      id: d.id,
+      name: d.name,
+      value: d.format(v),
+      slider: true,
+      fraction: (v - d.min) / (d.max - d.min),
+      off: v === d.def,
+      // A REPLAY LOCKS THEM. The row is still drawn — a control that vanishes
+      // is a control the player thinks they imagined — but it refuses, and
+      // `render/title.js` dims a locked row so the refusal is visible before
+      // the press rather than only after it. See sim/dials.js `applyDials`:
+      // this is the SECOND half of that refusal, and the install-site one is
+      // the half that is actually load-bearing.
+      locked: title.replaying === true,
+    });
+  }
   // Only on a build whose driver armed the binding table. `>` on the count
   // rather than a plain truthiness test: an armed-but-empty table is a driver
   // bug, and a row that opens onto nothing is worse than no row.
@@ -608,6 +782,24 @@ export const TITLE_EXTRAS = [
 export const CREDITS = [
   { role: 'Developer', who: 'Radi0', link: 'radi0.dev' },
   { role: 'Bug fixing and Playtesting', who: 'WandeR', link: 'wander22lstr.carrd.co' },
+  // TRONIC560 IS NOT LISTED HERE, AND THAT IS A DECISION FOR THE OWNER OF THIS
+  // REPO TO REVERSE, not an oversight. The CONTROLS page's NO BULLET COOLDOWNS
+  // toggle translates his published mod (gamebanana.com/mods/587241), and the
+  // credit for it lives in `sim/attacks/nbc.js`'s header with the site table
+  // and the GML line numbers — which is where the brief asked for it, the way
+  // `kaizo/ui/credits.js` credits EnderCat8.
+  //
+  // A row was written here and then taken out: kaizo-knight-sim's
+  // `kaizo/tools/checks/check-credits.mjs` asserts that the VANILLA list is
+  // exactly three rows and that the cursor wraps at three, so a fourth row
+  // turns `npm run verify:kaizo` red in a repo this lane must not edit. To put
+  // the row back, land both halves in one change:
+  //
+  //   { role: 'Creator of the NO BULLET COOLDOWNS mod', who: 'TRONIC560',
+  //     link: 'gamebanana.com/mods/587241' },
+  //
+  // plus the three `want 3` expectations in that check. SUPPORT stays last
+  // either way — it is the only row with no `who`.
   { role: 'SUPPORT', who: '', link: 'ko-fi.com/shadowcrystaldev' },
 ];
 
@@ -733,6 +925,15 @@ export function createTitle() {
     pickingDifficulty: false,
     difficultyIndex: 0,
     difficultyCount: 1,
+    /**
+     * WHICH STAGE, for ENDLESS — an index into `ENDLESS_STAGES`, in the same
+     * shape `attackIndex` is an index into the SINGLE roster. 0 is WHOLE
+     * FIGHT, which is what ENDLESS did before this list existed, so a fresh
+     * title and a dropped saved entry both land on the old behaviour.
+     */
+    stageIndex: 0,
+    /** True once ENDLESS is picked and its stage list is up. */
+    pickingStage: false,
     siner: 0,
     held: {},
     /** null, or the open settings state. */
@@ -756,6 +957,27 @@ export function createTitle() {
      * their setting: the driver's saved entry is applied over this.
      */
     volumes: { music: 50, sfx: 50 },
+    /**
+     * THE TWO PRACTICE BARS, at their defaults (sim/dials.js).
+     *
+     * ALL-DEFAULT IS THE REAL FIGHT, and `applyDials` refuses to arm a state
+     * with an all-default set for exactly that reason: a title that has never
+     * been touched cannot make a run differ from one built before this field
+     * existed, by any path.
+     *
+     * Same lifecycle as `volumes`: the page edits it, `dirty` tells the driver
+     * to persist, and the run reads it once at start.
+     */
+    dials: freshDials(),
+    /**
+     * TRUE WHILE A `?replay=` TOKEN IS DRIVING THE RUN, set by the driver.
+     *
+     * It reaches the settings page so the two bars can be drawn LOCKED rather
+     * than silently ignored — the refusal that matters is `applyDials`', in
+     * the sim, but a control that appears live and does nothing is its own
+     * bug report.
+     */
+    replaying: false,
     /**
      * `global.flag[12]`, DELTARUNE's own screen-shake switch, kept in the
      * player's polarity: true here = the shake happens = flag 12 is 0.
@@ -830,6 +1052,38 @@ export function createTitle() {
      * the first held direction.
      */
     holdBreath: false,
+    /**
+     * NO BULLET COOLDOWNS — **tronic560's mod**, gamebanana.com/mods/587241,
+     * translated from a decompile of its own patched data.win. Not a mode of
+     * ours and not a difficulty slider: it is someone else's published change
+     * to this fight, and `sim/attacks/nbc.js` carries the credit, the site
+     * table and the GML line numbers for every number it moves.
+     *
+     * Requested by a player, in those words: "In order to implement no bullet
+     * cooldown, look into this mod and copy how it handles it, add this as an
+     * optional mod in controller settings."
+     *
+     * WHAT IT CHANGES, in one line each: the roar fires its three-star fan
+     * every frame instead of every fifth; ROARING's rings stop skipping two
+     * beats in three; a roaring star bursts after 2 frames instead of 40; the
+     * box splitter slashes on a flat 33 instead of its per-difficulty
+     * `spawn_speed`; the sword tunnel drops a pair every frame; the tunnel
+     * slasher skips its wind-up. Tracking swords and the sword vortex are
+     * HALVED to 103 to pay for it, the pointing stars go up to 100, the
+     * splitslash to 242, and the roar's catch drops to 15.
+     *
+     * READ AT SCENE BUILD, like `holdBreath` beside it, and for the same
+     * reason: the drivers copy it onto `state.noBulletCooldown` before the
+     * scene exists, so flipping it mid-run does nothing until the next reset.
+     *
+     * FALSE IS A NO-OP AND MUST STAY ONE — more strictly than anything else
+     * on this page. Every site it touches is a BULLET SPAWN, the kaizo byte
+     * gate replays recorded fights bullet for bullet, and every bullet draws
+     * from the shared RNG stream. One extra spawn moves every later bullet in
+     * the run. The OFF branch at each site is written as the expression that
+     * was there before, not as the mod's with a multiplier of 1.
+     */
+    noBulletCooldown: false,
     /**
      * THE PER-DEVICE BINDING TABLE, or null for "not armed" — the same idiom
      * `unused` uses, and for the same reason: a build whose driver never arms
@@ -951,6 +1205,17 @@ function stepSettings(title, pressed) {
     if (pressed('down')) { s.cursor = (s.cursor + 1) % SETTINGS_PAGES.length; out.moved = true; }
     if (pressed('cancel')) { title.settings = null; out.moved = true; return out; }
     if (pressed('confirm')) {
+      // THE HUB'S CURSOR IS BOUNDS-CHECKED, and it crashed the title without
+      // this. `s.cursor` is SHARED between the hub and every page opened from
+      // it — CONTROLS has more rows than the hub has pages, so walking down to
+      // a binding row and backing out left the cursor past the end, and the
+      // next confirm read `.id` off undefined and took the whole screen with
+      // it. A saved cursor from a build with a different page list does the
+      // same thing.
+      //
+      // Re-validated against the LIVE list, which is the treatment the ENDLESS
+      // stage index already gets in web/main.js for exactly this reason.
+      if (!(s.cursor >= 0 && s.cursor < SETTINGS_PAGES.length)) s.cursor = 0;
       const page = SETTINGS_PAGES[s.cursor].id;
       // ---- UNUSED: reserved and inert, unless a driver armed it ------------
       //
@@ -1172,9 +1437,45 @@ function stepSettings(title, pressed) {
       if (row.id === 'bindings') {
         // The only row that OPENS something rather than toggling.
         if (confirm) { c.stage = 'bind'; c.bind = 0; out.selected = true; }
+      } else if (row.slider) {
+        // ── THE BARS: LEFT AND RIGHT ONLY, exactly like MUSIC / SFX ────────
+        //
+        // CONFIRM IS DELIBERATELY NOT A STEP. It toggles on this page's two
+        // switch rows, and a value that jumped when the player pressed Z to
+        // leave would be indistinguishable from a bug; the audio page has
+        // never bound it either, and these are that page's controls.
+        //
+        // A LOCKED ROW REFUSES AND SAYS SO. `out.error` is the sound the
+        // equip menu already makes when it will not do the thing — reusing it
+        // means the refusal is audible without a second mechanism, and a
+        // silent no-op would read as a dead key.
+        if (row.locked) {
+          if (left || right) out.error = true;
+        } else {
+          const dir = (right ? 1 : 0) - (left ? 1 : 0);
+          // `dir` is a NET, not two branches: pressing both arrows on one
+          // frame cancels rather than stepping twice, which is what a single
+          // `stepDial` per frame is for.
+          if (dir !== 0) {
+            if (!title.dials) title.dials = freshDials();
+            if (stepDial(title.dials, row.id, dir)) {
+              title.dirty = true;
+              out.moved = true;
+            }
+            // A bar parked at its end is SILENT. `stepDial` returns false
+            // when the value did not move, so holding right at the ceiling
+            // does not blip forever — the one thing a stepped bar gets wrong
+            // if it reports every press.
+          }
+        }
       } else if (left || right || confirm) {
+        // EVERY TOGGLE NAMED, no catch-all `else`. This was an if/else pair
+        // while there were two rows, and a third row added under that shape
+        // would have silently toggled HoldBreath — the row would look live
+        // and change the wrong thing.
         if (row.id === 'touch') title.swapZX = !title.swapZX;
-        else title.holdBreath = !title.holdBreath;
+        else if (row.id === 'holdbreath') title.holdBreath = !title.holdBreath;
+        else if (row.id === 'nbc') title.noBulletCooldown = !title.noBulletCooldown;
         title.dirty = true;
         out.moved = true;
       }
@@ -1439,12 +1740,22 @@ export function stepTitle(title, input, attacks) {
   }
 
   // The cursor walks the modes plus the TITLE_EXTRAS rows below them.
-  const list = title.pickingDifficulty
-    ? title.difficultyCount
-    : title.pickingAttack ? attackCount : MODES.length + TITLE_EXTRAS.length;
-  const cur = title.pickingDifficulty
-    ? 'difficultyIndex'
-    : title.pickingAttack ? 'attackIndex' : 'index';
+  //
+  // ENDLESS's stage list is a THIRD sub-stage beside SINGLE's two, and it is
+  // tested FIRST here for the reason the difficulty stage is tested first
+  // below it: these are mutually exclusive by construction, so the order only
+  // has to be stable, and putting each new one at the front keeps every
+  // existing branch reading exactly as it did.
+  const list = title.pickingStage
+    ? ENDLESS_STAGES.length
+    : title.pickingDifficulty
+      ? title.difficultyCount
+      : title.pickingAttack ? attackCount : modeRows(title).length + TITLE_EXTRAS.length;
+  const cur = title.pickingStage
+    ? 'stageIndex'
+    : title.pickingDifficulty
+      ? 'difficultyIndex'
+      : title.pickingAttack ? 'attackIndex' : 'index';
   let moved = false;
 
   if (pressed('up')) {
@@ -1481,19 +1792,50 @@ export function stepTitle(title, input, attacks) {
     title.pickingAttack = false;
     return { moved: true, chosen: false };
   }
+  // X OUT OF THE STAGE LIST, off the ONE `cancelled` read above — never a
+  // second `pressed('cancel')`, which is the latch bug this whole chain was
+  // rewritten to fix (issue #6) and which a new stage is the obvious place to
+  // reintroduce.
+  if (cancelled && title.pickingStage) {
+    title.pickingStage = false;
+    return { moved: true, chosen: false };
+  }
 
   if (pressed('confirm')) {
-    if (!title.pickingAttack && title.index >= MODES.length) {
-      const extra = TITLE_EXTRAS[title.index - MODES.length];
+    // THE STAGE LIST STARTS THE RUN. It is the last choice ENDLESS needs, so
+    // confirming a row here is the same event confirming ENDLESS used to be —
+    // and it is tested before every other branch because `title.index` is
+    // still sitting on the ENDLESS row while this list is up.
+    if (title.pickingStage) {
+      title.mode = 'endless';
+      return { moved: false, chosen: true, selected: true };
+    }
+    if (!title.pickingAttack && title.index >= modeRows(title).length) {
+      const extra = TITLE_EXTRAS[title.index - modeRows(title).length];
       if (extra.id === 'credits') openCredits(title);
       else if (extra.id === 'gear') openGear(title);
       else openSettings(title);
       return { moved: false, chosen: false, selected: true };
     }
-    if (!title.pickingAttack && MODES[title.index].id === 'single') {
+    if (!title.pickingAttack && modeRows(title)[title.index].id === 'single') {
       // SINGLE needs a second choice, so it opens the roster rather than
       // starting. Everything else starts immediately.
       title.pickingAttack = true;
+      return { moved: false, chosen: false, selected: true };
+    }
+    // ENDLESS needs one too, and it is the SAME shape — a list, confirmed,
+    // then the run — which is the whole reason it is built out of the stages
+    // this screen already has rather than a new menu idiom. The cursor is NOT
+    // reset: coming back to practise the same phase is the common case, and
+    // the driver persists the row for exactly that reason.
+    if (!title.pickingAttack && modeRows(title)[title.index].id === 'endless') {
+      // …CLAMPED ON THE WAY IN, because the row is persisted and the cursor
+      // wraps modulo the list length: an index restored from an older, longer
+      // list would stay off the end for as long as the player only pressed
+      // down, drawing nothing and confirming a row that does not exist.
+      const n = ENDLESS_STAGES.length;
+      if (!(title.stageIndex >= 0 && title.stageIndex < n)) title.stageIndex = 0;
+      title.pickingStage = true;
       return { moved: false, chosen: false, selected: true };
     }
     // The roster confirm: an attack with one difficulty starts; one with
@@ -1508,7 +1850,7 @@ export function stepTitle(title, input, attacks) {
         return { moved: false, chosen: false, selected: true };
       }
     }
-    title.mode = MODES[title.index].id;
+    title.mode = modeRows(title)[title.index].id;
     return { moved: false, chosen: true, selected: true };
   }
 

@@ -51,6 +51,7 @@ import { spawn, destroy } from '../entity.js';
 import { roaringknightSlash } from './roaringknight-slash.js';
 import { knightCircle, knightWarp, knightWarpOut } from '../fx.js';
 import { cue, cueLoop, cueStop } from '../audio.js';
+import { nbcOn } from './nbc.js';
 import { scrApproach } from '../gml.js';
 import { gmlChoose, gmlIrandom, gmlRandom, gmlRandomRange, gmlU32 } from '../rng.js';
 import { scrBulletInherit } from '../bullets/regularbullet.js';
@@ -242,6 +243,39 @@ export const rotatingSlash = {
   },
 
   step(e, state) {
+    // NO BULLET COOLDOWNS: THIRTY OF THESE, NOT ONE.
+    //
+    //     obj_dbulletcontroller_Step_0.gml, the `type == 104` arm
+    //     -   if (made == false)
+    //     +   if (instance_number(obj_knight_rotating_slash) < 30)
+    //
+    // The controller's gate stops being “once ever” and becomes “while there
+    // are fewer than thirty alive”, so it keeps creating managers every frame
+    // until the arena holds thirty of them.
+    //
+    // WHY IT LIVES HERE. This sim has no obj_dbulletcontroller entity —
+    // sim/scenes/fight.js calls spawnRotatingSlash once, directly — so there
+    // is no controller Step for the gate to sit in. The FIRST manager carries
+    // the controller's job instead: it is the one the dispatch created, it is
+    // marked at creation, and it alone tops the population up. Putting this in
+    // every instance would have each new manager spawn more, which is not a
+    // faster attack but an exponential one.
+    //
+    // ROTATING SLASH CLOSES EVERY PHASE, which is why this being missed was
+    // worth finding: it measured EXACTLY x1.00 on every metric at every
+    // difficulty while the toggle was on, and it is the attack a player sees
+    // more than any other.
+    if (e.nbcController && nbcOn(state)) {
+      let live = 0;
+      for (const o of state.entities) {
+        if (o.alive && o.type === rotatingSlash) live += 1;
+      }
+      if (live < 30) {
+        const extra = spawn(state, rotatingSlash, { x: e.x, y: e.y });
+        extra.difficulty = e.difficulty;
+        rotatingSlash.init(extra);
+      }
+    }
 
     // `obj_knight_enemy.siner2 = 0;` — THE FIRST LINE OF THIS STEP, and it
     // runs every frame the slash is alive. It PINS THE KNIGHT'S BOB: the
@@ -675,6 +709,10 @@ export function spawnRotatingSlash(state, x, y, { difficulty = 0 } = {}) {
 
   const e = spawn(state, rotatingSlash, { x, y });
   e.difficulty = difficulty;
+  // THE ONE THE DISPATCH MADE is the controller — see the step. Only it
+  // tops the population up under NO BULLET COOLDOWNS, and the flag is set
+  // unconditionally so the OFF path writes the same property either way.
+  e.nbcController = true;
   rotatingSlash.init(e);
   return e;
 }

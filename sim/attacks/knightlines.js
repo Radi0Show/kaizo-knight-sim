@@ -68,6 +68,8 @@ import { scrAfterimage, afterimage } from '../fx.js';
 import { SLASHTUNNEL_MASK, enginePairHit } from '../masks.js';
 import { roaringknightSlash } from './roaringknight-slash.js';
 import { cue } from '../audio.js';
+// NO BULLET COOLDOWNS (tronic560) -- site M6; see sim/attacks/nbc.js.
+import { nbcOn } from './nbc.js';
 
 /** scr_get_box, by the same indices sim/attacks/rotating-slash.js documents. */
 function boxOf(state) {
@@ -233,6 +235,23 @@ export const knightTunnelSlasher = {
         e.image_index = 3;
       }
     }
+
+    // NBC SITE M6 — obj_knight_tunnel_slasher_Step_0.gml, tronic560's mod
+    // INSERTS one line here, between the `prepare` block and the `slash`
+    // block:
+    //
+    //     + behavior = "slash";
+    //
+    // The 16-frame wind-up above is therefore run ONCE, on the object's first
+    // Step, and then never again: `behavior` is already "slash" on frame two,
+    // so the `prepare` arm stops matching. The spears start on frame one
+    // instead of after `timer == 16`, and `push_left` goes into the recoil
+    // still holding its create value.
+    //
+    // The same trick appears at obj_knight_slasher_Step_0.gml:29 as
+    // `state = "slash";`. That object is not modelled by this sim, so that
+    // one is unimplemented — see the table in sim/attacks/nbc.js.
+    if (nbcOn(state)) e.behavior = 'slash';
 
     if (e.behavior === 'slash') {
       if (e.timer < 20) e.image_index = scrApproach(e.image_index, 5.6, 0.4);

@@ -15,10 +15,15 @@ import { sliceShatter, drawShatterFragment } from './shatter.js';
 import { loadFont, drawText, textWidth, textHeight } from './font.js';
 import { VERSION } from '../web/version.js';
 import {
-  MODES, SETTINGS_PAGES, TITLE_EXTRAS, titleCredits, ITEM_PICKER, GEAR_PAGES,
-  pocketOf, previewStats, wornBy, partyTabs, unusedRowStyle,
+  modeRows, SETTINGS_PAGES, TITLE_EXTRAS, titleCredits, ITEM_PICKER, GEAR_PAGES,
+  pocketOf, previewStats, wornBy, partyTabs, unusedRowStyle, ENDLESS_STAGES,
   controlRows, deviceName,
 } from '../sim/modes.js';
+// NO IMPORT FROM sim/dials.js, DELIBERATELY. This file draws the CONTROLS
+// rows from the `slider` / `fraction` / `off` / `locked` fields `controlRows`
+// already puts on them, so the renderer never needs a dial's range — and, more
+// to the point, it has nothing to ask "are the dials on?" with. The one reader
+// that existed (`dialsActive`, for the wordmark banner) went with the banner.
 import { ITEMS, INVENTORY_SIZE } from '../sim/items.js';
 import { difficultyBlurb } from '../sim/scenes/single.js';
 import { WEAPONS, ARMOR, canEquip, itemOf } from '../sim/equipment.js';
@@ -26,6 +31,26 @@ import { WEAPONS, ARMOR, canEquip, itemOf } from '../sim/equipment.js';
 const BG = [0x27, 0x29, 0x3f];
 const DIM = [128, 128, 138];
 const HILITE = [255, 255, 0];
+/**
+ * THE OFF-DEFAULT BAR COLOUR — a dial that is not at its default is painted in
+ * it, name, bar and value together, ON ITS OWN ROW AND NOWHERE ELSE.
+ *
+ * NOT INVENTED: it is `spr_roaringknight`'s own blue, the same value the kaizo
+ * build paints the word KAIZO in through `drawTitle`'s `opts.title` segments —
+ * so a moved bar reads in a colour this project already uses, rather than in a
+ * second convention a reader would have to learn.
+ *
+ * THIS IS THE WHOLE DISCLOSURE, AND IT IS DELIBERATELY THE WHOLE OF IT. An
+ * earlier revision of this lane also painted a line under the wordmark reading
+ * "PRACTICE DIALS ON — NOT THE REAL FIGHT". It is gone, and it must not come
+ * back: the user has rejected self-describing UI copy three times, in those
+ * words. CLAUDE.md law 4 ("nothing invented ships unlabelled") exists so a
+ * player cannot mistake INVENTED CONTENT for the real fight — a bar the player
+ * moved themselves, one screen ago, is not a hidden substitution, and narrating
+ * a setting back to the person who just set it is not what the law asks for.
+ * The row is the disclosure. `tools/verify-dials.mjs` section 4 asserts that
+ * the title screen draws the SAME GLYPHS with the dials moved as without.
+ */
 
 const W = 640;
 
@@ -89,6 +114,22 @@ export function drawTitle(ctx, title, sprites, attacks, opts = {}) {
   // one white line, so a caller that passes no opts gets what it always got.
   centredSegments(ctx, font, opts.title ?? [['BLACK KNIFE SIMULATOR', c_white]], 60, 1.6);
 
+  // NOTHING IS DRAWN HERE FOR THE PRACTICE BARS, AND THAT IS THE REQUIREMENT.
+  //
+  // A revision of this lane painted "PRACTICE DIALS ON — NOT THE REAL FIGHT"
+  // under the wordmark whenever a bar was off its default. It was removed on
+  // the user's instruction, given for the third time: no on-screen label, no
+  // banner, nothing that announces itself. The bar's own row on the CONTROLS
+  // page is the disclosure — it carries the dial's name and its value — and a
+  // player who moved a slider one screen ago does not need to be told about it
+  // on the way out. A LATER REVISION TINTED THOSE ROWS BLUE instead, as "the
+  // label"; that was the same instinct in a different coat and it went the
+  // same way. Settings rows look like settings rows.
+  //
+  // `tools/verify-dials.mjs` section 4 holds this: it records every glyph
+  // drawTitle blits with the dials at their defaults and with both bars moved
+  // to their extremes, and fails if the two differ by so much as one.
+
   const heart = sprites.get('spr_heart');
   const picked = attacks[title.attackIndex];
   let rows;
@@ -104,11 +145,23 @@ export function drawTitle(ctx, title, sprites, attacks, opts = {}) {
     }));
     index = title.difficultyIndex;
     centred(ctx, font, picked.name.toUpperCase(), 136, DIM, 0.9);
+  } else if (title.pickingStage) {
+    // ENDLESS's second list, drawn in the difficulty stage's exact shape: the
+    // mode's name above it (so the screen says where the cursor is without
+    // anything narrating the choice back), the rows, and each row's blurb in
+    // the same right-hand column the roster uses. Nothing new is invented for
+    // it — that is the point.
+    rows = ENDLESS_STAGES.map((s) => ({ name: s.name, blurb: s.blurb }));
+    index = title.stageIndex;
+    centred(ctx, font, 'ENDLESS', 136, DIM, 0.9);
   } else if (title.pickingAttack) {
     rows = attacks.map((a) => ({ name: a.name.toUpperCase(), blurb: a.where, unused: a.unused }));
     index = title.attackIndex;
   } else {
-    rows = MODES.map((m) => ({ name: m.name, blurb: m.blurb }));
+    // `modeRows`, not `MODES`: a vendoring driver may offer fewer rows than
+    // the shared constant carries, and the screen must not advertise a mode
+    // that page's scene cannot run. See sim/modes.js's note on the helper.
+    rows = modeRows(title).map((m) => ({ name: m.name, blurb: m.blurb }));
     index = title.index;
   }
 
@@ -124,7 +177,10 @@ export function drawTitle(ctx, title, sprites, attacks, opts = {}) {
   // because the cursor WRAPS here and a paged view jumps two pages at the wrap.
   const WINDOW = 8;
   const pitch = rows.length > 6 ? 30 : 34;
-  const top = title.pickingDifficulty ? 190 : 170;
+  // The two SECOND-STAGE lists sit lower, under the name of the thing they
+  // belong to (the attack, or ENDLESS). The mode list has no header and starts
+  // where it always did.
+  const top = (title.pickingDifficulty || title.pickingStage) ? 190 : 170;
 
   // Keep the cursor inside the window, and keep the window inside the list.
   let first = 0;
@@ -153,7 +209,7 @@ export function drawTitle(ctx, title, sprites, attacks, opts = {}) {
     // stops short of the blurb column.
     const squeeze = Math.min(1, 250 / Math.max(1, textWidth(font, rows[i].name)));
     drawText(ctx, font, rows[i].name, x, y, { color: rgb(on ? HILITE : restColor), xscale: squeeze });
-    if ((title.pickingAttack || title.pickingDifficulty) && rows[i].blurb) {
+    if ((title.pickingAttack || title.pickingDifficulty || title.pickingStage) && rows[i].blurb) {
       drawText(ctx, font, rows[i].blurb, 430, y + 3, { color: rgb(DIM), yscale: 0.75, xscale: 0.75 });
     }
   }
@@ -175,10 +231,12 @@ export function drawTitle(ctx, title, sprites, attacks, opts = {}) {
 
   // SETTINGS and CREDITS — the extra rows, visually separated from the modes
   // by a gap so they read as somewhere else to go rather than a fifth mode.
-  if (!title.pickingAttack) {
+  if (!title.pickingAttack && !title.pickingStage) {
     for (let i = 0; i < TITLE_EXTRAS.length; i++) {
-      const y = top + MODES.length * pitch + 30 + i * pitch;
-      const on = title.index === MODES.length + i;
+      // Positioned BELOW whatever the mode list actually is, so a narrowed
+      // list closes the gap instead of leaving a hole where a row was.
+      const y = top + modeRows(title).length * pitch + 30 + i * pitch;
+      const on = title.index === modeRows(title).length + i;
       if (on && heart) {
         const bob = Math.sin(title.siner / 6) * 1.5;
         drawSpriteExt(ctx, heart, 0, 160 + bob, y + 4, 1, 1, 0, null, 1);
@@ -633,14 +691,56 @@ function drawSettings(ctx, title, sprites, font) {
 
     // ---- the page's own rows ------------------------------------------------
     const rows = controlRows(title);
+    // THE PITCH FOLLOWS THE ROW COUNT, because the page grew. 60 was right for
+    // the two switches and one optional BUTTONS row; with the two practice
+    // bars it is four or five rows, and 190 + 4 * 60 = 430 puts the last one
+    // through the footer at 448. The item menu's own answer to the same
+    // problem is a scrolling window; a page that is never longer than five
+    // rows takes the simpler one.
+    const pitch = rows.length > 3 ? 46 : 60;
     for (let i = 0; i < rows.length; i++) {
-      const y = 190 + i * 60;
+      const row = rows[i];
+      const y = 190 + i * pitch;
       const on = i === s.cursor;
       if (on && heart) drawSpriteExt(ctx, heart, 0, 110 + bob, y + 4, 1, 1, 0, null, 1);
-      drawText(ctx, font, rows[i].name, 140, y, { color: rgb(on ? HILITE : c_white) });
-      drawText(ctx, font, rows[i].value, 420, y, { color: rgb(on ? HILITE : c_white) });
+      // A LOCKED ROW IS DIM EVEN WHEN SELECTED — the same treatment the
+      // binding list gives a `fixed` row, and for the same reason: the cursor
+      // can sit on it, and pressing does nothing but sound the refusal.
+      // A ROW OFF ITS DEFAULT IS NOT RECOLOURED, and it used to be. The blue
+      // was added as “the label” after a banner was rejected — the same instinct
+      // wearing a different coat, and rejected again for the same reason: the
+      // row already SHOWS its value, so tinting it tells the player something
+      // they can already read. Settings rows look like settings rows.
+      const rest = row.locked ? DIM : c_white;
+      const colour = row.locked ? DIM : (on ? HILITE : rest);
+      // Long names are SQUEEZED, never clipped — the roster's own idiom, and
+      // BULLET MULTIPLIER is the longest string this page has ever carried.
+      const nSq = Math.min(1, 150 / Math.max(1, textWidth(font, row.name)));
+      drawText(ctx, font, row.name, 140, y, { color: rgb(colour), xscale: nSq });
+      if (!row.slider) {
+        drawText(ctx, font, row.value, 420, y, { color: rgb(colour) });
+        continue;
+      }
+      // ---- the bar: the MUSIC / SFX trough, at this page's width ----------
+      // Three fillRects, exactly as the audio page draws them; only the span
+      // and the fill colour differ, and the fill is `fraction` rather than a
+      // 0..100 value doubled, so a dial can have any range it likes.
+      ctx.fillStyle = 'rgb(64,64,72)';
+      ctx.fillRect(300, y + 4, 150, 14);
+      ctx.fillStyle = row.locked
+        ? 'rgb(96,96,104)'
+        : (on ? 'rgb(255,255,0)' : (row.off ? 'rgb(255,255,255)' : 'rgb(83,169,232)'));
+      ctx.fillRect(300, y + 4, Math.round(150 * row.fraction), 14);
+      // EVERY FRAME is eleven characters where 3x is two, so the value is
+      // squeezed into its column rather than allowed to run off the canvas.
+      const vSq = Math.min(0.8, 170 / Math.max(1, textWidth(font, row.value)));
+      drawText(ctx, font, row.value, 460, y + 2,
+        { color: rgb(colour), xscale: vSq, yscale: 0.8 });
     }
-    centred(ctx, font, 'arrows  toggle      X  back', 448, DIM, 0.75);
+    // THE FOOTER NAMES WHAT THE ARROWS DO, and the page now does both: the two
+    // switches toggle, the two bars adjust. It said only "toggle" and that was
+    // true until this lane.
+    centred(ctx, font, 'arrows  adjust      X  back', 448, DIM, 0.75);
     return;
   }
 

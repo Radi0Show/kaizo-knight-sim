@@ -474,6 +474,19 @@ export const splitGrowtangle = {
     //
     // The +2/-1/+3 offsets are the original's and are not symmetric — marker 0
     // sits one pixel back, marker 1 three forward.
+    //
+    // DO NOT PUT THE NBC FLAG IN THIS BLOCK. tronic560's patched dump of
+    // obj_knight_split_growtangle_Step_0 is MISSING the whole `if (diagonal)`
+    // arm below and the `+ xoffset`/`+ yoffset` terms in the other two — and
+    // that is the mod carrying an OLDER BUILD of this one object, not an edit
+    // it made. The receipt is in the same object's `effect` Draw, where the
+    // patched copy reads `draw_surface_part_ext(surf, 0, ...)` where vanilla
+    // reads `(surf, _sx, ...)`: a source-rect bug a later game build fixed,
+    // which nobody mods in on purpose. Copying the deletion would put the
+    // flames 53px and 45 degrees off the cut on every diagonal split, for no
+    // extra bullet. Measured and argued in full in sim/attacks/nbc.js; guarded
+    // by tools/verify-nbc-knighthunks.mjs so a later lane cannot "translate"
+    // it by accident.
     if (e.markers && e.markers.length === 2) {
       const [m0, m1] = e.markers;
       const d = Math.round(e.distance);

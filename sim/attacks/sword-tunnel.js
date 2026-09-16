@@ -42,6 +42,8 @@ import {
 import { swordTunnelAnim } from './sword-tunnel-anim.js';
 import { gmlChoose, gmlIrandom } from '../rng.js';
 import { cue, cueIfIdle } from '../audio.js';
+// NO BULLET COOLDOWNS (tronic560) -- site M5; see sim/attacks/nbc.js.
+import { nbcOn, NBC_SWORD_TUNNEL_RATE } from './nbc.js';
 
 function box(state) {
   return state.entities.find((e) => e.alive && e.type.name === 'obj_growtangle');
@@ -533,6 +535,58 @@ export const swordTunnelManager = {
         if (s.alive && s.type.name === 'obj_sword_tunnel_sword') s.con = 1;
       }
     }
+
+    // NBC SITE M5 — obj_sword_tunnel_manager_Step_0.gml, tronic560's mod
+    // INSERTS one line here, between the finale check and the spawn gate:
+    //
+    //     + rate = -999;
+    //
+    // Not "a smaller rate" — an ASSIGNMENT, re-made every frame, to a number
+    // below every value `timer` can hold. Both gates below read `rate`
+    // (`timer >= rate && con == 0` and the `stopsfxtimer` one), so the
+    // corridor drops a sword PAIR EVERY FRAME and the passing sound retriggers
+    // with it, for as long as the manager lives.
+    //
+    // It is written as the mod wrote it — a field assignment, not a widened
+    // comparison — because the second gate resets `timer` to 0 and a
+    // comparison-only version would not survive that the same way.
+    //
+    // AND IT IS THE ONLY LINE. Every event of every `obj_sword_tunnel*`,
+    // `obj_knight_tunnel*` and `obj_bullet_knight_tunnelslash*` object was
+    // diffed vanilla-dump against mod-dump, mechanically and with no name
+    // filter — 27 code entries, all events. Three differ: this one, the
+    // `behavior = "slash"` insert in obj_knight_tunnel_slasher_Step_0 (site
+    // M6, sim/attacks/knightlines.js), and four asset indices shifting by 1-2
+    // in obj_knight_tunnel_slasher_2_revised_Alarm_2, which is renumbering.
+    // The tracking manager needed a companion hunk before its gate change did
+    // anything; the same was looked for here and there is none.
+    //
+    // MEASURED, per drill run, seeds 9/4242/12345 x difficulties 0/3/4:
+    //
+    //     difficulty 0   OFF  98 swords, peak 18, spawns launch+36 -> +228
+    //                    ON  458 swords, peak 70, spawns launch+1  -> +229
+    //     difficulty 3   OFF 108 swords, peak 23, spawns launch+36 -> +248
+    //                    ON  498 swords, peak 92, spawns launch+1  -> +249
+    //
+    // x4.7 swords and x3.9 on screen, and THE WINDOW CLOSES ON THE SAME FRAME:
+    // it closes on `finishtimer == finishtimermax` below, a frame count the mod
+    // does not touch. The mod moves the OPENING (`timer` starts at
+    // `-40 + irandom(10)`, and -999 makes the manager's first frame eligible)
+    // and the spacing. The attack is not shortened.
+    //
+    // REPORTED AS "GOING BACKWARDS" — peak up 3.5x, total spawns DOWN — and it
+    // was the measurement. A fixed-1800-frame drill with a MORTAL party is
+    // wiped at frame 218 under this density; `practice_director` latches
+    // `state.gameOver` and never launches another run, so ON counted one run
+    // (458) against OFF's six (576). `state.keepAlive` is the engine's own
+    // "drive the drill without the party mattering" path and the same window
+    // then reads 576 -> 2878, x5.0. tools/verify-nbc-tunnel.mjs pins both the
+    // density and the artefact, so the x0.8 is not re-derived.
+    //
+    // NOT A TEARDOWN. `swordcount >= maxswords` at the bottom of this Step is
+    // the dump's own last statement; `swordcount` is zeroed at every set
+    // boundary and peaks at THREE against maxswords 999, on and off.
+    if (nbcOn(state)) e.rate = NBC_SWORD_TUNNEL_RATE;
 
     if (e.timer >= e.rate && e.con === 0) {
       if (e.tobymode === 3) {

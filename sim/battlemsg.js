@@ -26,6 +26,11 @@
 // arriving at this phase/turn", and the golden/silver/migraine progression
 // reads as the escalation it is.
 
+// NO BULLET COOLDOWNS (tronic560) -- sites T2/T3/T4; see sim/attacks/nbc.js.
+import {
+  NBC_BATTLE_MSG, NBC_PROGAMER_MSG, NBC_DOWN_MSG, NBC_SUSIE_LATE_TURN,
+} from './attacks/nbc.js';
+
 /**
  * `phase -> phaseturn -> message`, exactly as the Step assigns them.
  *
@@ -162,10 +167,23 @@ export const OPENING_MSG = '* The Roaring Knight appeared.';
 export function battleMsgFor(phase, phaseturn, opts = {}) {
   const { phase4turn, partyHp, haveusedroaring, progamer, downSeen } = opts;
 
+  // NO BULLET COOLDOWNS — sites T2/T3/T4, tronic560's mod. `opts.nbc` is the
+  // caller's `state.noBulletCooldown`; absent or false is vanilla, and every
+  // line below then resolves exactly as it did before this parameter existed.
+  //
+  // AN OVERLAY, NOT A SECOND SCRIPT. `nbcMsg` returns the mod's line only
+  // where the mod actually rewrote one, so the fourteen it changed come from
+  // `NBC_BATTLE_MSG` and the one it left alone (phase 1 turn 0, the silver
+  // stars) falls through to the vanilla table below. See sim/attacks/nbc.js
+  // for the strings and their line numbers in the dump.
+  const nbc = opts.nbc === true;
+
   // A knockdown replaces the flavour line — the Step's `else` arm, taken when
   // the phase-4 message block does not apply.
   if (partyHp && downSeen) {
-    const down = downMsg(partyHp, downSeen);
+    const down = nbc
+      ? nbcDownMsg(partyHp, downSeen, opts.balloonturn)
+      : downMsg(partyHp, downSeen);
     if (down) return down;
   }
   // `if (phase == 4 || haveusedroaring == true)` — the CALLER encodes that
@@ -174,7 +192,63 @@ export function battleMsgFor(phase, phaseturn, opts = {}) {
   // every message after ROARING sends the fight back to phase 3, which is
   // exactly when the guard-drop line is supposed to be up.
   if (phase4turn !== undefined) {
-    return phase4Msg(phase4turn, partyHp?.[1] ?? 1, haveusedroaring, progamer);
+    // T3 — the mod rewrites the progamer line and nothing else in phase 4,
+    // so this stays `phase4Msg` and only its one return value is swapped.
+    const m = phase4Msg(phase4turn, partyHp?.[1] ?? 1, haveusedroaring, progamer);
+    if (nbc && phase4turn === 3 && progamer) return NBC_PROGAMER_MSG;
+    return m;
+  }
+  if (nbc) {
+    const m = NBC_BATTLE_MSG[phase]?.[phaseturn];
+    if (m !== undefined) return m;
   }
   return BATTLE_MSG[phase]?.[phaseturn] ?? null;
+}
+
+/**
+ * `downMsg` with tronic560's three replacement lines — NBC sites T4.
+ *
+ * A SEPARATE FUNCTION RATHER THAN A PARAMETER ON `downMsg`, because `downMsg`
+ * MUTATES `seen` and is called from elsewhere; a flag threaded through it
+ * would make the vanilla path read a branch on every call for a feature that
+ * is off. This is the same shape, the same `count === 2` quirk included, with
+ * the strings swapped and Susie's `balloonturn` variant added.
+ *
+ * @param {number[]} partyHp
+ * @param {{kris:boolean,susie:boolean,ralsei:boolean}} seen  MUTATED, as above
+ * @param {number} [balloonturn]  the Knight/Susie exchange's beat count. Absent
+ *   means "not known", and Susie gets her EARLY line — never a guess.
+ */
+export function nbcDownMsg(partyHp, seen, balloonturn) {
+  let kris = '';
+  let susie = '';
+  let ralsei = '';
+  let count = 0;
+  let msg = null;
+
+  if (!seen.kris && partyHp[0] < 1) {
+    kris = NBC_DOWN_MSG.kris;
+    count++;
+    seen.kris = true;
+    msg = kris;
+  }
+  if (!seen.susie && partyHp[1] < 1) {
+    // `if (balloonturn >= 6) susiedown = "* Susie realised she should've kept
+    // quiet.&"` — the only one of the three with two forms.
+    susie = (balloonturn ?? 0) >= NBC_SUSIE_LATE_TURN
+      ? NBC_DOWN_MSG.susieLate
+      : NBC_DOWN_MSG.susie;
+    count++;
+    seen.susie = true;
+    msg = susie;
+  }
+  if (!seen.ralsei && partyHp[2] < 1) {
+    ralsei = NBC_DOWN_MSG.ralsei;
+    count++;
+    seen.ralsei = true;
+    msg = ralsei;
+  }
+  // The `== 2` quirk is the ORIGINAL's and the mod did not touch it.
+  if (count === 2) msg = kris + susie + ralsei;
+  return msg;
 }

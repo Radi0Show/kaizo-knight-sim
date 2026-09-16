@@ -26,6 +26,7 @@
 // that was broken.
 
 import {
+  modeRows,
   createTitle, stepTitle, MODES, SETTINGS_PAGES, TITLE_EXTRAS, CREDITS, creditLink,
   ITEM_PICKER, GEAR_PAGES, pocketOf, wornBy, controlRows,
   armUnused, unusedRowStyle, UNUSED_PRESSES, UNUSED_SHATTER, UNUSED_SHAKE,
@@ -140,7 +141,17 @@ function atRoster() {
   check(t.settings.cursor === 1, 'down should walk the credits rows');
   tap(t, 'up');
   check(t.settings.cursor === 0, 'and up should come back');
+  // STILL EXACTLY THREE. A fourth row was drafted here for tronic560, whose
+  // mod ships behind the CONTROLS page's NO BULLET COOLDOWNS toggle, and was
+  // taken back out — kaizo-knight-sim's check-credits asserts this same three
+  // independently, and that repo is not this lane's to edit. `sim/modes.js`
+  // carries the row and the two-file change that would land it.
   check(CREDITS.length === 3, `three credit rows, got ${CREDITS.length}`);
+  // Added with that draft and kept: the count alone never said the rows were
+  // well formed, and SUPPORT being last is what the `who`-less row relies on.
+  check(CREDITS.every((c) => typeof c.role === 'string' && c.role.length > 0),
+    'every credit row names a role');
+  check(CREDITS[CREDITS.length - 1].role === 'SUPPORT', 'SUPPORT stays last');
 
   // ...and X leaves for the TITLE, not for the settings hub.
   tap(t, 'cancel');
@@ -327,11 +338,18 @@ function atRoster() {
   // The rows an unarmed build has: TOUCH BUTTONS and SINGLE HOLDBREATH, in
   // that order, and NO binding row.
   const rows = controlRows(t);
-  check(rows.length === 2, `an unarmed build should list two control rows, got ${rows.length}`);
+  // THE TWO SWITCHES ARE FIRST, and everything after them is asserted by ID.
+  // This used to read `rows.length === 2`; the page now also carries the two
+  // PRACTICE BARS (BULLET MULTIPLIER / BULLET COOLDOWN, sim/dials.js), which
+  // are sliders rather than switches and are checked in tools/verify-dials.mjs.
+  // What this block is really about is the two switches and the ABSENCE of the
+  // binding row, so that is what it says now.
   check(rows[0].id === 'touch' && rows[1].id === 'holdbreath',
-    `the control rows should be touch then holdbreath, got ${rows.map((r) => r.id).join()}`);
+    `the control rows should start touch then holdbreath, got ${rows.map((r) => r.id).join()}`);
   check(!rows.some((r) => r.id === 'bindings'),
     'an unarmed build must not offer the binding row');
+  check(rows.every((r) => r.slider !== true || typeof r.fraction === 'number'),
+    'every slider row must carry a 0..1 fraction for the renderer');
   // The captions are the player's, and the HoldBreath row names its mode: it
   // does nothing outside SINGLE, and a row that reads as global would be a
   // control that silently does nothing in three modes out of four.
@@ -371,12 +389,17 @@ function atRoster() {
   tap(t, 'right');
   check(t.holdBreath === false, 'leaving it OFF, which is the default');
 
-  // The cursor wraps over exactly the rows `controlRows` reports.
+  // The cursor wraps over exactly the rows `controlRows` reports. Walked to
+  // the LAST row first rather than assuming holdbreath is it — the practice
+  // bars sit below it now, and a literal "down once more" only tested the wrap
+  // while the page happened to be two rows long.
+  const n = controlRows(t).length;
+  while (t.settings.cursor !== n - 1) tap(t, 'down');
   tap(t, 'down');
   check(t.settings.cursor === 0,
     `down from the last control row should wrap to the first, got ${t.settings.cursor}`);
   tap(t, 'up');
-  check(t.settings.cursor === controlRows(t).length - 1,
+  check(t.settings.cursor === n - 1,
     `up from the first row should wrap to the last, got ${t.settings.cursor}`);
   tap(t, 'cancel');
   check(t.settings.page === null, 'X did not return to the settings hub from CONTROLS');
@@ -407,14 +430,21 @@ function atRoster() {
     capture: null,
   };
   const rows = controlRows(t);
-  check(rows.length === 3, `an armed build should list three control rows, got ${rows.length}`);
-  check(rows[2].id === 'bindings', 'the binding row should be last');
+  // ROWS ARE RESOLVED BY ID, NEVER BY INDEX. This block asserted
+  // `rows.length === 3` and `rows[2]`, and the two practice bars (the
+  // BULLET MULTIPLIER / BULLET COOLDOWN lane) broke both the moment they were
+  // added — the same brittleness `extraAt` exists to avoid on the title list.
+  // What is actually being claimed here is that BINDINGS IS LAST and names the
+  // live device, and that is what is checked.
+  const bindAt = rows.findIndex((r) => r.id === 'bindings');
+  check(bindAt === rows.length - 1,
+    `the binding row should be last, found at ${bindAt} of ${rows.length}`);
   // DETECTION SURFACES AS THE ROW'S VALUE, which is the whole of what the
   // player is owed by it: open the page holding a controller and the row
   // already says CONTROLLER.
-  check(rows[2].value === 'KEYBOARD', `the row should name the live device, got ${rows[2].value}`);
+  check(rows[bindAt].value === 'KEYBOARD', `the row should name the live device, got ${rows[bindAt].value}`);
   t.bindings.device = 'gamepad';
-  check(controlRows(t)[2].value === 'CONTROLLER',
+  check(controlRows(t)[bindAt].value === 'CONTROLLER',
     'the Gamepad API says "gamepad"; the menu says CONTROLLER');
   t.bindings.device = 'keyboard';
 
@@ -423,9 +453,8 @@ function atRoster() {
   tap(t, 'confirm');
   for (let i = 0; i < ctl; i++) tap(t, 'down');
   tap(t, 'confirm');
-  tap(t, 'down');
-  tap(t, 'down');
-  check(t.settings.cursor === 2, `could not reach the binding row, got ${t.settings.cursor}`);
+  for (let i = 0; i < bindAt; i++) tap(t, 'down');
+  check(t.settings.cursor === bindAt, `could not reach the binding row, got ${t.settings.cursor}`);
   // The binding row OPENS; it does not toggle.
   tap(t, 'confirm');
   check(t.settings.controls.stage === 'bind', 'Z on the binding row should open the list');
@@ -1282,6 +1311,156 @@ function idle(t) {
     `the no-op proof should cover ${frames} stepped frames`);
 }
 
+
+// ── A NARROWED MODE LIST — what a vendoring page offers ────────────────────
+//
+// `modeRows(title)` is `MODES` unless a driver hands the title its own list.
+// It exists because the engine is VENDORED: kaizo-knight-sim mirrors sim/ and
+// render/ wholesale and builds its fight with its OWN scene, so every row
+// appended to the shared `MODES` appeared on that page too — including
+// PRACTICE, whose blurb promises "a wipe rewinds the attack" over a director
+// that never reads `runMode === 'practice'`.
+//
+// The navigation has to move over the NARROWED list, and TITLE_EXTRAS has to
+// sit directly below it — the extras are positioned by the list's LENGTH, so
+// a helper that narrowed the rows but not the offset would leave SETTINGS and
+// CREDITS floating over a gap and confirm the wrong thing.
+{
+  const NARROW = MODES.filter((m) => m.id !== 'practice');
+  const t = createTitle();
+  t.modes = NARROW;
+
+  check(modeRows(t).length === MODES.length - 1,
+    `a narrowed title offers ${modeRows(t).length} rows, want ${MODES.length - 1}`);
+  check(modeRows(createTitle()).length === MODES.length,
+    'an ordinary title still offers every row');
+  check(modeRows(null) === MODES && modeRows({}) === MODES,
+    'no list, or a title without one, falls back to MODES');
+  check(modeRows({ modes: [] }) === MODES,
+    'an EMPTY list falls back too — a page with no rows at all is a bug, not a menu');
+
+  // WALK IT. Down past the last narrowed mode must land on the first extra,
+  // not on the row the full list would have had there.
+  for (let i = 0; i < NARROW.length; i++) tap(t, 'down');
+  check(t.index === NARROW.length,
+    `down off the end of a ${NARROW.length}-row list lands on index ${t.index}`);
+
+  // AND THE ROW IT DROPPED IS UNREACHABLE. Walking the whole narrowed list
+  // must never select 'practice' — the assertion that the filter took effect
+  // in the NAVIGATION and not merely in the array handed to the renderer.
+  const seen = [];
+  const t2 = createTitle();
+  t2.modes = NARROW;
+  for (let i = 0; i < NARROW.length; i++) {
+    seen.push(modeRows(t2)[t2.index].id);
+    tap(t2, 'down');
+  }
+  check(!seen.includes('practice'),
+    `a narrowed walk reached practice: ${seen.join(',')}`);
+  check(seen.length === NARROW.length,
+    `walked ${seen.length} rows, want ${NARROW.length}`);
+  check(MODES.some((m) => m.id === 'practice'),
+    'the full list still HAS practice — otherwise this whole block is vacuous');
+
+  // THE WRAP POINT, which is the assertion that actually discriminates.
+  //
+  // Everything above still passes if the cursor's LENGTH is left reading the
+  // full `MODES` — walking down four times from zero lands on index 4 either
+  // way. What differs is where the list turns over: a narrowed screen holds
+  // NARROW.length + TITLE_EXTRAS.length rows, so exactly that many downs
+  // returns to the top, while a cursor still counting the full list stops one
+  // short and leaves the heart on a row nothing draws.
+  //
+  // Written down because the first version of this block did NOT catch it:
+  // reverting the length site to `MODES.length` kept every assertion above
+  // green. A check that cannot redden under the sabotage it was written for
+  // is guarding nothing, which is this repo's own standing rule.
+  const span = NARROW.length + TITLE_EXTRAS.length;
+  const t3 = createTitle();
+  t3.modes = NARROW;
+  for (let i = 0; i < span; i++) tap(t3, 'down');
+  check(t3.index === 0,
+    `${span} downs over a narrowed screen should wrap to 0, landed on ${t3.index}`);
+
+  // And UP from the top lands on the last EXTRA, not on a phantom row past it.
+  const t4 = createTitle();
+  t4.modes = NARROW;
+  tap(t4, 'up');
+  check(t4.index === span - 1,
+    `up from the top should land on ${span - 1}, landed on ${t4.index}`);
+
+  // CONFIRM ON EACH EXTRA, which is the OTHER site the helper had to reach.
+  //
+  // `stepTitle` decides mode-or-extra with `title.index >= modeRows(title).length`
+  // and then indexes `TITLE_EXTRAS[title.index - modeRows(title).length]`. Left
+  // reading the full `MODES`, a narrowed screen's first extra row (index 4 of
+  // a 4-row list) is neither: the extra branch declines it and the mode branch
+  // indexes one past the end. Nothing above notices, because nothing above
+  // PRESSES CONFIRM there — the second sabotage this block failed to catch.
+  //
+  // So each extra is opened by name, from its own fresh title.
+  for (let n = 0; n < TITLE_EXTRAS.length; n++) {
+    const te = createTitle();
+    te.modes = NARROW;
+    for (let i = 0; i < NARROW.length + n; i++) tap(te, 'down');
+    check(te.index === NARROW.length + n,
+      `extra ${TITLE_EXTRAS[n].id}: cursor at ${te.index}, want ${NARROW.length + n}`);
+    let threw = null;
+    try {
+      stepTitle(te, { ...NONE, confirm: true }, ROSTER);
+    } catch (err) {
+      threw = err;
+    }
+    check(threw === null,
+      `confirming ${TITLE_EXTRAS[n].id} on a narrowed screen threw: ${threw && threw.message}`);
+    check(te.mode === null,
+      `confirming ${TITLE_EXTRAS[n].id} started a run instead (mode ${te.mode})`);
+    check(te.settings != null,
+      `confirming ${TITLE_EXTRAS[n].id} opened nothing`);
+  }
+
+  // A MIDDLE ROW DROPPED, which is the only shape that tests the id READS.
+  //
+  // `practice` is last in `MODES`, so filtering it out leaves a PREFIX — and
+  // over a prefix `MODES[i]` and `modeRows(title)[i]` are the same element for
+  // every reachable i. Sabotaging the two `.id` reads back to `MODES` changed
+  // nothing measurable, because there was nothing to measure. Dropping a row
+  // from the MIDDLE is what separates them.
+  //
+  // This is not a hypothetical shape: it is what a page offering only the
+  // modes its own scene implements looks like as soon as the dropped one is
+  // not the newest.
+  {
+    const MID = MODES.filter((m) => m.id !== 'endless');
+    const want = MID[2].id;
+    check(want !== MODES[2].id,
+      `the middle drop must SHIFT row 2 to be discriminating (${want} vs ${MODES[2].id})`);
+
+    const tm = createTitle();
+    tm.modes = MID;
+    for (let i = 0; i < 2; i++) tap(tm, 'down');
+    check(modeRows(tm)[tm.index].id === want,
+      `row 2 of the narrowed list reads ${modeRows(tm)[tm.index].id}, want ${want}`);
+
+    stepTitle(tm, { ...NONE, confirm: true }, ROSTER);
+    // 'single' opens the roster rather than starting, so assert on whichever
+    // of the two that row actually is instead of assuming it starts a run.
+    if (want === 'single') {
+      check(tm.pickingAttack === true,
+        'confirming the narrowed row 2 (single) should open the roster');
+    } else {
+      check(tm.mode === want,
+        `confirming the narrowed row 2 started ${tm.mode}, want ${want}`);
+    }
+
+    // ENDLESS must be unreachable on that screen — including its submenu,
+    // which is the branch that would fire if the id read still used MODES.
+    check(tm.pickingStage !== true,
+      'the dropped ENDLESS row opened its stage list anyway');
+    check(tm.mode !== 'endless',
+      `a screen without ENDLESS started it anyway (mode ${tm.mode})`);
+  }
+}
 console.log('title navigation — modes, roster, difficulties, settings\n');
 console.log(`→ ${MODES.length} modes + ${TITLE_EXTRAS.map((e) => e.name).join(' + ')},`
   + ` ${SETTINGS_PAGES.length} settings pages`);

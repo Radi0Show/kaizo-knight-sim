@@ -34,6 +34,8 @@ import { spawn, destroy } from '../entity.js';
 import { scrApproach, scrMovetowards, lerp, sign } from '../gml.js';
 import { splitslash } from './splitslash.js';
 import { gmlIrandom } from '../rng.js';
+// NO BULLET COOLDOWNS (tronic560) -- site M4; see sim/attacks/nbc.js.
+import { nbcOn, NBC_BOXSPLITTER_SPAWN } from './nbc.js';
 
 function box(state) {
   return state.entities.find((e) => e.alive && e.type.name === 'obj_growtangle');
@@ -180,7 +182,32 @@ export const boxsplitterAttack = {
     }
 
     e.timer += 1;
-    if (e.timer >= e.spawn_speed) {
+    // NBC SITE M4 — obj_roaringknight_boxsplitter_attack_Step_0.gml:62,
+    // tronic560's mod:
+    //
+    //     -  if (timer >= spawn_speed)
+    //     +  if (timer >= 33)
+    //
+    // A SPEED-UP EVERYWHERE THE FIGHT ACTUALLY GOES. Read the init block above
+    // for what `spawn_speed` really is: 50 at difficulty 0 and 46 at 1, both
+    // walking down to 40 by 3 a slash; 31 at difficulty 2; and NO BRANCH AT
+    // ALL at difficulty 3, which therefore keeps the 40 the Create set. The
+    // mod replaces the variable with a FLAT 33, so it is faster than 50, 46,
+    // 40 and 40 — every difficulty sim/scenes/fight.js dispatches (ac 2 at
+    // difficulty 0, 1 and 3).
+    //
+    // It WOULD be slower than difficulty 2's 31. That branch is simply never
+    // reached in this fight, so the regression the mod contains never runs.
+    // tools/verify-nbc.mjs's M4 asserts both halves — the measured cadence at
+    // the three live difficulties, and the absence of a difficulty-2 dispatch.
+    //
+    // (An earlier note here claimed the difficulty-3 slashes come SLOWER, and
+    // the suite asserted it and passed. Both were wrong: 31 is difficulty 2,
+    // and the count only fell because the party died sooner under the mod.)
+    //
+    // The per-slash decay at the bottom of this block — which the mod left in
+    // place — now feeds a value nothing reads.
+    if (e.timer >= (nbcOn(state) ? NBC_BOXSPLITTER_SPAWN : e.spawn_speed)) {
       e.timer = 0;
 
       // ORDER MATTERS: the draw happens even at difficulty 0, where the value

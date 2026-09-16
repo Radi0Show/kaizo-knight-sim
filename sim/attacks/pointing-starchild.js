@@ -407,5 +407,11 @@ export const pointingStarchild = {
   // The SAME 75-damage party-wide hit as its parent — obj_knight_pointing_
   // starchild's Other_15 is `target = 3; damage = 75; scr_damage_all()`.
   // The children were doing 1 to one character.
+  //
+  // NBC SITE D4 — obj_knight_pointing_starchild_Other_15.gml:37 gets the same
+  // `75` -> `100` tronic560 gives the parent at site D3, and it needs no code
+  // of its own HERE precisely because the two share one handler. If that ever
+  // stops being true, D4 has to be written out separately; the two numbers
+  // being equal in the mod is a fact about the mod, not a guarantee.
   other15: starOther15,
 };

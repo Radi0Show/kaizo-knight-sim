@@ -50,6 +50,8 @@ import { scrLerpvar } from '../lerpvar.js';
 import { cue, cueSustain, cueTune } from '../audio.js';
 import { roaringStar } from './roaring-star.js';
 import { roaringknightSlash } from './roaringknight-slash.js';
+// NO BULLET COOLDOWNS (tronic560) — sites M1 and M2 live in this file.
+import { nbcOn } from './nbc.js';
 import { scrBulletInherit } from '../bullets/regularbullet.js';
 import {
   screenPiece, scrAfterimage, knightCircle, particleGeneric, afterimageScreen,
@@ -677,7 +679,20 @@ export const roaring2 = {
       // but the draw is taken.
       e.spinspeed = gmlChoose(state.gmlRng, [-1, 1]);
 
-      if (e.starcount_p1 === 1 && e.intensity < 3.7) {
+      // NBC SITE M2 — obj_knight_roaring2_Step_0.gml:174, tronic560's mod:
+      //
+      //     -  if (starcount_p1 == 1 && intensity < 3.7)
+      //     +  if (intensity < 3.7)
+      //
+      // The one-in-three gate described above is simply deleted, so every
+      // beat fires a ring instead of the first of each three. `starcount_p1`
+      // still counts and still resets — the mod did not touch either — it
+      // just no longer decides anything below 2.7 intensity.
+      //
+      // OFF IS THE ORIGINAL EXPRESSION, not the mod's with a `true` folded
+      // in: the rings each draw from `gmlRng`, so a beat that fires when it
+      // should not moves every later bullet in the fight.
+      if (nbcOn(state) ? e.intensity < 3.7 : (e.starcount_p1 === 1 && e.intensity < 3.7)) {
         if (e.intensity >= 2.7) {
           // Two stars, opposite each other.
           e.rand_angle += 9;
@@ -849,7 +864,24 @@ export const roaring2 = {
 
         if (e.roaring_timer >= 9) e.player_suck = Math.min(e.player_suck, -3);
 
-        if (e.roaring_timer > 15 && e.roaring_timer % 5 === 0) {
+        // NBC SITE M1 — obj_knight_roaring2_Step_0.gml:417, tronic560's mod,
+        // and the clearest statement of what the mod IS:
+        //
+        //     -  if (roaring_timer > 15 && (roaring_timer % 5) == 0)
+        //     +  if (roaring_timer > 15 && (roaring_timer % roaring_timer) == 0)
+        //
+        // `x % x` is 0 for every non-zero x. The guard is therefore always
+        // true past frame 15 and the three-star fan below fires EVERY FRAME
+        // instead of every fifth — five times the stars, five times the
+        // `snd_stardrop`, and five times the RNG draws.
+        //
+        // Written as the mod wrote it rather than as `true`, because the
+        // expression is the evidence: a reader who doubts the claim can
+        // evaluate it.
+        const fanDue = nbcOn(state)
+          ? e.roaring_timer % e.roaring_timer === 0
+          : e.roaring_timer % 5 === 0;
+        if (e.roaring_timer > 15 && fanDue) {
           // One per star of the roar's stream, at half volume.
           cue(state, 'snd_stardrop', 0.5, 0.5);
           // A THREE-STAR FAN every five frames, walking around the circle.

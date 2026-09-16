@@ -56,6 +56,8 @@ import { gmlRandom } from './rng.js';
 import { PARTY, statFor, scrDamage } from './damage.js';
 import { cue, cueStop } from './audio.js';
 import { scrShakescreen } from './shake.js';
+// NO BULLET COOLDOWNS (tronic560) -- site D7; see sim/attacks/nbc.js.
+import { nbcOn, NBC_CATCH_DAMAGE } from './attacks/nbc.js';
 
 export const KNIGHT_MAXHP = 7300;   // scr_monstersetup, monstertype 104
 export const KNIGHT_AT = 40;
@@ -500,7 +502,21 @@ export function knightCatch(state) {
   for (let ti = 0; ti < 3; ti++) {
     const hp = state.partyHp[ti];
     if (hp <= 0) continue;
-    let dmg = 40;
+    // NBC SITE D7 — obj_knight_enemy_Other_12.gml:8, tronic560's mod:
+    //
+    //     -  damage = 40;
+    //     +  damage = 15;
+    //
+    // ONE LINE, AND THE CLAMP AROUND IT IS UNTOUCHED. The mod leaves both
+    // `hp[n] > 1 && hp[n] < 41` guards at 41, so under the mod the clamp
+    // covers a band that is now WIDER than the damage itself: anyone between
+    // 2 and 40 HP still has the hit rewritten to `hp - 1` — which for most of
+    // that band is MORE than 15, not less. The catch therefore gets harsher
+    // for a character on 30 HP and gentler for one on 200.
+    //
+    // That is the mod's arithmetic, not a translation artefact, and it is why
+    // the 41s below are deliberately left alone rather than "kept in step".
+    let dmg = nbcOn(state) ? NBC_CATCH_DAMAGE : 40;
     if (hp > 1 && hp < 41) dmg = hp - 1;
     state.invTimer = -1;
     total += scrDamage(state, dmg, ti, { truedamage: true });

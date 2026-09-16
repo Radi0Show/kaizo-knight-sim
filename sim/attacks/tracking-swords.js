@@ -46,6 +46,8 @@ import { scrBulletInit, collidebulletOther15 } from '../bullets/regularbullet.js
 import { gmlChoose } from '../rng.js';
 import { cue } from '../audio.js';
 import { afterimageGrow } from '../fx.js';
+// NO BULLET COOLDOWNS (tronic560) -- site D1; see sim/attacks/nbc.js.
+import { nbcOn, NBC_TRACKING_DAMAGE } from './nbc.js';
 
 const HEADINGS = [0, 45, 90, 135, 180, 225, 270, 315];
 
@@ -377,7 +379,22 @@ export const trackingSwordsManager = {
     e.multiswordcon = 0;
     e.multiswordcount = 0;
     e.setcount = 0;
-    e.setdirection = new Array(50).fill(-1);
+    // THE SET-DIRECTION POOL, AND THE MOD WIDENS IT — which is the half that
+    // was missing and the reason the toggle did not feel like bullet hell.
+    //
+    //     obj_tracking_swords_manager's Create_0:10
+    //     -  for (i = 0; i < 50; i++)   setdirection[i] = -1;
+    //     +  for (i = 0; i < 3000; i++) setdirection[i] = -1;
+    //
+    // Welding the spawn gate open (Step_0:6, `|| true`) makes a sword leave
+    // every frame instead of once per `rate` — but every sword reads its
+    // heading out of this array, and past entry 50 there was nothing to read.
+    // The swords kept coming and came out with NO set direction, so the screen
+    // filled with the wrong attack rather than more of the right one. The mod
+    // raises the pool sixty-fold for exactly this reason; the two changes are
+    // one mechanism and translating either alone is worse than translating
+    // neither.
+    e.setdirection = new Array(nbcOn(state) ? 3000 : 50).fill(-1);
     // A COLLIDEBULLET IN ITS OWN RIGHT. The object's parent chain (dumped via
     // object_parents.csx) is obj_tracking_swords_manager -> obj_regularbullet -> the
     // collidebullet base — so the real game's bullet enumeration counts the
@@ -397,6 +414,23 @@ export const trackingSwordsManager = {
 
   /** Other_10 — event_user(0), fired from the Create in the original. */
   init(e, state, chainedType = null) {
+    // NBC SITE D1 — obj_knight_enemy_Step_0.gml, tronic560's mod, on the
+    // TRACKING-SWORDS dispatches: `dc.damage = 206;` -> `103`, halved, at
+    // lines 465 (ac 11), 491 (ac 14), 505 (ac 15) and 527 (ac 17).
+    //
+    // **LINE 518 — ac 16's tracking swords — IS NOT CHANGED.** It still reads
+    // 206 in the patched dump. That is the mod's, not a transcription slip
+    // here: the four other dispatches are edited and this one is skipped, so
+    // the rotating-slash-plus-tracking turn keeps the full-strength swords.
+    // `chainedType === 104` is exactly ac 16 (`sim/scenes/fight.js` case 16
+    // is the only caller that passes it), which is why the exemption can be
+    // written without a new field.
+    //
+    // WHY IT SITS IN `init` AND NOT IN `create`: every dispatch assigns
+    // `damage` between the spawn and this call, so `create` runs too early to
+    // see the value the mod is editing. This is the first line after it.
+    if (nbcOn(state) && chainedType !== 104) e.damage = NBC_TRACKING_DAMAGE;
+
     if (e.variant === 0) {
       e.rate = 32;
       e.ratedecay = 4;
@@ -481,9 +515,28 @@ export const trackingSwordsManager = {
     if (state.turntimer < 70) return;
 
     e.timer += 1;
+    // NBC SITE M7 — obj_tracking_swords_manager_Step_0.gml:6, tronic560's mod,
+    // and the site the knight-only diff missed because the file is not named
+    // for the knight:
+    //
+    //     -  if ((timer == rate && swordcount <= maxswords) || (timer == multiswordframes && multiswordcon == 1))
+    //     +  if (((timer == rate && swordcount <= maxswords) || (timer == multiswordframes && multiswordcon == 1)) || true)
+    //
+    // A `|| true` WELDED ONTO THE END, which is the same joke as `x % x` at
+    // site M1: the gate is dead and a sword leaves the manager EVERY FRAME
+    // rather than once per `rate`. This is the biggest single change the mod
+    // makes to the knight — ac 11, 14, 15, 16 and 17 all run this manager —
+    // and it is why the four dispatches at site D1 are halved to 103.
+    //
+    // THE NEW TERM GOES LAST, exactly where the mod put it. `||` evaluates
+    // left to right and stops at the first true operand, so with the toggle
+    // OFF the two original tests are evaluated in the original order and
+    // `nbcOn` is reached only when both were already false — where it returns
+    // false and the manager returns, as it did before this line existed.
     const fire =
       (e.timer === e.rate && e.swordcount <= e.maxswords) ||
-      (e.timer === e.multiswordframes && e.multiswordcon === 1);
+      (e.timer === e.multiswordframes && e.multiswordcon === 1) ||
+      nbcOn(state);
     if (!fire) return;
 
     const inst = spawn(state, trackingSword, { x: e.x, y: e.y });
@@ -557,7 +610,11 @@ export const trackingSwordsManager = {
     // `undefined`, which `!== -1` treated as a scripted override: the sword's
     // direction went NaN and the collision phase crashed on it. Out of range
     // means "past the scripted opening" — no override.
-    const setdir = e.setcount < 50 ? e.setdirection[e.setcount] : -1;
+    // The bound follows the pool. It was a bare 50, so even a widened array
+    // would have been ignored past the fiftieth sword.
+    const setdir = e.setcount < e.setdirection.length
+      ? e.setdirection[e.setcount]
+      : -1;
     if (setdir !== -1) inst.direction = setdir;
 
     if (e.multiswordmax > 0) e.multiswordcount += 1;

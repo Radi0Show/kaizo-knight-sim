@@ -486,6 +486,25 @@ if (replayToken) {
 // quietly drifts.
 boot('building the title…');
 const title = createTitle();
+// THE MODES **THIS PAGE** CAN ACTUALLY RUN.
+//
+// `MODES` is the shared engine's list and it carries PRACTICE, whose blurb
+// promises that a wipe rewinds the attack rather than the run. That harness
+// lives in `sim/scenes/practice.js`, which THIS PAGE DOES NOT BUILD — the
+// kaizo fight comes from `buildKaizoScene` (kaizo/scenes/kaizo-fight.js), and
+// its director reads `runMode` for 'endless' and nothing else. Left alone,
+// re-vendoring the engine put a fifth row on this title screen that played an
+// ordinary run and said otherwise.
+//
+// `render/title.js` draws from `modeRows(title)`, so handing the title its own
+// list is the whole fix: the row is not dimmed or disabled, it is not there.
+//
+// TO ADD IT BACK, wire the harness — not this line. The engine's
+// `buildPracticeScene` takes the retry accounting and the damage allowance;
+// kaizo's director would need the same two hooks. tools/verify-practice.mjs
+// asserts the fork: a driver that narrows this row away must carry NO
+// reference to the harness, so a half-port fails there instead of shipping.
+title.modes = MODES.filter((m) => m.id !== 'practice');
 // THIS BUILD IS A RECREATION OF SOMEONE ELSE'S MOD, so it credits them.
 // `sim/modes.js` reads the list back through `titleCredits(title)` for both
 // the draw and the cursor wrap; the vanilla page installs nothing and gets
@@ -550,6 +569,25 @@ try {
   // production, so a setting added to one and forgotten in the other is a
   // setting that vanishes when the player crosses between them.
   if (typeof saved?.holdBreath === 'boolean') title.holdBreath = saved.holdBreath;
+  // NO BULLET COOLDOWNS (tronic560's mod, sim/attacks/nbc.js). BOTH PAGES OR
+  // NEITHER, exactly as above: the row exists on this page because
+  // `controlRows` is shared, so the flag has to survive a reload here too or
+  // it would silently reset every time the player crossed between the two
+  // builds. Absent is false; a non-boolean is dropped, because a stale entry
+  // must not be able to turn the mod on for someone who never asked.
+  if (typeof saved?.noBulletCooldown === 'boolean') title.noBulletCooldown = saved.noBulletCooldown;
+  // ENDLESS'S STAGE — which phase repeats, or the whole fight. BOTH PAGES OR
+  // NEITHER, the rule above: the submenu comes from the shared `sim/modes.js`,
+  // so a choice saved on one build has to survive a reload on the other or it
+  // reads as the setting resetting itself whenever the player crosses over.
+  //
+  // THE INDEX, NOT THE ID. The stage list lives in `sim/endless.js` and this
+  // driver deliberately does not import it: a vendored copy that has not been
+  // re-synced yet would fail the import outright rather than degrade, and a
+  // page that will not load is a far worse failure than a menu row that is not
+  // there yet. A plain number costs nothing, and the menu clamps it into range
+  // when the submenu opens.
+  if (Number.isInteger(saved?.stageIndex)) title.stageIndex = saved.stageIndex;
   // THE BINDINGS, AS AN OPAQUE BLOB — the input layer owns the contents; this
   // only carries it across a reload. See web/main.js for the same two lines.
   if (saved?.bindings && typeof saved.bindings === 'object') title.bindingsSaved = saved.bindings;
@@ -800,6 +838,23 @@ function reset() {
   // used to set it on the old one just before createState replaced it, so
   // ENDLESS never actually looped here.
   state.runMode = runMode;
+  // WHICH STAGE ENDLESS REPEATS, on the SAME state and for the same reason as
+  // the line above: the director reads it in its Create, and `build(state)`
+  // below is what spawns the director.
+  //
+  // THE ROW INDEX **IS** THE PHASE NUMBER, and that is a property of the list
+  // rather than a coincidence to lean on quietly: `ENDLESS_STAGES` is WHOLE
+  // FIGHT then PHASE 1..4, so row 0 carries phase 0 — the sim's own "do not
+  // lock" — and rows 1..4 carry 1..4. verify-endless asserts the identity for
+  // every row, naming this line, so reordering the table fails a suite here
+  // instead of silently practising the wrong phase on this page.
+  //
+  // WHY NOT `endlessPhase(title.stageIndex)`: this driver's `sim/` is
+  // VENDORED, and a copy not yet re-synced would have no such export — an
+  // import that fails takes the whole page down, which is a far worse failure
+  // than a stage number an older sim simply ignores (its `endlessLock` clamps
+  // anything it does not recognise to 0, the whole fight).
+  state.endlessStage = runMode === 'endless' ? (title.stageIndex | 0) : 0;
   state.vistaFsBase = vistaFs;
   // THE LOADOUT COMES FROM SETTINGS. The title's equip menu edits title.gear;
   // every fresh fight is built with a copy of it (sim/damage.js gearOf).
@@ -847,6 +902,9 @@ function exitRun() {
   title.mode = null;
   title.pickingAttack = false;
   title.pickingDifficulty = false;
+  // ...and ENDLESS's stage list, which is the same kind of sub-stage: leaving
+  // a run must land on the MODE list, never back inside a half-made choice.
+  title.pickingStage = false;
   reset();
 }
 
@@ -917,6 +975,9 @@ function persistSettings() {
       // binding blob. `?? undefined` keeps the key out of the entry on a build
       // that never armed bindings.
       holdBreath: title.holdBreath,
+      noBulletCooldown: title.noBulletCooldown,
+      // ENDLESS's stage cursor — see the load above for why it is the index.
+      stageIndex: title.stageIndex,
       bindings: title.bindings?.custom ?? undefined,
       // `global.kaizo_practice`, which the mod persists to dr.ini the same
       // way (`kaizo_settings_save()`, "Prac"). `?prac=` wins for a session
@@ -1182,6 +1243,9 @@ function startRun() {
   }
   // The director reads this: ENDLESS must not reach the ending.
   state.runMode = runMode;
+  // …and this is which stage it repeats. Set alongside runMode for the same
+  // reason, and re-set on the fresh state inside reset() — see the block there.
+  state.endlessStage = runMode === 'endless' ? (title.stageIndex | 0) : 0;
   reset();
 }
 

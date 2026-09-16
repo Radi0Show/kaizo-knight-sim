@@ -28,6 +28,7 @@ import { cue } from '../audio.js';
 import { lerp } from '../gml.js';
 import { gmlRandomRange, gmlChoose, gmlRandom } from '../rng.js';
 import { pointingStar } from './pointing-star.js';
+import { nbcOn } from './nbc.js';
 import { heartFollower } from './pointing-starchild.js';
 
 export const starsController = {
@@ -41,7 +42,10 @@ export const starsController = {
   create(e, state) {
     e.btimer = 0;
     e.made = 0;
-    e.endtimer = 120;
+    // NO BULLET COOLDOWNS runs the STARS longer as well as denser:
+    //     obj_dbulletcontroller Step_0, the `type == 98` branch
+    //     -  endtimer = 120;   +  endtimer = 150;
+    e.endtimer = nbcOn(state) ? 150 : 120;
     e.init = 2;
     e.size = 0;
     e.special = 0;
@@ -109,7 +113,20 @@ export const starsController = {
       return;
     }
 
-    if ((e.made !== 0 && e.btimer >= 4) || e.btimer >= 45) {
+    // THE STARS GATE, AND THIS IS THE ONE THAT WAS MISSED. The mod welds it
+    // open the same way it does the roar:
+    //
+    //     -  else if ((made != 0 && btimer >= 4)      || btimer >= 45)
+    //     +  else if ((made != 0 && btimer >= btimer) || btimer >= 45)
+    //
+    // `btimer >= btimer` holds for every value, so a star leaves every FRAME
+    // instead of every fourth. It went unimplemented because the object is
+    // called obj_dbulletcontroller — nothing in that name says knight or
+    // star, so a name-filtered sweep of the 264-file diff never surfaced it.
+    // Phase 1 OPENS with this attack, so the toggle was on and the first
+    // thing anyone saw was unchanged.
+    const starGate = nbcOn(state) ? 0 : 4;
+    if ((e.made !== 0 && e.btimer >= starGate) || e.btimer >= 45) {
       const cone = state.entities.find(
         (x) => x.alive && x.type.name === 'obj_knight_pointing_cone',
       );

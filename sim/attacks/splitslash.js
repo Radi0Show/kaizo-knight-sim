@@ -77,6 +77,8 @@ import { splitGrowtangle } from './split-growtangle.js';
 import { gmlChoose, gmlRandom, gmlRandomRange, gmlRandomsign } from '../rng.js';
 import { afterimage } from '../fx.js';
 import { cue, cueStop } from '../audio.js';
+// NO BULLET COOLDOWNS (tronic560) -- site D6; see sim/attacks/nbc.js.
+import { nbcOn, NBC_SPLITSLASH_DAMAGE } from './nbc.js';
 
 function manager(state) {
   return state.entities.find(
@@ -173,7 +175,19 @@ export const splitslash = {
     // Draw-only, but it CONSUMES a draw.
     e.flip = state.flipTable ? state.flipTable[state.flipIndex++] : gmlChoose(state.gmlRng, [-1, 1]);
 
-    e.damage = 206;
+    // NBC SITE D6 — obj_roaringknight_splitslash_Create_0.gml:18, tronic560's
+    // mod:
+    //
+    //     -  damage = 206;
+    //     +  damage = 242;
+    //
+    // THIS IS THE CHANGELOG'S ONE HONEST NUMBER. `NBC Nerfs and Changes
+    // v1.5.0.txt` says "Increased damage of Knight's Box Splitter attack from
+    // 206 to 242" and it is right — about this object. What it does not say
+    // is that five `dc.damage = 206` sites elsewhere become 103 (sites D1 and
+    // D2), which is the opposite direction on a different attack. Both are in
+    // the patched dump; the prose names one.
+    e.damage = nbcOn(state) ? NBC_SPLITSLASH_DAMAGE : 206;
     e.element = 5;
     e.grazepoints = 10;
     e.vertical = false;
@@ -296,6 +310,19 @@ export const splitslash = {
       e.active = true;
       e.slash = true;
 
+      // `var _splitter;` then `if (!i_ex(obj_knight_split_growtangle))` —
+      // Step_0:77-92. The ELSE arm of that `if` decompiles as a bare
+      // `_splitter = 182;`, and 182 is the vanilla OBJECT INDEX of
+      // obj_knight_split_growtangle (sim/data/object-order.js records it);
+      // the source was `_splitter = obj_knight_split_growtangle;`, i.e. "the
+      // one that already exists", which is what `organism(state)` returns.
+      //
+      // tronic560's mod prints `_splitter = 910;` here. That is NOT a
+      // gameplay change and must not be translated as one: 910 is the SAME
+      // object's index in the mod's own rebuilt object table. The full
+      // argument, with the `knight = 345` -> `344` anchor that settles it, is
+      // under MOD-BUILD DRIFT in sim/attacks/nbc.js. The line stays as it is,
+      // flag or no flag.
       let splitter = organism(state);
       if (!splitter) {
         const gt = box(state);

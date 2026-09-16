@@ -15,13 +15,17 @@
 // themselves are the verified ones.
 
 import { spawn } from '../entity.js';
+import { applyDials } from '../dials.js';
 import { gmlLte } from '../gml.js';
 import { battlebox, settleBox } from '../battlebox.js';
 import { gmlCreate, gmlChoose, gmlIrandom, gmlRandom } from '../rng.js';
 import { FIGHT_TABLE, launchAttack, openArena, clearTurn, nextTurn, phase4Entry, turnLength, deliverHeart } from './fight.js';
 import { battleMsgFor, OPENING_MSG } from '../battlemsg.js';
 import { createMenu, stepMenu, openMenu, bagOf } from '../menu.js';
-import { partyWiped, PARTY as PARTY_STATS, isUp, PARTY_POS} from '../damage.js';
+import {
+  partyWiped, PARTY as PARTY_STATS, isUp, PARTY_POS,
+  freshParty, scrRevive, effectivePartyHp,
+} from '../damage.js';
 import { createFightBar, stepFightBar, fightTp } from '../fightbar.js';
 import { endTurnItems } from '../menu.js';
 import { applyItem } from '../items.js';
@@ -31,10 +35,10 @@ import {
   textSoundChar,
 } from '../dialogue.js';
 import {
-  spawnDmgNumber, stepDmgNumbers, resetDmgStack,
+  spawnDmgNumber, stepDmgNumbers, resetDmgStack, createDmgNumbers,
 } from '../dmgnumbers.js';
 import { spawnImpact, stepAttackVfx } from '../attackvfx.js';
-import { stepRudeBuster, rudeBusterBusy } from '../rudebuster.js';
+import { stepRudeBuster, rudeBusterBusy, createRudeBuster } from '../rudebuster.js';
 import { castSpell, resolveActPages } from '../spells.js';
 import { needsSpellphase, createSpellphase, stepSpellphase } from '../spellphase.js';
 import { rngNext } from '../rng.js';
@@ -50,6 +54,104 @@ import { knightActor, partyActor, PARTY, KNIGHT, BOX } from '../actors.js';
 export const IS_SANDBOX = true;
 export const SANDBOX_NOTE =
   'THE REAL FIGHT ORDER — verified attacks, real difficulties, real HP · phase 4 opens at 5840';
+
+// ── THE PRACTICE HARNESS — Bad Time Simulator's death model ──────────────
+//
+// BTS (Jcw87/c2-sans-fight) ships four modes and ours are the same four, but
+// its PRACTICE mode is a different shape from anything here. Its whole trigger
+// is one Construct condition in `Event sheets/Battle.xml`, evaluated EVERY
+// TICK:
+//
+//     Compare two values:  First "HP - KR"  Comparison 2 (less than)
+//                          Second "PracticeTargetTest"
+//
+// with `PracticeTargetTest` seeded from the `PracticeTarget` global each tick.
+// Three properties fall out of that, and all three are the ask:
+//
+//   1. IT IS A THRESHOLD, not a death. The number is a variable, not zero.
+//   2. IT IS TESTED CONTINUOUSLY, not at a turn boundary or on a hit event.
+//   3. IT RESETS. Nothing latches, nothing waits, nothing plays.
+//
+// THE `KR` TERM HAS NO COUNTERPART HERE, and no attempt is made to invent one.
+// `KR` is Undertale's KARMIC RETRIBUTION — Sans-only poison that sits on the
+// player as pending damage, so `HP - KR` is "what you will have once the
+// poison finishes". The Roaring Knight has no such mechanic, DELTARUNE has no
+// such mechanic, and `scr_damage` deals its whole number on the frame it
+// lands. So `HP - KR` reduces to `HP`, and `effectivePartyHp()` (sim/damage.js)
+// is the entire left-hand side. Adding a karma system to make the expression
+// look like BTS's would be translating the spelling instead of the shape.
+//
+// WHAT "EFFECTIVE" STILL MEANS HERE: the party is THREE pools, not one, and a
+// swooned member sits at -999 rather than 0 — so a naive sum reads -1758 while
+// two members are still standing. `effectivePartyHp` clamps each slot at zero
+// and sums the roster, which makes `< 1` exactly today's `partyWiped()` and
+// makes any larger target an earlier, stricter reset.
+//
+// THE DEFAULT RESET IS THE CURRENT ATTACK, NOT THE RUN. That is the half of
+// BTS people actually remember: a death costs you the attack you were on and
+// nothing else. Measured on this sim before the change, a wiped party in
+// ENDLESS cost a full driver `reset()` — 117 frames of menu and dialogue from
+// rebuild to a soul you can steer, with confirm mashed as fast as the menu
+// accepts it — and in NORMAL it cost the game-over screen (a 150-frame glide
+// before the Knight's script even starts) plus a trip through the title.
+// `retryAttack` rewinds to the top of the SAME turn instead: **9 frames** from
+// the frame the threshold fires to a soul you can steer — the tail of the
+// rtimer-12 board grow-in, which is kept deliberately (see `retryAttack`).
+// Both numbers are measured, not estimated, and `tools/verify-practice.mjs`
+// asserts the ratio rather than either figure, so a change in the turn's
+// opening cannot quietly make a retry expensive again.
+//
+// The 9 frames do not grow: a second and third death in the same turn cost
+// the same 9, because the turn is restored from a snapshot rather than
+// re-entered. `damagereduction` reads 0.21 after two retries, not 0.23.
+//
+// `reset: 'run'` keeps the old behaviour for anyone who wants a clean run —
+// it latches `gameOver` exactly as before and hands the decision to the driver.
+export const PRACTICE_DEFAULTS = Object.freeze({
+  /**
+   * HOW MUCH DAMAGE ONE TURN MAY COST YOU before it starts over.
+   *
+   * `null` means work it out from the party: a fifth of its starting total, so
+   * a different roster scales instead of inheriting a number fitted to
+   * Kris/Susie/Ralsei's 490.
+   *
+   * WHY AN ALLOWANCE RATHER THAN BAD TIME SIMULATOR'S HP FLOOR. BTS tests
+   * `HP - KR < PracticeTargetTest`, and that test is 2 — "reset when you are
+   * about to die". It is brutal THERE because Sans is 92 HP in one pool with no
+   * revives and karma that finishes you off a few ticks. Ported literally it
+   * became a floor of 1 across 490 HP in THREE pools WITH revives, so it fired
+   * only on a total wipe: the most forgiving possible reading of the strictest
+   * mode in the reference. Reported from play as exactly that.
+   *
+   * The allowance is the half that transfers — take this much and the turn
+   * rewinds — and 98 (490/5) sits deliberately between the fight's own numbers:
+   * above the 40 and 50 hits so a graze does not rewind you, below the box
+   * splitter's 206 so one of those does.
+   */
+  allowance: null,
+  /** The wipe floor is KEPT as a backstop: a party that dies resets regardless. */
+  target: 1,
+  /** 'attack' rewinds this turn in place; 'run' latches gameOver for the driver. */
+  reset: 'attack',
+});
+
+/**
+ * Normalise what a caller asked for into the object the director reads.
+ * Returns null for a falsy argument, which is what keeps every other mode —
+ * and the byte gate — on the untouched path.
+ */
+export function practiceOptions(opts) {
+  if (!opts) return null;
+  const o = opts === true ? {} : opts;
+  const target = Number.isFinite(o.target) ? o.target : PRACTICE_DEFAULTS.target;
+  const reset = o.reset === 'run' ? 'run' : PRACTICE_DEFAULTS.reset;
+  // Resolved against the LIVE party at build time, not here: this runs before
+  // the roster is installed, so null travels through and is filled in there.
+  const allowance = Number.isFinite(o.allowance) && o.allowance > 0
+    ? o.allowance
+    : PRACTICE_DEFAULTS.allowance;
+  return { target, reset, allowance };
+}
 
 // THE BUFFERS BETWEEN TURNS, all three from the dump. This was one invented
 // constant (`TURN_GAP = 45`) standing in for a sequence with real timings.
@@ -180,11 +282,49 @@ const turnClock = {
   },
 };
 
+/**
+ * WHICH PHASE ENDLESS IS LOCKED TO, or 0 for "not locked" — the whole fight.
+ *
+ * `state.endlessStage` is the DRIVER'S number, resolved from the title's
+ * stage row by `endlessPhase()` in sim/modes.js, the same way the SINGLE
+ * roster's difficulty INDEX is resolved to the selector's raw value before it
+ * reaches the sim. This module never learns what a menu row is.
+ *
+ * TAKEN, in shape, from Bad Time Simulator's `EndlessStage` global
+ * (Globals.xml; MainMenu.xml writes it, Battle.xml reads it back on entry to
+ * pre-set the stage's starting state). Theirs is ZERO-BASED over two phases
+ * and has no whole-fight case at all; ours is the phase NUMBER, and 0 — what a
+ * fresh state, a dropped setting and a hostile URL all land on — means do not
+ * lock, which is exactly what ENDLESS did before this existed.
+ *
+ * **EVERY CALLER IS GATED THROUGH THIS, AND IT RETURNS 0 OFF ENDLESS.** The
+ * whole-fight byte gate replays this scene — tools/fullfight-trace.mjs imports
+ * `buildPracticeScene` — so the NORMAL path must execute the same calls in
+ * the same order, not merely reach the same result: one extra RNG draw moves
+ * every bullet after it. This function makes no draw and writes no state.
+ */
+export function endlessLock(state) {
+  if (state?.runMode !== 'endless') return 0;
+  const n = state.endlessStage | 0;
+  return n >= 1 && n <= 4 ? n : 0;
+}
+
 const director = {
   name: 'fight_director',
 
   create(e, state) {
-    e.phase = 1;
+    // A PHASE-LOCKED ENDLESS RUN OPENS ON ITS OWN PHASE. Walking phases 1-3 to
+    // reach phase 4's charge-up is precisely the wait this mode exists to
+    // delete, and `endlessLock` is 0 — so this is `e.phase = 1` unchanged —
+    // for NORMAL, HITLESS, SINGLE and whole-fight ENDLESS alike.
+    //
+    // PHASE 4 OPENS ON ROW 0, NOT `phase4Entry`. That helper skips the
+    // rotating slash when `rotatingslash3used` is set, and it is set by PHASE
+    // 3's turn 5 — which a run that starts in phase 4 has never played. A
+    // fresh knight has the flag clear, so the honest entry is the one the real
+    // fight takes when its HP gate trips before phase 3 finishes: all three
+    // turns, rotating slash first.
+    e.phase = endlessLock(state) || 1;
     e.turn = 0;
     // `*downmessage` — one-shot per character per FIGHT, never cleared.
     state.downSeen = { kris: false, susie: false, ralsei: false };
@@ -227,7 +367,33 @@ const director = {
     // THE FIGHT IS LOST when all three are down. The real game goes to its
     // Game Over screen; here the run simply stops and the HUD says so, which
     // is the honest stand-in — the retry flow is turn-system machinery.
-    if (!state.gameOver && partyWiped(state)) {
+    //
+    // ...UNLESS THE PRACTICE HARNESS IS INSTALLED, in which case BTS's
+    // continuous threshold replaces the wipe test and the turn rewinds instead
+    // of ending. See PRACTICE_DEFAULTS at the top of this file.
+    //
+    // THIS FILE IS THE BYTE GATE'S SCENE — tools/fullfight-trace.mjs calls
+    // buildPracticeScene — so the shape of this block matters as much as its
+    // result. With no `state.practice` installed the `prac &&` short-circuits
+    // on a plain property read and the ELSE arm runs `partyWiped(state)`, the
+    // same call this block always made, in the same position in the same
+    // event. Nothing above it moved and nothing new is called. `reset: 'run'`
+    // takes the else arm too: it is the old behaviour, kept and named.
+    const prac = state.practice;
+    if (prac && prac.reset === 'attack') {
+      // TWO WAYS A TURN ENDS EARLY, and the first is the one that makes this
+      // mode strict: DAMAGE TAKEN THIS TURN reaching the allowance. The HP
+      // floor is kept underneath as a backstop for the case the allowance
+      // cannot see — a party that dies without crossing it, which a large
+      // hand-set allowance permits.
+      const spent = state.practiceDamage ?? 0;
+      const cap = prac.allowance;
+      const tooMuch = Number.isFinite(cap) && cap > 0 && spent >= cap;
+      if (!state.gameOver && (tooMuch || effectivePartyHp(state) < prac.target)) {
+        retryAttack(e, state);
+        return;
+      }
+    } else if (!state.gameOver && partyWiped(state)) {
       state.gameOver = true;
       state.menu.open = false;
     }
@@ -323,7 +489,16 @@ const director = {
     if (state.runMode === 'endless' && endCutsceneReached(state)) {
       state.knight.hp = KNIGHT_MAXHP;
       state.knight.haveusedroaring = false;
-      e.phase = 1;
+      // ...AND BACK TO THE STAGE THE PLAYER PICKED, not always phase 1.
+      //
+      // ONLY PHASE 4 CAN REACH HERE UNDER A LOCK. `endCutsceneReached` needs
+      // `haveusedroaring`, which nothing but ROARING sets, and ROARING is
+      // phase 4's third turn — so phases 1-3 locked never see this branch and
+      // wrap through the turn table below instead. It is still written as the
+      // lock rather than as a literal 4, because a wrap that hardcodes the one
+      // phase that can currently reach it is a line that silently becomes
+      // wrong the day anything else sets that flag.
+      e.phase = endlessLock(state) || 1;
       e.turn = 0;
       e.turnsRun = 0;
     } else if (endCutsceneReached(state)) {
@@ -534,6 +709,25 @@ const director = {
       e.phase = nx.phase;
       e.turn = nx.turn;
 
+      // ---- ENDLESS, LOCKED TO ONE PHASE: THE PHASE'S OWN LIST REPEATS ------
+      //
+      // `nextTurn` is the FIGHT's schedule — phases 1 and 2 hand over, 3
+      // loops, 4 falls back to 3 — and it is shared with the byte gate and
+      // read by tools, so the lock is applied HERE rather than inside it. The
+      // arithmetic is the whole rule: the next row of the same table, wrapping
+      // at its end. Phase 4's three rows therefore cycle rotating slash ->
+      // charge-up -> ROARING -> rotating slash, which is the thing that cannot
+      // be practised in the real fight because it happens once.
+      //
+      // `else if` ON THE PHASE-4 RESUME, so the NORMAL path is byte-identical:
+      // `lock` is 0 for every mode but a phase-locked ENDLESS, and the branch
+      // below then runs exactly as the bare `if` it replaced.
+      const lock = endlessLock(state);
+      if (lock) {
+        e.phase = lock;
+        e.turn = (prevTurn + 1) % FIGHT_TABLE[lock].length;
+      }
+
       // ROARING DOES NOT REWIND THE SCHEDULE. The selector's first line is
       //
       //     if (phase != 4) { turn++; phaseturn++; }
@@ -546,7 +740,7 @@ const director = {
       // Flurry difficulty 3 — phase 3's second row — could effectively never
       // be seen: the fight ends on the first hit after ROARING, which usually
       // lands during that always-first Stars turn. Reported from play.
-      if (prevPhase === 4 && prevTurn === 2) {
+      else if (prevPhase === 4 && prevTurn === 2) {
         e.turn = e.resumeTurn ?? 0;
       }
 
@@ -1271,6 +1465,27 @@ const director = {
     // these 12 frames there is nothing to collide with.
     if (e.spawnDelay > 0) {
       if (e.spawnDelay === RTIMER_SPAWN) {
+        // THE TURN'S RESTORE POINT, for the practice harness only.
+        //
+        // A retry that only refilled HP would still be a DIFFERENT attempt:
+        // this block is where `advanceTurn` ramps `damagereduction` by 0.01,
+        // where `phaseturn` and `knightPhase` are recomputed, and where
+        // ROARING sets `haveusedroaring` and the 0.4 reduction. Replaying the
+        // turn without rewinding those makes the Knight one ramp step tougher
+        // every death — a practice tool that silently drifts under you.
+        //
+        // Taken BEFORE any of it runs, so restoring and re-entering lands on
+        // exactly the same numbers; the snapshot is therefore idempotent and a
+        // retry can re-take it here without compounding. Gated: with no
+        // practice harness this is a property read that is false.
+        if (state.practice) {
+          e.turnSnapshot = snapshotTurn(e, state);
+          // THE TALLY IS PER TURN. Zeroed at the same point the snapshot is
+          // taken, because that is the turn boundary this mode rewinds to:
+          // carrying damage across turns would make the third attack of a run
+          // reset on its first graze.
+          state.practiceDamage = 0;
+        }
         // `damagereduction += 0.01`, HERE and not after the party's turn.
         //
         //     if (global.mnfight == 1.5 && end_cutscene_version == 0) {
@@ -1491,7 +1706,183 @@ function spawnReturnHeart(state, x, y) {
   };
 }
 
-export function buildPracticeScene(state, { seed = 12345 } = {}) {
+/**
+ * Everything the practice retry has to put back, captured at the top of a
+ * turn's spawn window.
+ *
+ * `state.knight` is a PLAIN OBJECT (`createKnight()`, sim/state.js) and not an
+ * entity, so a shallow copy is the whole of it and restoring with
+ * `Object.assign` keeps the identity every other reader holds. The fields that
+ * actually move within a turn are `hp`, `damagereduction`, `haveusedroaring`,
+ * `chargeupcon`, `progamer` and the hurt/shake timers; copying the object whole
+ * means a field added later is covered without anyone remembering to add it
+ * here — the maintenance failure this repo has shipped before.
+ */
+function snapshotTurn(e, state) {
+  return {
+    phase: e.phase,
+    turn: e.turn,
+    resumeTurn: e.resumeTurn,
+    knight: state.knight ? { ...state.knight } : null,
+    phaseturn: state.phaseturn,
+    knightPhase: state.knightPhase,
+    battlemsg: state.battlemsg,
+    downSeen: { ...(state.downSeen ?? {}) },
+    tension: state.tension,
+  };
+}
+
+/**
+ * THE RETRY — a death costs you this attack and nothing else.
+ *
+ * BTS's practice reset is a Construct "restart layout" with the mode globals
+ * carried across; there is no equivalent here, because our turn is a position
+ * in `FIGHT_TABLE` rather than a whole scene. So the rewind is explicit, and
+ * it is in three parts:
+ *
+ *   1. SWEEP THE TURN. `clearTurn` is the battle controller's own
+ *      `with (obj_bulletparent) instance_destroy()` — newest first, cleanUps
+ *      in order — plus the view reset and the Knight's alpha/visibility, which
+ *      Flurry and the Stars cone each hide him with in a different way.
+ *   2. STAND THE PARTY BACK UP. Restoring HP stands NOBODY up (CLAUDE.md):
+ *      being down is FIVE globals and `scr_revive` clears three of them. The
+ *      other two are `charaction` and `charspecial`, and they matter here even
+ *      though the menu is skipped — `charaction == 10` is a held DEFEND, which
+ *      would otherwise carry into the retried attack and quietly halve its
+ *      damage.
+ *   3. REWIND THE DIRECTOR to the top of THIS turn — `e.phase` and `e.turn`
+ *      are deliberately NOT advanced — and set the flags that make the next
+ *      frame fall straight through to the spawn window: `gap` 1 so the
+ *      inter-turn beat is spent, `menuShown` and `balloonDone` already true so
+ *      the command phase and the Susie exchange are skipped. The 12-frame
+ *      rtimer stays, because it is not friction: `openArena`, the box re-arm
+ *      and `deliverHeart`'s 8-frame flight all hang off it, and an attack that
+ *      launched onto an ungrown box with no soul would be a different attack.
+ *
+ * THE RNG IS NOT RE-ANCHORED. Every attempt draws from where the stream now
+ * stands, so a retried Flurry is a fresh Flurry rather than a memorised one —
+ * which is what a player practising a pattern needs. A byte-identical replay
+ * of one particular attempt is what `?replay=<token>` already offers, through
+ * a mechanism that is already verified.
+ */
+function retryAttack(e, state) {
+  // A retry is a fresh attempt at the turn, so the tally starts over with
+  // it — otherwise the allowance would be already spent on arrival and the
+  // turn would rewind forever.
+  state.practiceDamage = 0;
+  state.practiceRetries = (state.practiceRetries ?? 0) + 1;
+
+  // 1 — sweep.
+  clearTurn(state);
+  if (state.soul) {
+    state.soul.alive = false;
+    state.soul = null;
+  }
+  state.returnHeart = null;
+  state.heartBurst = null;
+  state.dmg = createDmgNumbers();
+  state.invTimer = 0;
+  state.turntimer = 0;
+  state.turntimerArmed = false;
+
+  // 2 — stand them up. freshParty() is roster-aware; scrRevive is the game's
+  // own three globals and the two lines after it are the pair it leaves.
+  state.partyHp = freshParty(state);
+  for (let i = 0; i < state.partyHp.length; i++) {
+    scrRevive(state, i);
+    if (state.charaction) state.charaction[i] = 0;
+    if (state.charspecial) state.charspecial[i] = 0;
+  }
+  state.gameOver = false;
+
+  // 3 — rewind the turn. The snapshot exists from the frame the spawn window
+  // opened; a trigger before that (there is none in practice — the party
+  // cannot be damaged while the menu is up and no bullets exist) simply keeps
+  // whatever the fight already had.
+  const snap = e.turnSnapshot;
+  if (snap) {
+    e.phase = snap.phase;
+    e.turn = snap.turn;
+    e.resumeTurn = snap.resumeTurn;
+    if (snap.knight && state.knight) Object.assign(state.knight, snap.knight);
+    state.phaseturn = snap.phaseturn;
+    state.knightPhase = snap.knightPhase;
+    state.battlemsg = snap.battlemsg;
+    state.downSeen = { ...snap.downSeen };
+    state.tension = snap.tension;
+  }
+
+  // The menu and everything downstream of it is recreated rather than poked
+  // field by field: between the menu block and the spawn window sit gates on
+  // `menu.open`, `menu.needsCommit`, `menu.fight`, `pendingAct`, `pendingSpell`,
+  // `pendingItem`, `spellphase`, `rudeBusterBusy` and `e.bar`, and any one of
+  // them left set stalls the retry somewhere in the middle of a command phase
+  // the player is not in. A fresh menu clears the first four at once.
+  state.menu = createMenu();
+  state.pendingAct = null;
+  state.pendingSpell = null;
+  state.pendingItem = null;
+  state.rude = createRudeBuster();
+  clearDialogue(state.dialogue);
+  e.talkWriter = null;
+  e.talkTimer = 0;
+  e.spellphase = undefined;
+  e.started = false;
+  e.clockOn = false;
+  e.arenaOpen = false;
+  e.soulHold = null;
+  e.owner = null;
+  e.elapsed = 0;
+  e.drain = 0;
+  e.pendingSwing = null;
+  e.fadingBar = null;
+  e.bar = null;
+  e.barHold = 0;
+  state.fightBar = null;
+  e.menuShown = true;
+  e.balloonDone = true;
+  e.gap = 1;
+  e.spawnDelay = RTIMER_SPAWN;
+}
+
+export function buildPracticeScene(state, { seed = 12345, practice = null, dials = null } = {}) {
+  // TWO OPT-IN HARNESSES, BOTH INSTALLED HERE, and both absent by default.
+  //
+  // `practice` is the retry harness; `dials` is the pair of practice bars.
+  // They arrived as separate lanes editing the same signature, and taking
+  // either side of that conflict alone would have silently dropped a whole
+  // feature — so this is one call with both options rather than a choice.
+  //
+  // tools/fullfight-trace.mjs builds this scene with NO options at all, so
+  // the byte gate leaves `state.practice` undefined and never calls
+  // applyDials. `if (dials)` is a truthiness test and nothing else runs — not
+  // even the property write applyDials opens with. "The same calls in the
+  // same order" is satisfied literally, which is the only reading that keeps
+  // a recorded fight byte-exact.
+  //
+  // DIALS ARE ARMED BEFORE ANYTHING SPAWNS. `applyDials` is the only writer
+  // of `state.dials`, and the multiplier's hook in sim/entity.js reads it on
+  // every spawn; arming later would make a run's first attack differ from the
+  // rest, which is the sort of "works, sometimes" a practice tool must not
+  // have.
+  if (dials) applyDials(state, dials);
+  const prac = practiceOptions(practice);
+  if (prac) {
+    // RESOLVE THE ALLOWANCE AGAINST THE LIVE ROSTER. `freshParty` is
+    // roster-aware, so a two-member Weird Route party gets a proportionate
+    // number instead of one fitted to the vanilla trio's 490. A fifth of the
+    // total, floored at 1 so a tiny roster cannot produce a zero that would
+    // read as "no allowance" and disable the mode.
+    if (!Number.isFinite(prac.allowance) || prac.allowance <= 0) {
+      const total = freshParty(state).reduce((a, b) => a + b, 0);
+      prac.allowance = Math.max(1, Math.round(total / 5));
+    }
+    state.practice = prac;
+    /** Damage taken in the current turn. Compared against prac.allowance. */
+    state.practiceDamage = 0;
+    /** How many attempts the current run has spent. Driver-readable; no UI here. */
+    state.practiceRetries = 0;
+  }
   state.menu = createMenu();
   state.hp = 0;
   // `global.inv` STARTS AT 0, not -1.

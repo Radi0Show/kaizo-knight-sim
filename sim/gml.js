@@ -414,6 +414,41 @@ export function mergeColor(a, b, t) {
 }
 
 /**
+ * GML `make_color_hsv(h, s, v)`. GameMaker's ranges are 0..255 on ALL THREE
+ * arguments, not 0..360 for the hue and not 0..1 for saturation and value —
+ * which is why `make_color_hsv(0, 255, 255)` is a fully saturated red rather
+ * than a black.
+ *
+ * Third copy of this shim in the project and the first under `sim/`: the
+ * renderer already carries one in `render/draw/roaring.js`, one in
+ * `render/draw/intro-fx.js` and one in `render/background.js`, all for drawing
+ * code. `sim/` needs it because the NBC mod puts a `make_color_hsv` call in an
+ * object's CREATE event (obj_growtangle, site V1 in sim/attacks/nbc.js), where
+ * it is state the renderer reads rather than something the renderer computes.
+ * Deliberately not hoisted out of the three render copies here: `render/` does
+ * not import from `sim/` in this project and this lane is not the place to
+ * change that.
+ *
+ * @param {number} h hue, 0..255
+ * @param {number} s saturation, 0..255
+ * @param {number} v value, 0..255
+ * @returns {[number, number, number]} RGB bytes
+ */
+export function makeColorHsv(h, s, v) {
+  const hh = ((h / 255) * 6) % 6;
+  const ss = s / 255;
+  const vv = v / 255;
+  const i = Math.floor(hh);
+  const f = hh - i;
+  const p = vv * (1 - ss);
+  const q = vv * (1 - ss * f);
+  const t = vv * (1 - ss * (1 - f));
+  const map = [[vv, t, p], [q, vv, p], [p, vv, t], [p, q, vv], [t, p, vv], [vv, p, q]];
+  const c = map[i % 6];
+  return [Math.round(c[0] * 255), Math.round(c[1] * 255), Math.round(c[2] * 255)];
+}
+
+/**
  * `scr_anglechange(current, target, limit)` —
  * `median(-limit, limit, angle_difference(target, current))`, i.e. the signed
  * turn toward `target` capped at `limit`. GML's `median` of three values is a

@@ -47,6 +47,8 @@ import { scrBulletInit, collidebulletOther15 } from '../bullets/regularbullet.js
 import { knightCatch } from '../knight.js';
 import { scrChildbulletCopy } from '../childbullet.js';
 import { pointingStarchild } from './pointing-starchild.js';
+// NO BULLET COOLDOWNS (tronic560) -- site M3; see sim/attacks/nbc.js.
+import { nbcOn, NBC_ROARING_STAR_BURST } from './nbc.js';
 
 export const roaringStar = {
   name: 'obj_knight_roaring_star',
@@ -167,7 +169,16 @@ export const roaringStar = {
         e.friction = 0;
       }
       e.timer += 1;
-      if (e.timer >= 40 && !e.split) {
+      // NBC SITE M3 — obj_knight_roaring_star_Step_0.gml:35, tronic560's mod:
+      //
+      //     -  if (timer >= 40 && !split)
+      //     +  if (timer >= 2 && !split)
+      //
+      // The star's backwards fall lasts 2 frames instead of 40 before it goes
+      // off, so the roar's stars burst almost where they are fired rather
+      // than after a long drift. Only the threshold moves; `!split` and every
+      // branch below are the mod's as well as ours, untouched.
+      if (e.timer >= (nbcOn(state) ? NBC_ROARING_STAR_BURST : 40) && !e.split) {
         e.timer = 0;
         e.con += 1;
         // The star going off. `playSound` is false for the ones the controller
