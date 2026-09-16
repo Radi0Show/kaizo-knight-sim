@@ -5,10 +5,9 @@ tools/ are a snapshot of knight-sim; never hand-edit them here (see the
 script's header and CLAUDE.md).
 
 - source: D:\ShadowCrystal\knight-sim
-- commit: bc449a106420475eba4dee0e77b7d2c09bdbca1a
-- vendored: 2026-09-15
-- the source tree was DIRTY inside the mirrored directories; these uncommitted files were vendored as they stood:
-     M tools/verify-practice.mjs
+- commit: d16db14502e3aca28af840a01728ed9dcdfc7cf4
+- vendored: 2026-09-16
+- the mirrored directories were clean in the source tree
 
 ## Pending port-backs
 

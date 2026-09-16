@@ -43,7 +43,7 @@
 
 import { createState } from '../sim/index.js';
 import { createMenu, openMenu, stepMenu, BUTTONS, listRows } from '../sim/menu.js';
-import { HERO_ACT, FACE_SPARE } from '../sim/heroes.js';
+import { HERO_ACT, FACE_SPARE, FACE_IDLE } from '../sim/heroes.js';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -92,7 +92,16 @@ console.log('\nA — SPARE opens a target row instead of passing the turn');
   pickButton(st, 'SPARE');
   eq(st.menu.submenu, 'spare', 'A the SPARE button opens its row');
   eq(st.charaction[c], 0, 'A ...and commits NOTHING yet — the first press is not the command');
-  eq(st.heroes[c].faceaction, FACE_SPARE, 'A ...with faceaction 10, the marker the confirm writes');
+  // NOR THE POSE. This line used to demand faceaction 10 HERE, one stage
+  // early, under a label that said in as many words that the confirm writes
+  // it — and the dump agrees with the label: all four assignments sit
+  // together inside `if (global.bmenuno == 12)`, the ROW's confirm, quoted in
+  // this file's own header. A player found what that cost on the MAGIC menu:
+  // "using rude buster but then cancelling makes the sprite of susie
+  // preparing still show". SPARE had the same shape. See setFace's header in
+  // sim/menu.js and the pose block in tools/verify-animation.mjs.
+  eq(st.heroes[c].faceaction, FACE_IDLE,
+    'A ...nor the pose — faceaction travels with the charaction, at the confirm');
 }
 
 console.log('\nB — the row\'s confirm is what commits the mercy attempt');
@@ -103,6 +112,8 @@ console.log('\nB — the row\'s confirm is what commits the mercy attempt');
   tap(st, 'confirm');
   eq(st.charaction[c], 2, 'B charaction 2 — the same value a spell commits');
   eq(st.charspecial[c], 100, 'B charspecial 100 — the marker that separates it from a spell');
+  eq(st.heroes[c].faceaction, FACE_SPARE,
+    'B ...and faceaction 10, the line directly above them in the dump');
   ok(st.menu.submenu !== 'spare', 'B ...and the row closed behind it');
 }
 

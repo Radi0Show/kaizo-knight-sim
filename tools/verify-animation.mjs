@@ -25,6 +25,8 @@ import {
   HERO_ACT, HERO_ITEM, HERO_SPELL,
 } from '../sim/heroes.js';
 import { createKnight, damageKnight, stepKnightAnim } from '../sim/knight.js';
+import { createMenu, openMenu, stepMenu, BUTTONS } from '../sim/menu.js';
+import { FACE_SPARE } from '../sim/heroes.js';
 
 const failures = [];
 
@@ -304,6 +306,128 @@ console.log('\nPASS  party and knight animation (no oracle — see header)');
   if (sawFade && !poseEndedWithFade) {
     failures.push('a character was still in the attack pose while the bar faded '
       + '— the bar is what ends it');
+  }
+}
+
+// ── THE POSE IS SET AT THE COMMIT, NEVER AT THE MENU STAGE ────────────────
+//
+// Reported from play: "using rude buster but then cancelling makes the sprite
+// of susie preparing still show". This build wrote `faceaction` when a BUTTON
+// opened its submenu — FIGHT, MAGIC, ACT, SPARE and ITEM alike — so pressing X
+// out of the spell grid left Susie standing in her cast pose with no spell
+// queued behind it, for the rest of the turn.
+//
+// The dump never does that. Every non-zero faceaction assignment in the game
+// sits beside the `charaction` it belongs to, in the code that ENDS the
+// selection: Step_0:1322 (attack), scr_spellconsumeb:4, scr_itemconsumeb:3,
+// Step_0:507 (defend), scr_actselect:49/59, Step_0:1397 (spare). DEFEND is the
+// only one written by a button, because for DEFEND the button IS the commit.
+//
+// BOTH HALVES ARE ASSERTED. The negative one alone passes on an engine that
+// has simply deleted every setFace call.
+{
+  const NOBTN = { up: false, down: false, left: false, right: false, confirm: false, cancel: false };
+  const tap = (s, key) => {
+    stepMenu(s, { ...NOBTN, [key]: true });
+    for (let i = 0; i < 6; i += 1) {
+      if (s.menu.onebuffer < 0 && s.menu.twobuffer < 0) break;
+      stepMenu(s, { ...NOBTN });
+    }
+    stepMenu(s, { ...NOBTN });
+  };
+  const btnName = (s, c) => {
+    const n = BUTTONS[s.menu.selected[c]].name;
+    return typeof n === 'function' ? n(c) : n;
+  };
+  const open = (c) => {
+    const s = st();
+    s.menu = createMenu();
+    s.charaction = [0, 0, 0];
+    s.charspecial = [0, 0, 0];
+    openMenu(s);
+    // Enough TP that no spell is greyed out — an unaffordable row refuses the
+    // confirm, and the walk would then be measuring the refusal, not the commit.
+    s.tension = 500;
+    if (s.temptension) s.temptension = s.temptension.map(() => 500);
+    s.menu.charturn = c;
+    return s;
+  };
+  const goto = (s, c, label) => {
+    for (let i = 0; i <= BUTTONS.length; i += 1) {
+      if (btnName(s, c) === label) return true;
+      tap(s, 'right');
+    }
+    return false;
+  };
+  const face = (s, c) => s.heroes[c].faceaction;
+
+  // Susie is slot 1 and Rude Buster is hers — the exact report.
+  for (const [label, c, confirms, pose] of [
+    ['FIGHT', 0, 2, FACE_ATTACK],   // button -> enemy row -> commit
+    ['MAGIC', 1, 3, FACE_SPELL],    // button -> grid -> target -> commit
+    ['ITEM',  0, 2, FACE_ITEM],     // button -> bag -> commit
+    ['ACT',   0, 3, FACE_ACT],      // Kris's slot-1 button IS act; button -> picker -> grid -> commit
+  ]) {
+    // every stage BEFORE the last confirm must leave the pose alone...
+    for (let stage = 1; stage < confirms; stage += 1) {
+      const s = open(c);
+      if (!goto(s, c, label)) { failures.push(`${label} is not on the button row`); break; }
+      for (let i = 0; i < stage; i += 1) tap(s, 'confirm');
+      if (face(s, c) !== FACE_IDLE) {
+        failures.push(`${label}: the pose was set after ${stage} confirm(s), before the `
+          + `commit — faceaction ${face(s, c)} with the menu still in `
+          + `'${s.menu.submenu}'. That is the stuck-pose bug.`);
+      }
+      // ...and backing out of it must leave nothing behind
+      for (let i = 0; i < stage; i += 1) tap(s, 'cancel');
+      if (face(s, c) !== FACE_IDLE) {
+        failures.push(`${label}: cancelling out of stage ${stage} left faceaction `
+          + `${face(s, c)} standing`);
+      }
+    }
+
+    // ...and the commit must actually set it
+    const s = open(c);
+    if (!goto(s, c, label)) continue;
+    for (let i = 0; i < confirms; i += 1) tap(s, 'confirm');
+    if (face(s, c) !== pose) {
+      failures.push(`${label}: the commit did not set the pose — faceaction `
+        + `${face(s, c)}, expected ${pose}`);
+    }
+  }
+
+  // SPARE commits on the second press like FIGHT, and its pose is the only one
+  // above 6 (Step_0:1397, beside `charspecial = 100`).
+  {
+    const s = open(0);
+    if (goto(s, 0, 'SPARE')) {
+      tap(s, 'confirm');
+      if (face(s, 0) !== FACE_IDLE) {
+        failures.push(`SPARE: the pose was set when the button opened the target row `
+          + `— faceaction ${face(s, 0)}`);
+      }
+      tap(s, 'confirm');
+      if (face(s, 0) !== FACE_SPARE) {
+        failures.push(`SPARE: the confirm did not set the pose — faceaction ${face(s, 0)}`);
+      }
+    } else {
+      failures.push('SPARE is not on the button row');
+    }
+  }
+
+  // DEFEND is the exception and must stay one: its button has no submenu, so
+  // the press that chooses it is the press that ends the selection.
+  {
+    const s = open(0);
+    if (goto(s, 0, 'DEFEND')) {
+      tap(s, 'confirm');
+      if (face(s, 0) !== FACE_DEFEND) {
+        failures.push(`DEFEND: one press is the whole command and it must set the pose `
+          + `— faceaction ${face(s, 0)}`);
+      }
+    } else {
+      failures.push('DEFEND is not on the button row');
+    }
   }
 }
 

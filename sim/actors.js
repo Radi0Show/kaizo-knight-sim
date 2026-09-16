@@ -530,10 +530,40 @@ export const partyActor = {
     e.isActor = true;
   },
   step(e, state) {
-    // `with (obj_herosusie) visible = 0` — obj_rudebuster_anim REPLACES her
-    // for its 28 frames rather than drawing over her. Leaving her visible
-    // gives you two Susies, one of them casting.
-    e.visible = !(e.slot === 1 && state.rude?.anim);
+    // RUDE BUSTER IS DRAWN HERE, AS SUSIE, and that is the whole point of the
+    // object it stands in for. obj_rudebuster_anim's Create:
+    //
+    //     if (instance_exists(obj_herosusie)) {
+    //         depth = obj_herosusie.depth;          // HER depth, exactly
+    //         with (obj_herosusie) visible = 0;
+    //     }
+    //
+    // and its Step restores `visible = 1` in the same statement that destroys
+    // it. So the cast is Susie's sprite swapped for 28 frames at her own layer
+    // — never an effect on top, and never a gap.
+    //
+    // THIS BUILD HAD IT AS A LATE SCREEN-SPACE PASS (render/rudebuster.js, run
+    // after the entity loop, the charbox row and the attack vfx), with her
+    // actor hidden by a flag that the director's endStep cleared one phase
+    // AFTER this step had already read it. Both halves showed, and a player
+    // reported both in one sentence: "susie's sprite layer goes on top of
+    // ralsei then disappears and then comes back" — the depth, then the one
+    // blank frame between the flag clearing and this step running again.
+    //
+    // Drawing it from her own actor fixes both by construction: the layer is
+    // hers because it IS her, and there is no second object to fall out of
+    // step with. The anim's spawn position is PARTY_POS[1] (sim/spells.js),
+    // which is this actor's own x/y, so the picture does not move.
+    const anim = e.slot === 1 ? state.rude?.anim : null;
+    if (anim) {
+      e.sprite_index = 'spr_susie_rudebuster';
+      // `image_index = t / 2` with `image_speed = 0` — assigned, never played,
+      // so it must CLAMP at the last frame rather than wrap the way an idle
+      // does. 28 frames at half speed is 0..13, inside the sheet's 15.
+      const n = state.spriteFrames?.[e.sprite_index] ?? 1;
+      e.image_index = Math.min(Math.floor(anim.index), Math.max(0, n - 1));
+      return;
+    }
     const h = state.heroes?.[e.slot];
     if (!h || !h.sprite) return;
     e.sprite_index = h.sprite;

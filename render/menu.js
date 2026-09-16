@@ -63,8 +63,27 @@ const PANEL_W = 212;
 const B_OFFSET = 336;
 /** c_maroon — GameMaker packs BGR, so 0x000080 is RGB(128, 0, 0). */
 const MAROON = 'rgb(128,0,0)';
-/** `bcolor` — obj_battlecontroller's band colour, c_navy. */
-const BCOLOR = [0, 0, 128];
+/**
+ * `bcolor` — obj_battlecontroller's band colour. NOT c_navy.
+ *
+ * TWO OBJECTS IN THIS FIGHT OWN A VARIABLE CALLED `bcolor`, and they are
+ * different colours:
+ *
+ *     obj_attackpress     Create:65       bcolor = c_navy;
+ *     obj_battlecontroller Create:144-145 bcolor = merge_color(c_purple, c_black, 0.7);
+ *                                         bcolor = merge_color(bcolor, c_dkgray, 0.5);
+ *
+ * This file is the CONTROLLER's band and took the attack bar's value, so the
+ * two hairlines bracketing the button row came out bright navy against a
+ * black field. Reported from play, in three words: "also blue line".
+ *
+ * The arithmetic, which is also the receipt: c_purple is RGB(128, 0, 128);
+ * merged 0.7 toward black that is (38, 0, 38); merged 0.5 toward c_dkgray
+ * (64, 64, 64) that is (51, 32, 51) — a plum so dark it reads as a seam, not
+ * a line. `flipped_oracle_shot_60.png` has exactly 51,32,51 on those rows.
+ * render/fightbar.js keeps its own c_navy: that one IS obj_attackpress's.
+ */
+const BCOLOR = [51, 32, 51];
 
 /**
  * `scr_selectionmatrix(x, y)` — the active panel's highlight.
@@ -610,9 +629,14 @@ export function drawMenu(ctx, state, sprites) {
   // the arena extends behind it.
   ctx.fillStyle = '#000000';
   ctx.fillRect(-10, top - 4, 710, 481 - (top - 4));
+  // `draw_rectangle` IS INCLUSIVE OF BOTH CORNERS — y1 through y2, not y2-y1
+  // rows. `(480 - bp - 3) .. (480 - bp - 2)` is TWO rows and
+  // `(480 - bp) + 34 .. (480 - bp) + 36` is THREE; both were one short here.
+  // The reference shot has the upper seam on 325-326 and the lower on
+  // 362-363-364.
   ctx.fillStyle = rgb(BCOLOR);
-  ctx.fillRect(-10, top - 3, 710, 1);
-  ctx.fillRect(-10, top + 34, 710, 2);
+  ctx.fillRect(-10, top - 3, 710, 2);
+  ctx.fillRect(-10, top + 34, 710, 3);
 
   // THE ROSTER IS NOT ALWAYS THE SAME THREE. `scr_charbox` walks
   // `chartotal` panels and reads each one's character out of `global.char`,
@@ -646,8 +670,24 @@ export function drawMenu(ctx, state, sprites) {
     // black fill does — so as the panel rises the coloured band grows out from
     // under it instead of the whole thing sliding. That is what gives the
     // raised panel its outline.
-    ctx.fillStyle = rgb(active ? color : [128, 128, 128]);
-    ctx.fillRect(chunk, top - 3 + mmy, PANEL_W, top - 2 - (top - 3 + mmy));
+    //
+    // AN IDLE PANEL'S BORDER IS `bcolor`, NOT c_gray — scr_charbox:657-668:
+    //
+    //     if (gc == charpos[c]) draw_set_color(charcolor);
+    //     else                  draw_set_color(bcolor);
+    //     if (global.charselect == charpos[c] || global.charselect == 3)
+    //         draw_set_color(charcolor);
+    //
+    // so the two idle panels' top edges are the SAME plum as the band's own
+    // hairline and read as one seam across the row. Grey drew them as a
+    // second, brighter line — the other half of the report that named the
+    // navy one. The reference shot has 51,32,51 from x 213 to the right edge
+    // on both 325 and 326, unbroken.
+    ctx.fillStyle = rgb(active ? color : BCOLOR);
+    // Inclusive again: `(480 - bp - 3) + mmy` through `(480 - bp) - 2`, where
+    // the bottom edge deliberately drops mmy. That is `2 - mmy` rows, not
+    // `1 - mmy`.
+    ctx.fillRect(chunk, top - 3 + mmy, PANEL_W, (top - 2) - (top - 3 + mmy) + 1);
     ctx.fillStyle = '#000000';
     ctx.fillRect(chunk + 2, top - 1 + mmy, 208, 34);
 

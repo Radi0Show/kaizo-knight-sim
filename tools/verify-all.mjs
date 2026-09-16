@@ -105,6 +105,8 @@ const SUITES = [
 ['verify-downstate.mjs', 'down state — the pose gate and the menu gate agree'],
 ['verify-selectflash.mjs', 'enemy selection flash — the game curve, not a halo'],
 ['verify-render-smoke.mjs', 'the renderer survives a real fight without throwing'],
+  ['verify-rudebuster-layer.mjs', 'Rude Buster draws at Susie’s depth, with no gap'],
+  ['verify-charbox-band.mjs', 'the battle band’s seams are bcolor, not c_navy'],
 ['verify-touch.mjs', 'the touch binder — pad sectors, latch, two thumbs'],
 ['verify-bindings.mjs', 'rebindable controls — three profiles, detection, capture'],
 ['verify-windowsize.mjs', 'SMALL is the window size obj_time would pick'],

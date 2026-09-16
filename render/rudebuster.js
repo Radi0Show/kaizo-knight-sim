@@ -1,9 +1,12 @@
-// obj_rudebuster_anim and obj_rudebuster_bolt.
+// obj_rudebuster_bolt. THE CAST ITSELF IS NOT DRAWN HERE.
 //
-// SUSIE IS HIDDEN while this plays — `with (obj_herosusie) visible = 0` in the
-// anim's Create, restored at `t >= 28`. The animation object stands in for
-// her at her own depth; it is not an effect layered on top. Drawing both
-// gives you two Susies.
+// obj_rudebuster_anim takes `obj_herosusie.depth` and hides her for its 28
+// frames — it stands in for her at her own layer, it is not an effect over
+// the party. This file used to draw it, from a pass that runs after the
+// entity loop and the charbox row, under a header that said in as many words
+// that it belonged at her depth. It read exactly as what it was: the cast
+// jumping in front of Ralsei. It is sim/actors.js's partyActor now, which
+// swaps her sprite in place; that header has the report and the reasoning.
 //
 // The bolt leaves a trail of `scr_afterimage` copies, one per frame, each
 // shrinking on the Y axis (`image_yscale -= 0.1`) — so the streak tapers
@@ -20,14 +23,6 @@ export function drawRudeBuster(ctx, state, sprites) {
 
   ctx.save();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
-
-  const anim = sprites.get('spr_susie_rudebuster');
-  if (r.anim && anim?.frames.length) {
-    // `image_index = t / 2` — the sheet plays at half speed, the same
-    // 0.5-per-frame rule obj_heroparent uses everywhere.
-    const f = Math.min(Math.floor(r.anim.index), anim.frames.length - 1);
-    drawSpriteExt(ctx, anim, f, r.anim.x, r.anim.y, 2, 2, 0, c_white, 1);
-  }
 
   const b = r.bolt;
   const beam = sprites.get('spr_rudebuster_beam');
