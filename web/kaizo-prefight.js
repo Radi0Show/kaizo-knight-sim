@@ -3,8 +3,8 @@
 // and the keys; everything decidable lives here so a check can drive it
 // headlessly (the same split web/kaizo-epilogue.js uses for its cue names).
 //
-// V-C/V-D recreation of EnderCat8's Kaizo Roaring Knight — do not publish
-// without permission.
+// V-C/V-D recreation of EnderCat8's Kaizo Roaring Knight, published with the
+// author's permission (given 2026-09-16) and credited on the page.
 //
 // The translation is kaizo/scenes/kaizo-prefight.js; read its header first.
 // This file is only the wiring: which directory a routed filename lives in,

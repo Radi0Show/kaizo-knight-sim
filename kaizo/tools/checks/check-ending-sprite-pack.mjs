@@ -47,15 +47,18 @@
 //       pack `source: 'mod', replaced: true` — spr_roaringknight_attack_over-
 //       world (6/6 frames differ) and spr_roaringknight_faceaway_turning
 //       (10/10), the same blue recolour his fight sprites carry. Asserted in
-//       BOTH directions, the way check-snowflake-art asserts its two: a mod
-//       sprite mislabelled vanilla would walk EnderCat8's art past the publish
-//       gate, and a vanilla sprite mislabelled mod would gate art that is the
-//       player's own.
+//       BOTH directions, the way check-snowflake-art asserts its two. This
+//       mattered doubly while the overlay was publish-gated; with the gate gone
+//       (2026-09-16) the split is pure provenance, and it is still worth
+//       asserting — it is the only record of which art is whose.
 //   E5  every frame file is on disk and the PNG's real pixel size matches the
 //       metadata (extracted WITH padding, so the origin lands where the
 //       physics expects it)
-//   E6  the two mod-sourced sprites are IGNORED BY GIT — HANDOFF §5-C, asked
-//       of git itself rather than of the .gitignore text
+//   E6  the two mod-sourced sprites REACH A CLONE — not ignored by git, asked
+//       of git itself rather than of the .gitignore text. This ran the other
+//       way until 2026-09-16, when the publish gate was removed; the failure
+//       it guards now is the art silently not shipping, which looks like the
+//       Knight rendering vanilla grey on everyone's screen but the packer's.
 //
 // SABOTAGE-TESTED 2026-09-12, three ways, each confirmed exit 1 and restored
 // to exit 0: a backtick put back on one SPR value (E1 alone); spr_susie_hurt
@@ -224,8 +227,13 @@ console.log('E5 — every frame file is on disk at the size the metadata claims'
   ok(checked === 65, `  ...sixty-five frames, the count both extractions reported (${checked})`);
 }
 
-// ═══ E6: THE PUBLISH GATE COVERS THE MOD'S TWO ═════════════════════════════
-console.log("E6 — EnderCat8's two overworld repaints are gated (HANDOFF §5-C)");
+// ═══ E6: THE MOD'S TWO OVERWORLD REPAINTS ACTUALLY SHIP ════════════════════
+// Inverted 2026-09-16 with the rest of the publish gate: this asserted that
+// git REFUSED these sixteen frames. Everything ships now, so the question is
+// whether they reach a clone — the Knight's overworld set renders vanilla grey
+// if they do not, which is the same silent wrong-art failure E5 guards for the
+// fight sprites.
+console.log("E6 — EnderCat8's two overworld repaints ship (HANDOFF 5-C, permission given)");
 {
   const modFiles = Object.entries(PACKED)
     .filter(([, w]) => w.source === 'mod')
@@ -242,9 +250,9 @@ console.log("E6 — EnderCat8's two overworld repaints are gated (HANDOFF §5-C)
   } catch (err) {
     ignored = String(err.stdout ?? '').split('\n').map((s) => s.trim()).filter(Boolean);
   }
-  ok(ignored.length === modFiles.length,
-    `git ignores all ${modFiles.length} of them — the mod's art cannot reach a public repo `
-    + `(${ignored.length} ignored)`);
+  ok(ignored.length === 0,
+    `git ships all ${modFiles.length} of them — the mod's art reaches a public clone `
+    + `(${ignored.length} still ignored)`);
 }
 
 console.log('');

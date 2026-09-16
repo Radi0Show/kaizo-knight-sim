@@ -13,4 +13,4 @@
 //
 // This repo's line starts at 0.1.0 (2026-09-02, the split from knight-sim, whose
 // web line was at 1.0.13). The two numbers are unrelated on purpose.
-export const VERSION = '0.1.22';
+export const VERSION = '0.1.23';

@@ -9,29 +9,40 @@ game.ios
 gml_dump/
 oracle/
 
-# Extracted assets
-*.png
-# ...except the curated sprite set the browser build ships. CLAUDE.md accepts
-# bundling sprites (free, non-commercial). 96 sprites / 271 frames / ~1.1 MB,
-# only what the fight code references.
-
-# THE PWA ICONS ARE NOT EXTRACTED GAME ART, and the blanket *.png above was
-# silently eating them. web/index.html, web/kaizo.html and
-# web/manifest.webmanifest all reference icon-180/192/512, so without this
-# carve-out the repo ships a manifest pointing at files it does not contain -
-# the install icon and the iOS home-screen icon just 404. They survived only
-# in thedevice's vendored copy until a vendor mirror with --delete removed
-# them from there too.
-!web/icon-*.png
-!assets/sprites/*.png
-# kaizo/assets/ carries its OWN .gitignore -- a publish gate on the mod author's
-# art (`*`, everything held back until permission). It overrides anything said
-# here, so there is deliberately no carve-out for kaizo/assets/sprites in this
-# file; regenerate the pack with `node kaizo/tools/pack-kaizo-sprites.mjs`.
-# The battle UI draws item and ACT names with a REAL font asset (fnt_mainbig),
-# not the digit-only sprite fonts. Same posture as the sprites: extracted from
-# the player own copy, free and non-commercial.
-!assets/fonts/*.png
+# ── ASSETS: NOTHING IS BARRED. ────────────────────────────────────────────
+#
+# There used to be a blanket `*.png` block here with three carve-outs, plus a
+# `*` .gitignore inside kaizo/assets/ holding back the whole mod overlay, plus
+# a rule of its own for the mod's audio. ALL OF IT IS GONE as of 2026-09-16, on
+# the user's instruction: this is a mod recreation, it is approved by its
+# author, and every asset ships — art, music, sounds, the lot.
+#
+# What that means concretely, so nobody re-derives it from scratch:
+#   assets/sprites/        the vanilla fight pack
+#   assets/fonts/          fnt_mainbig, the real font the item and ACT names use
+#   web/icon-*.png         the PWA icons (these were never game art, and the
+#                          old blanket rule silently ate them once — the
+#                          manifest shipped pointing at 404s)
+#   kaizo/assets/sprites/  the mod overlay, all 129 manifest entries: 58
+#                          `vanilla` (211 frames) and 71 `mod` (321 frames,
+#                          EnderCat8's own art — the blue recolour of the
+#                          Knight's set, his bullets, the tension bar)
+#   kaizo/assets/audio/    the mod's music
+#
+# CREDIT IS THE PART THAT STILL MATTERS AND IS EASY TO LOSE. web/kaizo.html's
+# meta description and `KAIZO_NOTE` in kaizo/scenes/kaizo-fight.js both name
+# EnderCat8's "Kaizo Roaring Knight" v2.3.3, and they are the only strings that
+# survive thedevice's comment strip — so they ARE the credit on the live site.
+# Removing or rewriting them removes it, whatever the source comments say.
+#
+# Regenerate the overlay with `node kaizo/tools/pack-kaizo-sprites.mjs`.
+# `kaizo/tools/checks/check-sprites.mjs` asserts every one of those files is
+# NOT ignored, which is the direction that can now fail silently.
+#
+# RAW GAME DATA IS A DIFFERENT RULE AND IT DOES NOT MOVE — see the top of this
+# file and tools/pre-commit. data.win / game.ios / *.unx / *.audiogroup, the
+# GML dumps and the oracle builds stay out of every repo. That is about the
+# game's own files, not about this mod's content.
 
 # Generated traces — regenerate with tools/run-trace.mjs, never commit
 /traces/

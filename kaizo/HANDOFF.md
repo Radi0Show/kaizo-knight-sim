@@ -216,7 +216,43 @@ changes, and oracle-record it with the patch templates in
 2. **Shipping a recreation of EnderCat8's fight publicly needs their
    permission and credit.** Mechanics aren't copyrightable, but a 1:1
    recreation of a named mod is their creative work. Ask the user; the user
-   asks the author. Until then V-C material stays private research.
+   asks the author. ~~Until then V-C material stays private research.~~
+   **SATISFIED 2026-09-16 — THIS GATE IS OPEN.** The protocol ran as written:
+   the assistant asked, the user asked the author, EnderCat8 gave permission.
+   Credit was already in place and is the half that is easy to lose, so note
+   where it lives: `web/kaizo.html`'s meta description and `KAIZO_NOTE` in
+   `kaizo/scenes/kaizo-fight.js`, both naming *EnderCat8's "Kaizo Roaring
+   Knight" v2.3.3*. Those two strings are the only ones that survive
+   thedevice's comment strip, so **they are the credit on the live site** —
+   anything that removes or rewrites them removes the credit, whatever the
+   source comments still say.
+
+   **EVERY ASSET SHIPS — art, music, sounds, the lot.** The user's instruction
+   was to remove the rules, not to narrow them: the overlay's `*` .gitignore is
+   gone, and the root `.gitignore`'s blanket `*.png` block and all three of its
+   carve-outs went with it. Nothing under `assets/` or `kaizo/assets/` is
+   barred. All 129 manifest entries (58 `vanilla`, 71 `mod`) and
+   `kaizo/assets/audio/kaizoknight.ogg` are committed.
+
+   One provenance note, kept because it is true and not because it gates
+   anything: **`kaizoknight.ogg` is not EnderCat8's own composition.** The mod
+   ships with no music of its own — the file is a "custom song (optional)" the
+   player drops into `mus/`, and what is EnderCat8's is the ROUTER that copes
+   with which optional file an install has. `web/kaizo.js` asserted the
+   opposite until this date; `kaizo/scenes/kaizo-prefight.js` was the one
+   telling the truth, and it quotes the mod's own GML.
+
+   **The two checks that enforced the gate now assert the inverse** —
+   `check-sprites` section 4 and `check-ending-sprite-pack` E6 ask git whether
+   each file is ignored and require that NONE is. The risk inverted with the
+   rule: what fails silently now is the art not reaching a clone, and it is
+   invisible on the machine that packed it, because the files are sitting right
+   there on disk. Everyone else gets collision-mask shapes and a grey Knight.
+
+   RAW GAME DATA IS A SEPARATE RULE AND DID NOT MOVE: gate 1 above stands, and
+   `tools/pre-commit` still refuses `.gml`, `data.win`/`game.ios`/`*.unx`/
+   `*.audiogroup`, `gml_dump/` and `oracle/`. That is about the game's files,
+   not this mod's content.
 
 ## 6. What exists today, and the two gates
 
@@ -476,8 +512,9 @@ placeholder 10 is the dump's own number and is exempted with citation).
   to it every lap, so it is the most-played attack in the fight.
   THEN: oracle-record the real mod (the kaizo-game copy is the
   instrumentation target) and diff frame-exact.
-  PUBLISH GATE unchanged: nothing V-C ships publicly without EnderCat8's
-  permission.
+  PUBLISH GATE: OPEN as of 2026-09-16 — EnderCat8 gave permission and the
+  overlay ships. See 5-C gate 2 for what that does and does not cover (it
+  covers the art; it does not reach kaizo/assets/audio/).
 
 ## 8. Traps that will bite kaizo specifically
 

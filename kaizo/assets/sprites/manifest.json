@@ -1,0 +1,3045 @@
+{
+ "bg_snowfall": {
+  "w": 64,
+  "h": 64,
+  "ox": 0,
+  "oy": 0,
+  "frames": 1,
+  "bbox": [
+   0,
+   1,
+   62,
+   63
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 15,
+  "playbacktype": "FramesPerSecond",
+  "files": [
+   "bg_snowfall_0.png"
+  ],
+  "source": "vanilla"
+ },
+ "spr_attack_shard": {
+  "w": 43,
+  "h": 44,
+  "ox": 21,
+  "oy": 22,
+  "frames": 5,
+  "bbox": [
+   0,
+   0,
+   42,
+   43
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_attack_shard_0.png",
+   "spr_attack_shard_1.png",
+   "spr_attack_shard_2.png",
+   "spr_attack_shard_3.png",
+   "spr_attack_shard_4.png"
+  ],
+  "source": "mod",
+  "replaced": true
+ },
+ "spr_berdlyb_idle_shocked": {
+  "w": 54,
+  "h": 43,
+  "ox": 0,
+  "oy": 0,
+  "frames": 2,
+  "bbox": [
+   4,
+   3,
+   51,
+   40
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_berdlyb_idle_shocked_0.png",
+   "spr_berdlyb_idle_shocked_1.png"
+  ],
+  "source": "vanilla"
+ },
+ "spr_bnamenoelle": {
+  "w": 48,
+  "h": 15,
+  "ox": 0,
+  "oy": 0,
+  "frames": 1,
+  "bbox": [
+   0,
+   0,
+   47,
+   14
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_bnamenoelle_0.png"
+  ],
+  "source": "vanilla"
+ },
+ "spr_diamondbullet_form": {
+  "w": 33,
+  "h": 32,
+  "ox": 16,
+  "oy": 15,
+  "frames": 1,
+  "bbox": [
+   10,
+   13,
+   22,
+   17
+  ],
+  "sepmasks": "Precise",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_diamondbullet_form_0.png"
+  ],
+  "source": "mod",
+  "replaced": true
+ },
+ "spr_dodgeheart_smaller_2px": {
+  "w": 20,
+  "h": 20,
+  "ox": 0,
+  "oy": 0,
+  "frames": 2,
+  "bbox": [
+   2,
+   2,
+   17,
+   17
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_dodgeheart_smaller_2px_0.png",
+   "spr_dodgeheart_smaller_2px_1.png"
+  ],
+  "source": "vanilla"
+ },
+ "spr_dodgeheart_smaller_2px_mask": {
+  "w": 20,
+  "h": 20,
+  "ox": 0,
+  "oy": 0,
+  "frames": 1,
+  "bbox": [
+   4,
+   4,
+   15,
+   15
+  ],
+  "sepmasks": "Precise",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_dodgeheart_smaller_2px_mask_0.png"
+  ],
+  "source": "vanilla"
+ },
+ "spr_headnoelle": {
+  "w": 34,
+  "h": 25,
+  "ox": 0,
+  "oy": 0,
+  "frames": 11,
+  "bbox": [
+   0,
+   0,
+   32,
+   23
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_headnoelle_0.png",
+   "spr_headnoelle_1.png",
+   "spr_headnoelle_2.png",
+   "spr_headnoelle_3.png",
+   "spr_headnoelle_4.png",
+   "spr_headnoelle_5.png",
+   "spr_headnoelle_6.png",
+   "spr_headnoelle_7.png",
+   "spr_headnoelle_8.png",
+   "spr_headnoelle_9.png",
+   "spr_headnoelle_10.png"
+  ],
+  "source": "vanilla"
+ },
+ "spr_icespell_snowflake": {
+  "w": 46,
+  "h": 46,
+  "ox": 23,
+  "oy": 23,
+  "frames": 1,
+  "bbox": [
+   2,
+   2,
+   42,
+   44
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_icespell_snowflake_0.png"
+  ],
+  "source": "vanilla"
+ },
+ "spr_knight_bullet_flow": {
+  "w": 320,
+  "h": 240,
+  "ox": 0,
+  "oy": 0,
+  "frames": 3,
+  "bbox": [
+   11,
+   0,
+   53,
+   63
+  ],
+  "sepmasks": "Precise",
+  "playback": 10,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_knight_bullet_flow_0.png",
+   "spr_knight_bullet_flow_1.png",
+   "spr_knight_bullet_flow_2.png"
+  ],
+  "source": "mod",
+  "replaced": true
+ },
+ "spr_knight_bullet_flow_alt": {
+  "w": 320,
+  "h": 240,
+  "ox": 0,
+  "oy": 0,
+  "frames": 3,
+  "bbox": [
+   0,
+   0,
+   319,
+   239
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_knight_bullet_flow_alt_0.png",
+   "spr_knight_bullet_flow_alt_1.png",
+   "spr_knight_bullet_flow_alt_2.png"
+  ],
+  "source": "mod"
+ },
+ "spr_knight_bullet_star": {
+  "w": 64,
+  "h": 64,
+  "ox": 32,
+  "oy": 32,
+  "frames": 3,
+  "bbox": [
+   0,
+   0,
+   63,
+   63
+  ],
+  "sepmasks": "Precise",
+  "playback": 10,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_knight_bullet_star_0.png",
+   "spr_knight_bullet_star_1.png",
+   "spr_knight_bullet_star_2.png"
+  ],
+  "source": "mod",
+  "replaced": true
+ },
+ "spr_knight_bullet_star_bottom": {
+  "w": 64,
+  "h": 64,
+  "ox": 32,
+  "oy": 32,
+  "frames": 3,
+  "bbox": [
+   0,
+   12,
+   40,
+   60
+  ],
+  "sepmasks": "Precise",
+  "playback": 1,
+  "playbacktype": "FramesPerSecond",
+  "files": [
+   "spr_knight_bullet_star_bottom_0.png",
+   "spr_knight_bullet_star_bottom_1.png",
+   "spr_knight_bullet_star_bottom_2.png"
+  ],
+  "source": "mod",
+  "replaced": true
+ },
+ "spr_knight_bullet_star_easy": {
+  "w": 64,
+  "h": 64,
+  "ox": 32,
+  "oy": 32,
+  "frames": 3,
+  "bbox": [
+   0,
+   0,
+   63,
+   63
+  ],
+  "sepmasks": "Precise",
+  "playback": 10,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_knight_bullet_star_easy_0.png",
+   "spr_knight_bullet_star_easy_1.png",
+   "spr_knight_bullet_star_easy_2.png"
+  ],
+  "source": "mod",
+  "replaced": true
+ },
+ "spr_knight_bullet_star_top": {
+  "w": 64,
+  "h": 64,
+  "ox": 32,
+  "oy": 32,
+  "frames": 3,
+  "bbox": [
+   0,
+   0,
+   63,
+   63
+  ],
+  "sepmasks": "Precise",
+  "playback": 1,
+  "playbacktype": "FramesPerSecond",
+  "files": [
+   "spr_knight_bullet_star_top_0.png",
+   "spr_knight_bullet_star_top_1.png",
+   "spr_knight_bullet_star_top_2.png"
+  ],
+  "source": "mod",
+  "replaced": true
+ },
+ "spr_knight_crescentslash": {
+  "w": 94,
+  "h": 91,
+  "ox": 4,
+  "oy": 51,
+  "frames": 8,
+  "bbox": [
+   0,
+   0,
+   93,
+   87
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_knight_crescentslash_0.png",
+   "spr_knight_crescentslash_1.png",
+   "spr_knight_crescentslash_2.png",
+   "spr_knight_crescentslash_3.png",
+   "spr_knight_crescentslash_4.png",
+   "spr_knight_crescentslash_5.png",
+   "spr_knight_crescentslash_6.png",
+   "spr_knight_crescentslash_7.png"
+  ],
+  "source": "mod",
+  "replaced": true
+ },
+ "spr_knight_diamondbullet_l": {
+  "w": 99,
+  "h": 32,
+  "ox": 49,
+  "oy": 15,
+  "frames": 3,
+  "bbox": [
+   3,
+   14,
+   94,
+   16
+  ],
+  "sepmasks": "Precise",
+  "playback": 1,
+  "playbacktype": "FramesPerSecond",
+  "files": [
+   "spr_knight_diamondbullet_l_0.png",
+   "spr_knight_diamondbullet_l_1.png",
+   "spr_knight_diamondbullet_l_2.png"
+  ],
+  "source": "mod",
+  "replaced": true
+ },
+ "spr_knight_diamondbullet_m": {
+  "w": 66,
+  "h": 32,
+  "ox": 33,
+  "oy": 15,
+  "frames": 3,
+  "bbox": [
+   4,
+   15,
+   61,
+   15
+  ],
+  "sepmasks": "RotatedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerSecond",
+  "files": [
+   "spr_knight_diamondbullet_m_0.png",
+   "spr_knight_diamondbullet_m_1.png",
+   "spr_knight_diamondbullet_m_2.png"
+  ],
+  "source": "mod",
+  "replaced": true
+ },
+ "spr_knight_diamondswordbullet": {
+  "w": 33,
+  "h": 32,
+  "ox": 16,
+  "oy": 15,
+  "frames": 2,
+  "bbox": [
+   4,
+   15,
+   28,
+   15
+  ],
+  "sepmasks": "RotatedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerSecond",
+  "files": [
+   "spr_knight_diamondswordbullet_0.png",
+   "spr_knight_diamondswordbullet_1.png"
+  ],
+  "source": "mod",
+  "replaced": true
+ },
+ "spr_knight_spark": {
+  "w": 17,
+  "h": 18,
+  "ox": 8,
+  "oy": 9,
+  "frames": 4,
+  "bbox": [
+   0,
+   0,
+   16,
+   17
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_knight_spark_0.png",
+   "spr_knight_spark_1.png",
+   "spr_knight_spark_2.png",
+   "spr_knight_spark_3.png"
+  ],
+  "source": "vanilla"
+ },
+ "spr_knight_starchild": {
+  "w": 33,
+  "h": 32,
+  "ox": 16,
+  "oy": 16,
+  "frames": 1,
+  "bbox": [
+   7,
+   11,
+   22,
+   19
+  ],
+  "sepmasks": "Precise",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_knight_starchild_0.png"
+  ],
+  "source": "mod",
+  "replaced": true
+ },
+ "spr_knight_triangle": {
+  "w": 16,
+  "h": 16,
+  "ox": 0,
+  "oy": 8,
+  "frames": 1,
+  "bbox": [
+   0,
+   0,
+   15,
+   15
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 30,
+  "playbacktype": "FramesPerSecond",
+  "files": [
+   "spr_knight_triangle_0.png"
+  ],
+  "source": "vanilla"
+ },
+ "spr_knight_warp": {
+  "w": 100,
+  "h": 88,
+  "ox": 0,
+  "oy": 0,
+  "frames": 9,
+  "bbox": [
+   13,
+   1,
+   86,
+   76
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_knight_warp_0.png",
+   "spr_knight_warp_1.png",
+   "spr_knight_warp_2.png",
+   "spr_knight_warp_3.png",
+   "spr_knight_warp_4.png",
+   "spr_knight_warp_5.png",
+   "spr_knight_warp_6.png",
+   "spr_knight_warp_7.png",
+   "spr_knight_warp_8.png"
+  ],
+  "source": "mod",
+  "replaced": true
+ },
+ "spr_knight_weird_shape": {
+  "w": 55,
+  "h": 20,
+  "ox": 27,
+  "oy": 10,
+  "frames": 4,
+  "bbox": [
+   3,
+   5,
+   54,
+   14
+  ],
+  "sepmasks": "Precise",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_knight_weird_shape_0.png",
+   "spr_knight_weird_shape_1.png",
+   "spr_knight_weird_shape_2.png",
+   "spr_knight_weird_shape_3.png"
+  ],
+  "source": "mod",
+  "replaced": true
+ },
+ "spr_kris_fallen_dark": {
+  "w": 32,
+  "h": 38,
+  "ox": 3,
+  "oy": 0,
+  "frames": 1,
+  "bbox": [
+   0,
+   25,
+   18,
+   38
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_kris_fallen_dark_0.png"
+  ],
+  "source": "vanilla"
+ },
+ "spr_kris_fell": {
+  "w": 54,
+  "h": 38,
+  "ox": 14,
+  "oy": 0,
+  "frames": 1,
+  "bbox": [
+   2,
+   15,
+   50,
+   35
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_kris_fell_0.png"
+  ],
+  "source": "vanilla"
+ },
+ "spr_krisb_frozen": {
+  "w": 48,
+  "h": 44,
+  "ox": 3,
+  "oy": 5,
+  "frames": 1,
+  "bbox": [
+   1,
+   7,
+   33,
+   42
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_krisb_frozen_0.png"
+  ],
+  "source": "mod"
+ },
+ "spr_krisd_dark": {
+  "w": 19,
+  "h": 38,
+  "ox": 0,
+  "oy": 0,
+  "frames": 4,
+  "bbox": [
+   0,
+   25,
+   18,
+   38
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_krisd_dark_0.png",
+   "spr_krisd_dark_1.png",
+   "spr_krisd_dark_2.png",
+   "spr_krisd_dark_3.png"
+  ],
+  "source": "vanilla"
+ },
+ "spr_krisl_dark": {
+  "w": 19,
+  "h": 38,
+  "ox": 0,
+  "oy": 0,
+  "frames": 4,
+  "bbox": [
+   0,
+   25,
+   18,
+   38
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_krisl_dark_0.png",
+   "spr_krisl_dark_1.png",
+   "spr_krisl_dark_2.png",
+   "spr_krisl_dark_3.png"
+  ],
+  "source": "vanilla"
+ },
+ "spr_lightfairy": {
+  "w": 7,
+  "h": 7,
+  "ox": 3,
+  "oy": 3,
+  "frames": 5,
+  "bbox": [
+   0,
+   0,
+   6,
+   6
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_lightfairy_0.png",
+   "spr_lightfairy_1.png",
+   "spr_lightfairy_2.png",
+   "spr_lightfairy_3.png",
+   "spr_lightfairy_4.png"
+  ],
+  "source": "vanilla"
+ },
+ "spr_noelle_shocked_dw": {
+  "w": 23,
+  "h": 46,
+  "ox": 0,
+  "oy": 0,
+  "frames": 1,
+  "bbox": [
+   0,
+   30,
+   22,
+   42
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 15,
+  "playbacktype": "FramesPerSecond",
+  "files": [
+   "spr_noelle_shocked_dw_0.png"
+  ],
+  "source": "vanilla"
+ },
+ "spr_noelle_walk_right_dw": {
+  "w": 23,
+  "h": 46,
+  "ox": 0,
+  "oy": 0,
+  "frames": 4,
+  "bbox": [
+   0,
+   30,
+   22,
+   45
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_noelle_walk_right_dw_0.png",
+   "spr_noelle_walk_right_dw_1.png",
+   "spr_noelle_walk_right_dw_2.png",
+   "spr_noelle_walk_right_dw_3.png"
+  ],
+  "source": "vanilla"
+ },
+ "spr_noelleb_act": {
+  "w": 51,
+  "h": 46,
+  "ox": 1,
+  "oy": 0,
+  "frames": 12,
+  "bbox": [
+   1,
+   0,
+   50,
+   45
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_noelleb_act_0.png",
+   "spr_noelleb_act_1.png",
+   "spr_noelleb_act_2.png",
+   "spr_noelleb_act_3.png",
+   "spr_noelleb_act_4.png",
+   "spr_noelleb_act_5.png",
+   "spr_noelleb_act_6.png",
+   "spr_noelleb_act_7.png",
+   "spr_noelleb_act_8.png",
+   "spr_noelleb_act_9.png",
+   "spr_noelleb_act_10.png",
+   "spr_noelleb_act_11.png"
+  ],
+  "source": "vanilla"
+ },
+ "spr_noelleb_actready": {
+  "w": 51,
+  "h": 46,
+  "ox": 1,
+  "oy": 0,
+  "frames": 2,
+  "bbox": [
+   1,
+   0,
+   31,
+   45
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_noelleb_actready_0.png",
+   "spr_noelleb_actready_1.png"
+  ],
+  "source": "vanilla"
+ },
+ "spr_noelleb_attack": {
+  "w": 37,
+  "h": 46,
+  "ox": 6,
+  "oy": 0,
+  "frames": 5,
+  "bbox": [
+   0,
+   0,
+   36,
+   45
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_noelleb_attack_0.png",
+   "spr_noelleb_attack_1.png",
+   "spr_noelleb_attack_2.png",
+   "spr_noelleb_attack_3.png",
+   "spr_noelleb_attack_4.png"
+  ],
+  "source": "vanilla"
+ },
+ "spr_noelleb_attackready": {
+  "w": 23,
+  "h": 46,
+  "ox": 0,
+  "oy": 0,
+  "frames": 1,
+  "bbox": [
+   0,
+   2,
+   20,
+   45
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_noelleb_attackready_0.png"
+  ],
+  "source": "vanilla"
+ },
+ "spr_noelleb_battleintro": {
+  "w": 35,
+  "h": 53,
+  "ox": 11,
+  "oy": 7,
+  "frames": 15,
+  "bbox": [
+   0,
+   0,
+   34,
+   52
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_noelleb_battleintro_0.png",
+   "spr_noelleb_battleintro_1.png",
+   "spr_noelleb_battleintro_2.png",
+   "spr_noelleb_battleintro_3.png",
+   "spr_noelleb_battleintro_4.png",
+   "spr_noelleb_battleintro_5.png",
+   "spr_noelleb_battleintro_6.png",
+   "spr_noelleb_battleintro_7.png",
+   "spr_noelleb_battleintro_8.png",
+   "spr_noelleb_battleintro_9.png",
+   "spr_noelleb_battleintro_10.png",
+   "spr_noelleb_battleintro_11.png",
+   "spr_noelleb_battleintro_12.png",
+   "spr_noelleb_battleintro_13.png",
+   "spr_noelleb_battleintro_14.png"
+  ],
+  "source": "vanilla"
+ },
+ "spr_noelleb_battleintro_sideb": {
+  "w": 35,
+  "h": 53,
+  "ox": 11,
+  "oy": 7,
+  "frames": 15,
+  "bbox": [
+   10,
+   6,
+   34,
+   52
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_noelleb_battleintro_sideb_0.png",
+   "spr_noelleb_battleintro_sideb_1.png",
+   "spr_noelleb_battleintro_sideb_2.png",
+   "spr_noelleb_battleintro_sideb_3.png",
+   "spr_noelleb_battleintro_sideb_4.png",
+   "spr_noelleb_battleintro_sideb_5.png",
+   "spr_noelleb_battleintro_sideb_6.png",
+   "spr_noelleb_battleintro_sideb_7.png",
+   "spr_noelleb_battleintro_sideb_8.png",
+   "spr_noelleb_battleintro_sideb_9.png",
+   "spr_noelleb_battleintro_sideb_10.png",
+   "spr_noelleb_battleintro_sideb_11.png",
+   "spr_noelleb_battleintro_sideb_12.png",
+   "spr_noelleb_battleintro_sideb_13.png",
+   "spr_noelleb_battleintro_sideb_14.png"
+  ],
+  "source": "vanilla"
+ },
+ "spr_noelleb_defeat": {
+  "w": 23,
+  "h": 46,
+  "ox": 0,
+  "oy": 0,
+  "frames": 1,
+  "bbox": [
+   0,
+   10,
+   21,
+   45
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_noelleb_defeat_0.png"
+  ],
+  "source": "vanilla"
+ },
+ "spr_noelleb_defend": {
+  "w": 32,
+  "h": 46,
+  "ox": 7,
+  "oy": 0,
+  "frames": 1,
+  "bbox": [
+   1,
+   0,
+   25,
+   45
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_noelleb_defend_0.png"
+  ],
+  "source": "vanilla"
+ },
+ "spr_noelleb_defend_sideb": {
+  "w": 49,
+  "h": 52,
+  "ox": 3,
+  "oy": 6,
+  "frames": 6,
+  "bbox": [
+   4,
+   0,
+   48,
+   51
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_noelleb_defend_sideb_0.png",
+   "spr_noelleb_defend_sideb_1.png",
+   "spr_noelleb_defend_sideb_2.png",
+   "spr_noelleb_defend_sideb_3.png",
+   "spr_noelleb_defend_sideb_4.png",
+   "spr_noelleb_defend_sideb_5.png"
+  ],
+  "source": "vanilla"
+ },
+ "spr_noelleb_float_sideb": {
+  "w": 35,
+  "h": 53,
+  "ox": 11,
+  "oy": 7,
+  "frames": 4,
+  "bbox": [
+   10,
+   6,
+   34,
+   52
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_noelleb_float_sideb_0.png",
+   "spr_noelleb_float_sideb_1.png",
+   "spr_noelleb_float_sideb_2.png",
+   "spr_noelleb_float_sideb_3.png"
+  ],
+  "source": "vanilla"
+ },
+ "spr_noelleb_hurt": {
+  "w": 32,
+  "h": 46,
+  "ox": 7,
+  "oy": 0,
+  "frames": 1,
+  "bbox": [
+   0,
+   0,
+   31,
+   45
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_noelleb_hurt_0.png"
+  ],
+  "source": "vanilla"
+ },
+ "spr_noelleb_hurt_sideb": {
+  "w": 26,
+  "h": 46,
+  "ox": 3,
+  "oy": 0,
+  "frames": 1,
+  "bbox": [
+   4,
+   0,
+   23,
+   45
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_noelleb_hurt_sideb_0.png"
+  ],
+  "source": "vanilla"
+ },
+ "spr_noelleb_idle": {
+  "w": 26,
+  "h": 46,
+  "ox": 3,
+  "oy": 0,
+  "frames": 5,
+  "bbox": [
+   0,
+   0,
+   23,
+   45
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_noelleb_idle_0.png",
+   "spr_noelleb_idle_1.png",
+   "spr_noelleb_idle_2.png",
+   "spr_noelleb_idle_3.png",
+   "spr_noelleb_idle_4.png"
+  ],
+  "source": "vanilla"
+ },
+ "spr_noelleb_idle_sideb": {
+  "w": 26,
+  "h": 46,
+  "ox": 3,
+  "oy": 0,
+  "frames": 5,
+  "bbox": [
+   0,
+   0,
+   23,
+   45
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_noelleb_idle_sideb_0.png",
+   "spr_noelleb_idle_sideb_1.png",
+   "spr_noelleb_idle_sideb_2.png",
+   "spr_noelleb_idle_sideb_3.png",
+   "spr_noelleb_idle_sideb_4.png"
+  ],
+  "source": "vanilla"
+ },
+ "spr_noelleb_item": {
+  "w": 25,
+  "h": 46,
+  "ox": 2,
+  "oy": 0,
+  "frames": 10,
+  "bbox": [
+   1,
+   0,
+   22,
+   45
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_noelleb_item_0.png",
+   "spr_noelleb_item_1.png",
+   "spr_noelleb_item_2.png",
+   "spr_noelleb_item_3.png",
+   "spr_noelleb_item_4.png",
+   "spr_noelleb_item_5.png",
+   "spr_noelleb_item_6.png",
+   "spr_noelleb_item_7.png",
+   "spr_noelleb_item_8.png",
+   "spr_noelleb_item_9.png"
+  ],
+  "source": "vanilla"
+ },
+ "spr_noelleb_itemready": {
+  "w": 23,
+  "h": 46,
+  "ox": 0,
+  "oy": 0,
+  "frames": 2,
+  "bbox": [
+   1,
+   0,
+   20,
+   45
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_noelleb_itemready_0.png",
+   "spr_noelleb_itemready_1.png"
+  ],
+  "source": "vanilla"
+ },
+ "spr_noelleb_orb": {
+  "w": 60,
+  "h": 60,
+  "ox": 30,
+  "oy": 30,
+  "frames": 1,
+  "bbox": [
+   0,
+   0,
+   59,
+   58
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_noelleb_orb_0.png"
+  ],
+  "source": "vanilla"
+ },
+ "spr_noelleb_pray": {
+  "w": 26,
+  "h": 46,
+  "ox": 3,
+  "oy": 0,
+  "frames": 5,
+  "bbox": [
+   0,
+   0,
+   23,
+   45
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_noelleb_pray_0.png",
+   "spr_noelleb_pray_1.png",
+   "spr_noelleb_pray_2.png",
+   "spr_noelleb_pray_3.png",
+   "spr_noelleb_pray_4.png"
+  ],
+  "source": "vanilla"
+ },
+ "spr_noelleb_spell": {
+  "w": 33,
+  "h": 46,
+  "ox": 2,
+  "oy": 0,
+  "frames": 9,
+  "bbox": [
+   0,
+   1,
+   32,
+   45
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_noelleb_spell_0.png",
+   "spr_noelleb_spell_1.png",
+   "spr_noelleb_spell_2.png",
+   "spr_noelleb_spell_3.png",
+   "spr_noelleb_spell_4.png",
+   "spr_noelleb_spell_5.png",
+   "spr_noelleb_spell_6.png",
+   "spr_noelleb_spell_7.png",
+   "spr_noelleb_spell_8.png"
+  ],
+  "source": "vanilla"
+ },
+ "spr_noelleb_spell_special": {
+  "w": 35,
+  "h": 50,
+  "ox": 4,
+  "oy": -1,
+  "frames": 4,
+  "bbox": [
+   0,
+   0,
+   32,
+   44
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_noelleb_spell_special_0.png",
+   "spr_noelleb_spell_special_1.png",
+   "spr_noelleb_spell_special_2.png",
+   "spr_noelleb_spell_special_3.png"
+  ],
+  "source": "vanilla"
+ },
+ "spr_noelleb_spellready": {
+  "w": 23,
+  "h": 46,
+  "ox": 0,
+  "oy": 0,
+  "frames": 1,
+  "bbox": [
+   1,
+   8,
+   20,
+   45
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_noelleb_spellready_0.png"
+  ],
+  "source": "vanilla"
+ },
+ "spr_noelleb_swooned": {
+  "w": 51,
+  "h": 46,
+  "ox": 5,
+  "oy": 0,
+  "frames": 1,
+  "bbox": [
+   0,
+   28,
+   48,
+   45
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_noelleb_swooned_0.png"
+  ],
+  "source": "mod"
+ },
+ "spr_noelleb_victory": {
+  "w": 23,
+  "h": 46,
+  "ox": 0,
+  "oy": 0,
+  "frames": 8,
+  "bbox": [
+   1,
+   0,
+   22,
+   45
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_noelleb_victory_0.png",
+   "spr_noelleb_victory_1.png",
+   "spr_noelleb_victory_2.png",
+   "spr_noelleb_victory_3.png",
+   "spr_noelleb_victory_4.png",
+   "spr_noelleb_victory_5.png",
+   "spr_noelleb_victory_6.png",
+   "spr_noelleb_victory_7.png"
+  ],
+  "source": "vanilla"
+ },
+ "spr_pixel_white": {
+  "w": 4,
+  "h": 4,
+  "ox": 0,
+  "oy": 0,
+  "frames": 1,
+  "bbox": [
+   0,
+   0,
+   3,
+   3
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_pixel_white_0.png"
+  ],
+  "source": "vanilla"
+ },
+ "spr_ralsei_down_surprised2": {
+  "w": 21,
+  "h": 41,
+  "ox": 0,
+  "oy": -3,
+  "frames": 1,
+  "bbox": [
+   2,
+   31,
+   18,
+   39
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_ralsei_down_surprised2_0.png"
+  ],
+  "source": "vanilla"
+ },
+ "spr_ralsei_shocked_right": {
+  "w": 33,
+  "h": 36,
+  "ox": 14,
+  "oy": -6,
+  "frames": 1,
+  "bbox": [
+   0,
+   0,
+   0,
+   0
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_ralsei_shocked_right_0.png"
+  ],
+  "source": "vanilla"
+ },
+ "spr_ralsei_shocked_standing_right": {
+  "w": 21,
+  "h": 40,
+  "ox": 0,
+  "oy": -3,
+  "frames": 1,
+  "bbox": [
+   0,
+   0,
+   20,
+   39
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_ralsei_shocked_standing_right_0.png"
+  ],
+  "source": "vanilla"
+ },
+ "spr_ralsei_surprised_left_walk": {
+  "w": 19,
+  "h": 40,
+  "ox": 0,
+  "oy": -3,
+  "frames": 4,
+  "bbox": [
+   0,
+   0,
+   18,
+   39
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_ralsei_surprised_left_walk_0.png",
+   "spr_ralsei_surprised_left_walk_1.png",
+   "spr_ralsei_surprised_left_walk_2.png",
+   "spr_ralsei_surprised_left_walk_3.png"
+  ],
+  "source": "vanilla"
+ },
+ "spr_ralsei_surprised_right_walk": {
+  "w": 19,
+  "h": 40,
+  "ox": 0,
+  "oy": -3,
+  "frames": 4,
+  "bbox": [
+   0,
+   0,
+   18,
+   39
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_ralsei_surprised_right_walk_0.png",
+   "spr_ralsei_surprised_right_walk_1.png",
+   "spr_ralsei_surprised_right_walk_2.png",
+   "spr_ralsei_surprised_right_walk_3.png"
+  ],
+  "source": "vanilla"
+ },
+ "spr_ralsei_swoon": {
+  "w": 77,
+  "h": 47,
+  "ox": 0,
+  "oy": 0,
+  "frames": 1,
+  "bbox": [
+   3,
+   35,
+   31,
+   46
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_ralsei_swoon_0.png"
+  ],
+  "source": "mod"
+ },
+ "spr_ralsei_walk_down_unhappy": {
+  "w": 21,
+  "h": 41,
+  "ox": 0,
+  "oy": -3,
+  "frames": 4,
+  "bbox": [
+   2,
+   31,
+   18,
+   39
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_ralsei_walk_down_unhappy_0.png",
+   "spr_ralsei_walk_down_unhappy_1.png",
+   "spr_ralsei_walk_down_unhappy_2.png",
+   "spr_ralsei_walk_down_unhappy_3.png"
+  ],
+  "source": "vanilla"
+ },
+ "spr_ralsei_walk_left_unhappy": {
+  "w": 19,
+  "h": 40,
+  "ox": 0,
+  "oy": -3,
+  "frames": 4,
+  "bbox": [
+   2,
+   31,
+   18,
+   39
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_ralsei_walk_left_unhappy_0.png",
+   "spr_ralsei_walk_left_unhappy_1.png",
+   "spr_ralsei_walk_left_unhappy_2.png",
+   "spr_ralsei_walk_left_unhappy_3.png"
+  ],
+  "source": "vanilla"
+ },
+ "spr_ralsei_walk_right_sad": {
+  "w": 21,
+  "h": 41,
+  "ox": 1,
+  "oy": -3,
+  "frames": 4,
+  "bbox": [
+   1,
+   1,
+   20,
+   39
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 2,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_ralsei_walk_right_sad_0.png",
+   "spr_ralsei_walk_right_sad_1.png",
+   "spr_ralsei_walk_right_sad_2.png",
+   "spr_ralsei_walk_right_sad_3.png"
+  ],
+  "source": "vanilla"
+ },
+ "spr_ralsei_walk_up_sad": {
+  "w": 21,
+  "h": 41,
+  "ox": 0,
+  "oy": -3,
+  "frames": 4,
+  "bbox": [
+   0,
+   1,
+   20,
+   40
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 2,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_ralsei_walk_up_sad_0.png",
+   "spr_ralsei_walk_up_sad_1.png",
+   "spr_ralsei_walk_up_sad_2.png",
+   "spr_ralsei_walk_up_sad_3.png"
+  ],
+  "source": "vanilla"
+ },
+ "spr_rk_quickslash_marker_gradient": {
+  "w": 250,
+  "h": 46,
+  "ox": 125,
+  "oy": 23,
+  "frames": 2,
+  "bbox": [
+   0,
+   20,
+   249,
+   25
+  ],
+  "sepmasks": "Precise",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_rk_quickslash_marker_gradient_0.png",
+   "spr_rk_quickslash_marker_gradient_1.png"
+  ],
+  "source": "vanilla"
+ },
+ "spr_roaring_knight_clash_pull_back": {
+  "w": 161,
+  "h": 110,
+  "ox": 20,
+  "oy": 18,
+  "frames": 2,
+  "bbox": [
+   47,
+   25,
+   144,
+   89
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_roaring_knight_clash_pull_back_0.png",
+   "spr_roaring_knight_clash_pull_back_1.png"
+  ],
+  "source": "mod",
+  "replaced": true
+ },
+ "spr_roaring_knight_kris_knighting": {
+  "w": 96,
+  "h": 67,
+  "ox": 0,
+  "oy": 0,
+  "frames": 6,
+  "bbox": [
+   0,
+   0,
+   95,
+   66
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_roaring_knight_kris_knighting_0.png",
+   "spr_roaring_knight_kris_knighting_1.png",
+   "spr_roaring_knight_kris_knighting_2.png",
+   "spr_roaring_knight_kris_knighting_3.png",
+   "spr_roaring_knight_kris_knighting_4.png",
+   "spr_roaring_knight_kris_knighting_5.png"
+  ],
+  "source": "mod",
+  "replaced": true
+ },
+ "spr_roaring_knight_overworld_warp": {
+  "w": 100,
+  "h": 88,
+  "ox": 0,
+  "oy": 0,
+  "frames": 11,
+  "bbox": [
+   13,
+   1,
+   88,
+   76
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_roaring_knight_overworld_warp_0.png",
+   "spr_roaring_knight_overworld_warp_1.png",
+   "spr_roaring_knight_overworld_warp_2.png",
+   "spr_roaring_knight_overworld_warp_3.png",
+   "spr_roaring_knight_overworld_warp_4.png",
+   "spr_roaring_knight_overworld_warp_5.png",
+   "spr_roaring_knight_overworld_warp_6.png",
+   "spr_roaring_knight_overworld_warp_7.png",
+   "spr_roaring_knight_overworld_warp_8.png",
+   "spr_roaring_knight_overworld_warp_9.png",
+   "spr_roaring_knight_overworld_warp_10.png"
+  ],
+  "source": "mod",
+  "replaced": true
+ },
+ "spr_roaring_knight_static": {
+  "w": 109,
+  "h": 88,
+  "ox": 0,
+  "oy": 0,
+  "frames": 3,
+  "bbox": [
+   12,
+   1,
+   87,
+   76
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_roaring_knight_static_0.png",
+   "spr_roaring_knight_static_1.png",
+   "spr_roaring_knight_static_2.png"
+  ],
+  "source": "mod",
+  "replaced": true
+ },
+ "spr_roaring_knight_susie_clash": {
+  "w": 161,
+  "h": 110,
+  "ox": 20,
+  "oy": 18,
+  "frames": 3,
+  "bbox": [
+   9,
+   8,
+   96,
+   90
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_roaring_knight_susie_clash_0.png",
+   "spr_roaring_knight_susie_clash_1.png",
+   "spr_roaring_knight_susie_clash_2.png"
+  ],
+  "source": "mod",
+  "replaced": true
+ },
+ "spr_roaringknight_arm_reach_grow": {
+  "w": 22,
+  "h": 15,
+  "ox": 2,
+  "oy": 3,
+  "frames": 4,
+  "bbox": [
+   0,
+   0,
+   21,
+   14
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_roaringknight_arm_reach_grow_0.png",
+   "spr_roaringknight_arm_reach_grow_1.png",
+   "spr_roaringknight_arm_reach_grow_2.png",
+   "spr_roaringknight_arm_reach_grow_3.png"
+  ],
+  "source": "mod",
+  "replaced": true
+ },
+ "spr_roaringknight_armpoint": {
+  "w": 49,
+  "h": 16,
+  "ox": 43,
+  "oy": 9,
+  "frames": 2,
+  "bbox": [
+   0,
+   0,
+   48,
+   15
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_roaringknight_armpoint_0.png",
+   "spr_roaringknight_armpoint_1.png"
+  ],
+  "source": "mod",
+  "replaced": true
+ },
+ "spr_roaringknight_attack_ol": {
+  "w": 117,
+  "h": 115,
+  "ox": 7,
+  "oy": 23,
+  "frames": 6,
+  "bbox": [
+   0,
+   0,
+   116,
+   114
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 30,
+  "playbacktype": "FramesPerSecond",
+  "files": [
+   "spr_roaringknight_attack_ol_0.png",
+   "spr_roaringknight_attack_ol_1.png",
+   "spr_roaringknight_attack_ol_2.png",
+   "spr_roaringknight_attack_ol_3.png",
+   "spr_roaringknight_attack_ol_4.png",
+   "spr_roaringknight_attack_ol_5.png"
+  ],
+  "source": "mod",
+  "replaced": true
+ },
+ "spr_roaringknight_attack_ol_center": {
+  "w": 117,
+  "h": 115,
+  "ox": 67,
+  "oy": 23,
+  "frames": 6,
+  "bbox": [
+   0,
+   0,
+   116,
+   114
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 30,
+  "playbacktype": "FramesPerSecond",
+  "files": [
+   "spr_roaringknight_attack_ol_center_0.png",
+   "spr_roaringknight_attack_ol_center_1.png",
+   "spr_roaringknight_attack_ol_center_2.png",
+   "spr_roaringknight_attack_ol_center_3.png",
+   "spr_roaringknight_attack_ol_center_4.png",
+   "spr_roaringknight_attack_ol_center_5.png"
+  ],
+  "source": "mod",
+  "replaced": true
+ },
+ "spr_roaringknight_attack_overworld": {
+  "w": 117,
+  "h": 115,
+  "ox": 7,
+  "oy": 23,
+  "frames": 6,
+  "bbox": [
+   0,
+   0,
+   116,
+   114
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 30,
+  "playbacktype": "FramesPerSecond",
+  "files": [
+   "spr_roaringknight_attack_overworld_0.png",
+   "spr_roaringknight_attack_overworld_1.png",
+   "spr_roaringknight_attack_overworld_2.png",
+   "spr_roaringknight_attack_overworld_3.png",
+   "spr_roaringknight_attack_overworld_4.png",
+   "spr_roaringknight_attack_overworld_5.png"
+  ],
+  "source": "mod",
+  "replaced": true
+ },
+ "spr_roaringknight_ball_fly": {
+  "w": 100,
+  "h": 88,
+  "ox": 0,
+  "oy": 0,
+  "frames": 5,
+  "bbox": [
+   47,
+   33,
+   62,
+   47
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_roaringknight_ball_fly_0.png",
+   "spr_roaringknight_ball_fly_1.png",
+   "spr_roaringknight_ball_fly_2.png",
+   "spr_roaringknight_ball_fly_3.png",
+   "spr_roaringknight_ball_fly_4.png"
+  ],
+  "source": "mod",
+  "replaced": true
+ },
+ "spr_roaringknight_ball_transition": {
+  "w": 100,
+  "h": 88,
+  "ox": 0,
+  "oy": 0,
+  "frames": 10,
+  "bbox": [
+   25,
+   1,
+   84,
+   76
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_roaringknight_ball_transition_0.png",
+   "spr_roaringknight_ball_transition_1.png",
+   "spr_roaringknight_ball_transition_2.png",
+   "spr_roaringknight_ball_transition_3.png",
+   "spr_roaringknight_ball_transition_4.png",
+   "spr_roaringknight_ball_transition_5.png",
+   "spr_roaringknight_ball_transition_6.png",
+   "spr_roaringknight_ball_transition_7.png",
+   "spr_roaringknight_ball_transition_8.png",
+   "spr_roaringknight_ball_transition_9.png"
+  ],
+  "source": "mod",
+  "replaced": true
+ },
+ "spr_roaringknight_ball_transition_sword": {
+  "w": 100,
+  "h": 88,
+  "ox": 0,
+  "oy": 0,
+  "frames": 9,
+  "bbox": [
+   13,
+   1,
+   86,
+   76
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_roaringknight_ball_transition_sword_0.png",
+   "spr_roaringknight_ball_transition_sword_1.png",
+   "spr_roaringknight_ball_transition_sword_2.png",
+   "spr_roaringknight_ball_transition_sword_3.png",
+   "spr_roaringknight_ball_transition_sword_4.png",
+   "spr_roaringknight_ball_transition_sword_5.png",
+   "spr_roaringknight_ball_transition_sword_6.png",
+   "spr_roaringknight_ball_transition_sword_7.png",
+   "spr_roaringknight_ball_transition_sword_8.png"
+  ],
+  "source": "mod",
+  "replaced": true
+ },
+ "spr_roaringknight_block_ol": {
+  "w": 82,
+  "h": 76,
+  "ox": -4,
+  "oy": -5,
+  "frames": 1,
+  "bbox": [
+   8,
+   2,
+   80,
+   69
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_roaringknight_block_ol_0.png"
+  ],
+  "source": "mod",
+  "replaced": true
+ },
+ "spr_roaringknight_faceaway_turning": {
+  "w": 69,
+  "h": 82,
+  "ox": -19,
+  "oy": -4,
+  "frames": 10,
+  "bbox": [
+   1,
+   1,
+   68,
+   73
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_roaringknight_faceaway_turning_0.png",
+   "spr_roaringknight_faceaway_turning_1.png",
+   "spr_roaringknight_faceaway_turning_2.png",
+   "spr_roaringknight_faceaway_turning_3.png",
+   "spr_roaringknight_faceaway_turning_4.png",
+   "spr_roaringknight_faceaway_turning_5.png",
+   "spr_roaringknight_faceaway_turning_6.png",
+   "spr_roaringknight_faceaway_turning_7.png",
+   "spr_roaringknight_faceaway_turning_8.png",
+   "spr_roaringknight_faceaway_turning_9.png"
+  ],
+  "source": "mod",
+  "replaced": true
+ },
+ "spr_roaringknight_finalshatter": {
+  "w": 640,
+  "h": 480,
+  "ox": 320,
+  "oy": 240,
+  "frames": 31,
+  "bbox": [
+   0,
+   0,
+   639,
+   479
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_roaringknight_finalshatter_0.png",
+   "spr_roaringknight_finalshatter_1.png",
+   "spr_roaringknight_finalshatter_2.png",
+   "spr_roaringknight_finalshatter_3.png",
+   "spr_roaringknight_finalshatter_4.png",
+   "spr_roaringknight_finalshatter_5.png",
+   "spr_roaringknight_finalshatter_6.png",
+   "spr_roaringknight_finalshatter_7.png",
+   "spr_roaringknight_finalshatter_8.png",
+   "spr_roaringknight_finalshatter_9.png",
+   "spr_roaringknight_finalshatter_10.png",
+   "spr_roaringknight_finalshatter_11.png",
+   "spr_roaringknight_finalshatter_12.png",
+   "spr_roaringknight_finalshatter_13.png",
+   "spr_roaringknight_finalshatter_14.png",
+   "spr_roaringknight_finalshatter_15.png",
+   "spr_roaringknight_finalshatter_16.png",
+   "spr_roaringknight_finalshatter_17.png",
+   "spr_roaringknight_finalshatter_18.png",
+   "spr_roaringknight_finalshatter_19.png",
+   "spr_roaringknight_finalshatter_20.png",
+   "spr_roaringknight_finalshatter_21.png",
+   "spr_roaringknight_finalshatter_22.png",
+   "spr_roaringknight_finalshatter_23.png",
+   "spr_roaringknight_finalshatter_24.png",
+   "spr_roaringknight_finalshatter_25.png",
+   "spr_roaringknight_finalshatter_26.png",
+   "spr_roaringknight_finalshatter_27.png",
+   "spr_roaringknight_finalshatter_28.png",
+   "spr_roaringknight_finalshatter_29.png",
+   "spr_roaringknight_finalshatter_30.png"
+  ],
+  "source": "mod"
+ },
+ "spr_roaringknight_finalslash_mask": {
+  "w": 10,
+  "h": 10,
+  "ox": 5,
+  "oy": 5,
+  "frames": 1,
+  "bbox": [
+   0,
+   0,
+   9,
+   9
+  ],
+  "sepmasks": "Precise",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_roaringknight_finalslash_mask_0.png"
+  ],
+  "source": "mod"
+ },
+ "spr_roaringknight_flurry": {
+  "w": 113,
+  "h": 78,
+  "ox": 0,
+  "oy": 0,
+  "frames": 3,
+  "bbox": [
+   0,
+   0,
+   112,
+   77
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_roaringknight_flurry_0.png",
+   "spr_roaringknight_flurry_1.png",
+   "spr_roaringknight_flurry_2.png"
+  ],
+  "source": "mod",
+  "replaced": true
+ },
+ "spr_roaringknight_flurry_prepare": {
+  "w": 113,
+  "h": 95,
+  "ox": 0,
+  "oy": 0,
+  "frames": 1,
+  "bbox": [
+   10,
+   7,
+   67,
+   94
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 33,
+  "playbacktype": "FramesPerSecond",
+  "files": [
+   "spr_roaringknight_flurry_prepare_0.png"
+  ],
+  "source": "mod",
+  "replaced": true
+ },
+ "spr_roaringknight_fly": {
+  "w": 96,
+  "h": 45,
+  "ox": -4,
+  "oy": -29,
+  "frames": 4,
+  "bbox": [
+   0,
+   0,
+   95,
+   41
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_roaringknight_fly_0.png",
+   "spr_roaringknight_fly_1.png",
+   "spr_roaringknight_fly_2.png",
+   "spr_roaringknight_fly_3.png"
+  ],
+  "source": "mod",
+  "replaced": true
+ },
+ "spr_roaringknight_fly_transition": {
+  "w": 100,
+  "h": 88,
+  "ox": 0,
+  "oy": 0,
+  "frames": 17,
+  "bbox": [
+   0,
+   6,
+   99,
+   76
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_roaringknight_fly_transition_0.png",
+   "spr_roaringknight_fly_transition_1.png",
+   "spr_roaringknight_fly_transition_2.png",
+   "spr_roaringknight_fly_transition_3.png",
+   "spr_roaringknight_fly_transition_4.png",
+   "spr_roaringknight_fly_transition_5.png",
+   "spr_roaringknight_fly_transition_6.png",
+   "spr_roaringknight_fly_transition_7.png",
+   "spr_roaringknight_fly_transition_8.png",
+   "spr_roaringknight_fly_transition_9.png",
+   "spr_roaringknight_fly_transition_10.png",
+   "spr_roaringknight_fly_transition_11.png",
+   "spr_roaringknight_fly_transition_12.png",
+   "spr_roaringknight_fly_transition_13.png",
+   "spr_roaringknight_fly_transition_14.png",
+   "spr_roaringknight_fly_transition_15.png",
+   "spr_roaringknight_fly_transition_16.png"
+  ],
+  "source": "mod",
+  "replaced": true
+ },
+ "spr_roaringknight_front": {
+  "w": 70,
+  "h": 80,
+  "ox": 35,
+  "oy": 30,
+  "frames": 1,
+  "bbox": [
+   0,
+   0,
+   69,
+   79
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerSecond",
+  "files": [
+   "spr_roaringknight_front_0.png"
+  ],
+  "source": "mod",
+  "replaced": true
+ },
+ "spr_roaringknight_front_flourish": {
+  "w": 71,
+  "h": 82,
+  "ox": 35,
+  "oy": 32,
+  "frames": 7,
+  "bbox": [
+   0,
+   0,
+   70,
+   81
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerSecond",
+  "files": [
+   "spr_roaringknight_front_flourish_0.png",
+   "spr_roaringknight_front_flourish_1.png",
+   "spr_roaringknight_front_flourish_2.png",
+   "spr_roaringknight_front_flourish_3.png",
+   "spr_roaringknight_front_flourish_4.png",
+   "spr_roaringknight_front_flourish_5.png",
+   "spr_roaringknight_front_flourish_6.png"
+  ],
+  "source": "mod",
+  "replaced": true
+ },
+ "spr_roaringknight_front_roar": {
+  "w": 70,
+  "h": 80,
+  "ox": 35,
+  "oy": 30,
+  "frames": 2,
+  "bbox": [
+   0,
+   0,
+   69,
+   79
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_roaringknight_front_roar_0.png",
+   "spr_roaringknight_front_roar_1.png"
+  ],
+  "source": "mod",
+  "replaced": true
+ },
+ "spr_roaringknight_front_slash": {
+  "w": 133,
+  "h": 141,
+  "ox": 60,
+  "oy": 68,
+  "frames": 6,
+  "bbox": [
+   25,
+   38,
+   94,
+   117
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_roaringknight_front_slash_0.png",
+   "spr_roaringknight_front_slash_1.png",
+   "spr_roaringknight_front_slash_2.png",
+   "spr_roaringknight_front_slash_3.png",
+   "spr_roaringknight_front_slash_4.png",
+   "spr_roaringknight_front_slash_5.png"
+  ],
+  "source": "mod",
+  "replaced": true
+ },
+ "spr_roaringknight_hurt": {
+  "w": 100,
+  "h": 93,
+  "ox": 0,
+  "oy": 0,
+  "frames": 3,
+  "bbox": [
+   0,
+   0,
+   72,
+   65
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 30,
+  "playbacktype": "FramesPerSecond",
+  "files": [
+   "spr_roaringknight_hurt_0.png",
+   "spr_roaringknight_hurt_1.png",
+   "spr_roaringknight_hurt_2.png"
+  ],
+  "source": "mod",
+  "replaced": true
+ },
+ "spr_roaringknight_idle": {
+  "w": 117,
+  "h": 115,
+  "ox": 7,
+  "oy": 23,
+  "frames": 1,
+  "bbox": [
+   24,
+   31,
+   91,
+   95
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 30,
+  "playbacktype": "FramesPerSecond",
+  "files": [
+   "spr_roaringknight_idle_0.png"
+  ],
+  "source": "mod",
+  "replaced": true
+ },
+ "spr_roaringknight_idle2": {
+  "w": 117,
+  "h": 115,
+  "ox": 7,
+  "oy": 23,
+  "frames": 1,
+  "bbox": [
+   50,
+   31,
+   91,
+   95
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_roaringknight_idle2_0.png"
+  ],
+  "source": "mod"
+ },
+ "spr_roaringknight_idle_overworld": {
+  "w": 100,
+  "h": 88,
+  "ox": 0,
+  "oy": 0,
+  "frames": 1,
+  "bbox": [
+   31,
+   8,
+   82,
+   72
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_roaringknight_idle_overworld_0.png"
+  ],
+  "source": "mod",
+  "replaced": true
+ },
+ "spr_roaringknight_idle_overworld_sword": {
+  "w": 117,
+  "h": 115,
+  "ox": 7,
+  "oy": 23,
+  "frames": 1,
+  "bbox": [
+   24,
+   31,
+   91,
+   95
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 30,
+  "playbacktype": "FramesPerSecond",
+  "files": [
+   "spr_roaringknight_idle_overworld_sword_0.png"
+  ],
+  "source": "mod",
+  "replaced": true
+ },
+ "spr_roaringknight_look_down": {
+  "w": 100,
+  "h": 88,
+  "ox": 0,
+  "oy": 0,
+  "frames": 1,
+  "bbox": [
+   17,
+   6,
+   86,
+   72
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_roaringknight_look_down_0.png"
+  ],
+  "source": "mod",
+  "replaced": true
+ },
+ "spr_roaringknight_look_down_full": {
+  "w": 100,
+  "h": 88,
+  "ox": 0,
+  "oy": 0,
+  "frames": 1,
+  "bbox": [
+   17,
+   6,
+   86,
+   72
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_roaringknight_look_down_full_0.png"
+  ],
+  "source": "mod",
+  "replaced": true
+ },
+ "spr_roaringknight_noarm": {
+  "w": 100,
+  "h": 88,
+  "ox": 0,
+  "oy": 0,
+  "frames": 1,
+  "bbox": [
+   17,
+   6,
+   86,
+   72
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_roaringknight_noarm_0.png"
+  ],
+  "source": "mod",
+  "replaced": true
+ },
+ "spr_roaringknight_point_ol": {
+  "w": 100,
+  "h": 88,
+  "ox": 0,
+  "oy": 0,
+  "frames": 5,
+  "bbox": [
+   8,
+   6,
+   86,
+   72
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 0.5,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_roaringknight_point_ol_0.png",
+   "spr_roaringknight_point_ol_1.png",
+   "spr_roaringknight_point_ol_2.png",
+   "spr_roaringknight_point_ol_3.png",
+   "spr_roaringknight_point_ol_4.png"
+  ],
+  "source": "mod",
+  "replaced": true
+ },
+ "spr_roaringknight_pose_ol": {
+  "w": 89,
+  "h": 85,
+  "ox": 0,
+  "oy": 0,
+  "frames": 2,
+  "bbox": [
+   5,
+   18,
+   81,
+   81
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 30,
+  "playbacktype": "FramesPerSecond",
+  "files": [
+   "spr_roaringknight_pose_ol_0.png",
+   "spr_roaringknight_pose_ol_1.png"
+  ],
+  "source": "mod",
+  "replaced": true
+ },
+ "spr_roaringknight_reach_base_sword": {
+  "w": 100,
+  "h": 88,
+  "ox": 0,
+  "oy": 0,
+  "frames": 1,
+  "bbox": [
+   17,
+   6,
+   86,
+   72
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_roaringknight_reach_base_sword_0.png"
+  ],
+  "source": "mod",
+  "replaced": true
+ },
+ "spr_roaringknight_shift_ol": {
+  "w": 100,
+  "h": 93,
+  "ox": 0,
+  "oy": 0,
+  "frames": 3,
+  "bbox": [
+   17,
+   8,
+   92,
+   75
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 30,
+  "playbacktype": "FramesPerSecond",
+  "files": [
+   "spr_roaringknight_shift_ol_0.png",
+   "spr_roaringknight_shift_ol_1.png",
+   "spr_roaringknight_shift_ol_2.png"
+  ],
+  "source": "mod",
+  "replaced": true
+ },
+ "spr_roaringknight_slash_tunnel": {
+  "w": 99,
+  "h": 32,
+  "ox": 49,
+  "oy": 10,
+  "frames": 1,
+  "bbox": [
+   4,
+   14,
+   94,
+   16
+  ],
+  "sepmasks": "Precise",
+  "playback": 30,
+  "playbacktype": "FramesPerSecond",
+  "files": [
+   "spr_roaringknight_slash_tunnel_0.png"
+  ],
+  "source": "mod",
+  "replaced": true
+ },
+ "spr_roaringknight_sword": {
+  "w": 8,
+  "h": 63,
+  "ox": -30,
+  "oy": 27,
+  "frames": 1,
+  "bbox": [
+   0,
+   0,
+   7,
+   62
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_roaringknight_sword_0.png"
+  ],
+  "source": "mod",
+  "replaced": true
+ },
+ "spr_roaringknight_sword_appear": {
+  "w": 83,
+  "h": 95,
+  "ox": -10,
+  "oy": 17,
+  "frames": 3,
+  "bbox": [
+   14,
+   23,
+   76,
+   93
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_roaringknight_sword_appear_0.png",
+   "spr_roaringknight_sword_appear_1.png",
+   "spr_roaringknight_sword_appear_2.png"
+  ],
+  "source": "mod",
+  "replaced": true
+ },
+ "spr_roaringknight_sword_appear_new": {
+  "w": 122,
+  "h": 127,
+  "ox": -10,
+  "oy": 30,
+  "frames": 19,
+  "bbox": [
+   0,
+   0,
+   121,
+   126
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_roaringknight_sword_appear_new_0.png",
+   "spr_roaringknight_sword_appear_new_1.png",
+   "spr_roaringknight_sword_appear_new_2.png",
+   "spr_roaringknight_sword_appear_new_3.png",
+   "spr_roaringknight_sword_appear_new_4.png",
+   "spr_roaringknight_sword_appear_new_5.png",
+   "spr_roaringknight_sword_appear_new_6.png",
+   "spr_roaringknight_sword_appear_new_7.png",
+   "spr_roaringknight_sword_appear_new_8.png",
+   "spr_roaringknight_sword_appear_new_9.png",
+   "spr_roaringknight_sword_appear_new_10.png",
+   "spr_roaringknight_sword_appear_new_11.png",
+   "spr_roaringknight_sword_appear_new_12.png",
+   "spr_roaringknight_sword_appear_new_13.png",
+   "spr_roaringknight_sword_appear_new_14.png",
+   "spr_roaringknight_sword_appear_new_15.png",
+   "spr_roaringknight_sword_appear_new_16.png",
+   "spr_roaringknight_sword_appear_new_17.png",
+   "spr_roaringknight_sword_appear_new_18.png"
+  ],
+  "source": "mod",
+  "replaced": true
+ },
+ "spr_roaringknight_sword_break_piece_small": {
+  "w": 5,
+  "h": 7,
+  "ox": 2,
+  "oy": 4,
+  "frames": 1,
+  "bbox": [
+   1,
+   1,
+   4,
+   5
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_roaringknight_sword_break_piece_small_0.png"
+  ],
+  "source": "mod",
+  "replaced": true
+ },
+ "spr_roaringknight_sword_break_vfx2": {
+  "w": 64,
+  "h": 64,
+  "ox": 32,
+  "oy": 32,
+  "frames": 2,
+  "bbox": [
+   3,
+   3,
+   61,
+   61
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 30,
+  "playbacktype": "FramesPerSecond",
+  "files": [
+   "spr_roaringknight_sword_break_vfx2_0.png",
+   "spr_roaringknight_sword_break_vfx2_1.png"
+  ],
+  "source": "vanilla"
+ },
+ "spr_roaringknight_sword_grab_hand_new": {
+  "w": 122,
+  "h": 127,
+  "ox": -10,
+  "oy": 30,
+  "frames": 19,
+  "bbox": [
+   0,
+   0,
+   44,
+   61
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_roaringknight_sword_grab_hand_new_0.png",
+   "spr_roaringknight_sword_grab_hand_new_1.png",
+   "spr_roaringknight_sword_grab_hand_new_2.png",
+   "spr_roaringknight_sword_grab_hand_new_3.png",
+   "spr_roaringknight_sword_grab_hand_new_4.png",
+   "spr_roaringknight_sword_grab_hand_new_5.png",
+   "spr_roaringknight_sword_grab_hand_new_6.png",
+   "spr_roaringknight_sword_grab_hand_new_7.png",
+   "spr_roaringknight_sword_grab_hand_new_8.png",
+   "spr_roaringknight_sword_grab_hand_new_9.png",
+   "spr_roaringknight_sword_grab_hand_new_10.png",
+   "spr_roaringknight_sword_grab_hand_new_11.png",
+   "spr_roaringknight_sword_grab_hand_new_12.png",
+   "spr_roaringknight_sword_grab_hand_new_13.png",
+   "spr_roaringknight_sword_grab_hand_new_14.png",
+   "spr_roaringknight_sword_grab_hand_new_15.png",
+   "spr_roaringknight_sword_grab_hand_new_16.png",
+   "spr_roaringknight_sword_grab_hand_new_17.png",
+   "spr_roaringknight_sword_grab_hand_new_18.png"
+  ],
+  "source": "mod",
+  "replaced": true
+ },
+ "spr_roaringknight_sword_mask": {
+  "w": 8,
+  "h": 63,
+  "ox": -30,
+  "oy": 27,
+  "frames": 1,
+  "bbox": [
+   0,
+   0,
+   7,
+   62
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_roaringknight_sword_mask_0.png"
+  ],
+  "source": "mod",
+  "replaced": true
+ },
+ "spr_roaringknight_sword_ol_alt": {
+  "w": 75,
+  "h": 31,
+  "ox": 37,
+  "oy": 15,
+  "frames": 1,
+  "bbox": [
+   7,
+   13,
+   66,
+   17
+  ],
+  "sepmasks": "Precise",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_roaringknight_sword_ol_alt_0.png"
+  ],
+  "source": "mod"
+ },
+ "spr_roaringknight_tooth": {
+  "w": 36,
+  "h": 36,
+  "ox": 18,
+  "oy": 18,
+  "frames": 2,
+  "bbox": [
+   12,
+   15,
+   24,
+   20
+  ],
+  "sepmasks": "Precise",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_roaringknight_tooth_0.png",
+   "spr_roaringknight_tooth_1.png"
+  ],
+  "source": "mod",
+  "replaced": true
+ },
+ "spr_shine": {
+  "w": 5,
+  "h": 5,
+  "ox": 0,
+  "oy": 0,
+  "frames": 4,
+  "bbox": [
+   0,
+   0,
+   4,
+   4
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_shine_0.png",
+   "spr_shine_1.png",
+   "spr_shine_2.png",
+   "spr_shine_3.png"
+  ],
+  "source": "vanilla"
+ },
+ "spr_smallbullet": {
+  "w": 16,
+  "h": 16,
+  "ox": 8,
+  "oy": 8,
+  "frames": 1,
+  "bbox": [
+   6,
+   6,
+   9,
+   9
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_smallbullet_0.png"
+  ],
+  "source": "mod",
+  "replaced": true
+ },
+ "spr_sneo_bigcircle": {
+  "w": 50,
+  "h": 50,
+  "ox": 25,
+  "oy": 25,
+  "frames": 1,
+  "bbox": [
+   0,
+   0,
+   49,
+   49
+  ],
+  "sepmasks": "Precise",
+  "playback": 15,
+  "playbacktype": "FramesPerSecond",
+  "files": [
+   "spr_sneo_bigcircle_0.png"
+  ],
+  "source": "vanilla"
+ },
+ "spr_susie_dw_jump_ball_fixed": {
+  "w": 29,
+  "h": 30,
+  "ox": 1,
+  "oy": -9,
+  "frames": 4,
+  "bbox": [
+   0,
+   0,
+   28,
+   29
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_susie_dw_jump_ball_fixed_0.png",
+   "spr_susie_dw_jump_ball_fixed_1.png",
+   "spr_susie_dw_jump_ball_fixed_2.png",
+   "spr_susie_dw_jump_ball_fixed_3.png"
+  ],
+  "source": "vanilla"
+ },
+ "spr_susie_hurt": {
+  "w": 54,
+  "h": 45,
+  "ox": 20,
+  "oy": 0,
+  "frames": 1,
+  "bbox": [
+   2,
+   0,
+   49,
+   43
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_susie_hurt_0.png"
+  ],
+  "source": "vanilla"
+ },
+ "spr_susie_walk_down_dw_unhappy": {
+  "w": 26,
+  "h": 43,
+  "ox": 0,
+  "oy": -2,
+  "frames": 4,
+  "bbox": [
+   0,
+   26,
+   24,
+   42
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_susie_walk_down_dw_unhappy_0.png",
+   "spr_susie_walk_down_dw_unhappy_1.png",
+   "spr_susie_walk_down_dw_unhappy_2.png",
+   "spr_susie_walk_down_dw_unhappy_3.png"
+  ],
+  "source": "vanilla"
+ },
+ "spr_susie_walk_left_dw_unhappy": {
+  "w": 25,
+  "h": 43,
+  "ox": 0,
+  "oy": -2,
+  "frames": 4,
+  "bbox": [
+   3,
+   32,
+   21,
+   42
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_susie_walk_left_dw_unhappy_0.png",
+   "spr_susie_walk_left_dw_unhappy_1.png",
+   "spr_susie_walk_left_dw_unhappy_2.png",
+   "spr_susie_walk_left_dw_unhappy_3.png"
+  ],
+  "source": "vanilla"
+ },
+ "spr_susieb_act": {
+  "w": 103,
+  "h": 71,
+  "ox": 21,
+  "oy": 24,
+  "frames": 11,
+  "bbox": [
+   3,
+   24,
+   89,
+   67
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_susieb_act_0.png",
+   "spr_susieb_act_1.png",
+   "spr_susieb_act_2.png",
+   "spr_susieb_act_3.png",
+   "spr_susieb_act_4.png",
+   "spr_susieb_act_5.png",
+   "spr_susieb_act_6.png",
+   "spr_susieb_act_7.png",
+   "spr_susieb_act_8.png",
+   "spr_susieb_act_9.png",
+   "spr_susieb_act_10.png"
+  ],
+  "source": "mod",
+  "replaced": true
+ },
+ "spr_susieb_victory": {
+  "w": 60,
+  "h": 51,
+  "ox": 25,
+  "oy": 6,
+  "frames": 20,
+  "bbox": [
+   0,
+   0,
+   59,
+   50
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_susieb_victory_0.png",
+   "spr_susieb_victory_1.png",
+   "spr_susieb_victory_2.png",
+   "spr_susieb_victory_3.png",
+   "spr_susieb_victory_4.png",
+   "spr_susieb_victory_5.png",
+   "spr_susieb_victory_6.png",
+   "spr_susieb_victory_7.png",
+   "spr_susieb_victory_8.png",
+   "spr_susieb_victory_9.png",
+   "spr_susieb_victory_10.png",
+   "spr_susieb_victory_11.png",
+   "spr_susieb_victory_12.png",
+   "spr_susieb_victory_13.png",
+   "spr_susieb_victory_14.png",
+   "spr_susieb_victory_15.png",
+   "spr_susieb_victory_16.png",
+   "spr_susieb_victory_17.png",
+   "spr_susieb_victory_18.png",
+   "spr_susieb_victory_19.png"
+  ],
+  "source": "mod",
+  "replaced": true
+ },
+ "spr_tenna_x": {
+  "w": 32,
+  "h": 32,
+  "ox": 16,
+  "oy": 16,
+  "frames": 2,
+  "bbox": [
+   0,
+   0,
+   31,
+   31
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 30,
+  "playbacktype": "FramesPerSecond",
+  "files": [
+   "spr_tenna_x_0.png",
+   "spr_tenna_x_1.png"
+  ],
+  "source": "vanilla"
+ },
+ "spr_tensionbar": {
+  "w": 25,
+  "h": 196,
+  "ox": 0,
+  "oy": 0,
+  "frames": 2,
+  "bbox": [
+   0,
+   0,
+   24,
+   195
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_tensionbar_0.png",
+   "spr_tensionbar_1.png"
+  ],
+  "source": "mod",
+  "replaced": true
+ },
+ "spr_tensionbar_sliced": {
+  "w": 25,
+  "h": 196,
+  "ox": 0,
+  "oy": 0,
+  "frames": 2,
+  "bbox": [
+   0,
+   0,
+   24,
+   195
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_tensionbar_sliced_0.png",
+   "spr_tensionbar_sliced_1.png"
+  ],
+  "source": "mod"
+ },
+ "spr_tensionbar_sliced_cutout": {
+  "w": 25,
+  "h": 197,
+  "ox": 0,
+  "oy": 0,
+  "frames": 1,
+  "bbox": [
+   0,
+   0,
+   24,
+   196
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_tensionbar_sliced_cutout_0.png"
+  ],
+  "source": "mod"
+ },
+ "spr_tensionbar_sliced_top": {
+  "w": 25,
+  "h": 196,
+  "ox": 0,
+  "oy": 0,
+  "frames": 1,
+  "bbox": [
+   0,
+   0,
+   24,
+   97
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerGameFrame",
+  "files": [
+   "spr_tensionbar_sliced_top_0.png"
+  ],
+  "source": "mod"
+ },
+ "spr_whitepx": {
+  "w": 1,
+  "h": 1,
+  "ox": 0,
+  "oy": 0,
+  "frames": 1,
+  "bbox": [
+   0,
+   0,
+   0,
+   0
+  ],
+  "sepmasks": "AxisAlignedRect",
+  "playback": 1,
+  "playbacktype": "FramesPerSecond",
+  "files": [
+   "spr_whitepx_0.png"
+  ],
+  "source": "vanilla"
+ }
+}

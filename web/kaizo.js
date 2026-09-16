@@ -284,11 +284,18 @@ if (window.matchMedia) {
 // mod ("custom song (optional)/"), and it is what plays over this fight, so the
 // recreation plays it rather than the vanilla knight theme.
 //
-// It lives under kaizo/assets/, which is PUBLISH-GATED in full by that
-// directory's own .gitignore -- it is EnderCat8's work, and kaizo/HANDOFF.md
-// §5-C is explicit that republishing another author's work needs their
-// permission. So the file is used locally and committed nowhere, exactly like
-// the sprite overlay.
+// IT IS NOT ENDERCAT8'S OWN COMPOSITION, and this comment used to say it was.
+// kaizo/scenes/kaizo-prefight.js quotes the router and the folder name: the mod
+// "ships with NO music of its own", and `kaizoknight.ogg` is a "custom song
+// (optional)" the PLAYER drops into the game's `mus/`. What is EnderCat8's here
+// is the ROUTER that copes with which optional file a given install has.
+//
+// IT SHIPS ANYWAY, on the user's instruction (2026-09-16): the mod is approved
+// and every asset goes out with it, music included. The file used to be held
+// back by kaizo/assets/'s `*` .gitignore along with the art; there is no rule
+// on it now. The provenance note above stays because it is true and because it
+// is the thing a future reader would otherwise have to re-derive -- not because
+// it gates anything.
 //
 // ── THE OVERRIDE IS NOW DERIVED, NOT DECLARED (ledger G-50) ───────────────
 //

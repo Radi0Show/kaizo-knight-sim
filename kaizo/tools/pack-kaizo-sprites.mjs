@@ -10,14 +10,17 @@
 // The main pack is the VANILLA fight's art and the main page is verified
 // against it. The kaizo lane needs art the vanilla fight never references —
 // some of it vanilla sprites the pack filtered out, and some of it
-// EnderCat8's own new art, which the V-C publish gate (kaizo/HANDOFF.md §5-C)
-// says must not be published without permission. Keeping it in a separate
-// directory means:
+// EnderCat8's own new art. The V-C publish gate (kaizo/HANDOFF.md §5-C) held
+// all of it back until the author gave permission; **permission was given and
+// the overlay SHIPS as of 2026-09-16**, so the root `.gitignore` now carries
+// `!kaizo/assets/sprites/*.png` and every file this tool writes is committed.
+// Keeping it in a separate directory still means the main pack cannot be
+// disturbed by kaizo work at all, which was always the better half of the
+// reason.
 //
-//   * the main pack cannot be disturbed by kaizo work at all, and
-//   * `.gitignore`'s global `*.png` block (whose only carve-out is
-//     `!assets/sprites/*.png`) already keeps every file here OUT of commits,
-//     which is exactly the behaviour the gate wants.
+// THE AUDIO BESIDE IT SHIPS TOO — every asset does now. See the root
+// `.gitignore`, which no longer bars anything, and kaizo/scenes/
+// kaizo-prefight.js for what `kaizoknight.ogg` actually is.
 //
 // ── THE REPLACED SPRITES, and why this tool compares two dumps ────────────
 //
@@ -192,9 +195,10 @@ const WANT = [
   // as `source: 'mod', replaced: true` — spr_roaringknight_attack_overworld
   // (6/6 frames differ) and spr_roaringknight_faceaway_turning (10/10). That
   // is the same blue recolour the fight sprites carry, applied to the Knight's
-  // OVERWORLD set, and it is publish-gated by kaizo/assets/.gitignore like the
-  // rest of EnderCat8's art. `kaizo/tools/checks/check-ending-sprite-pack.mjs`
-  // asserts that split by name, in both directions.
+  // OVERWORLD set, and it ships with the rest of EnderCat8's art now that the
+  // author has cleared it (2026-09-16). The `source` split is still what the
+  // manifest records and what `kaizo/tools/checks/check-ending-sprite-pack.mjs`
+  // asserts by name, in both directions — it is provenance, not a gate.
   'spr_krisd_dark',
   'spr_krisl_dark',
   'spr_pixel_white',

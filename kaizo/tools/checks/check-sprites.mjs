@@ -430,14 +430,23 @@ ok(unresolved.length === 0,
     + `${notActuallyDifferent.length ? ` — IDENTICAL: ${notActuallyDifferent.slice(0, 5).join(', ')}` : ''}`);
 }
 
-// ── 4: THE PUBLISH GATE ────────────────────────────────────────────────────
-// The gate is only real if git actually refuses these. Asserting the
-// .gitignore TEXT would prove nothing — patterns interact, and the root
-// ignore's `!assets/sprites/*.png` carve-out is exactly the kind of rule that
-// can start matching a new directory. So ask git itself.
+// ── 4: THE OVERLAY ACTUALLY SHIPS ──────────────────────────────────────────
+// THIS ASSERTION USED TO RUN THE OTHER WAY. Until 2026-09-16 the mod overlay
+// was publish-gated and this section proved git REFUSED every file; the user
+// has since cleared the whole mod to ship, so the gate is gone and the risk
+// has inverted with it. What can go wrong now is the art silently NOT reaching
+// a clone — a `*.png` rule creeping back, a carve-out that stops matching, a
+// renamed directory — and that failure is invisible on the machine that packed
+// the files, because they are sitting right there on disk. The page would
+// simply fall back to collision-mask shapes on everyone else's screen.
+//
+// So the machinery is kept exactly as it was and only the expected answer
+// moved: ask GIT rather than reading the .gitignore text (patterns interact),
+// and probe EVERY file rather than a sample (a sample cannot find the one file
+// a future pattern misses).
 {
   const modEntries = Object.entries(overlayManifest).filter(([, m]) => m.source === 'mod');
-  ok(modEntries.length > 0, `the overlay carries mod-sourced art to gate (${modEntries.length} sprites)`);
+  ok(modEntries.length > 0, `the overlay carries mod-sourced art (${modEntries.length} sprites)`);
 
   // EVERY mod frame, not a sample — the gate is only as good as its weakest
   // path, and a sample cannot find the one file a future pattern misses.
@@ -462,22 +471,29 @@ ok(unresolved.length === 0,
       ok(false, `PUBLISH GATE: git check-ignore failed (${err.status}): ${err.stderr ?? err.message}`);
     }
   }
-  const unGated = probes.filter((p) => !ignoredSet.has(p));
-  ok(unGated.length === 0,
-    `PUBLISH GATE: git ignores all ${probes.length} mod-sourced files and their metadata `
-    + `(EnderCat8's work — HANDOFF §5-C)${unGated.length
-      ? ` — NOT GATED: ${unGated.slice(0, 5).join(', ')}${unGated.length > 5 ? ` (+${unGated.length - 5})` : ''}`
+  const stillIgnored = probes.filter((p) => ignoredSet.has(p));
+  ok(stillIgnored.length === 0,
+    `git ships all ${probes.length} mod-sourced files and their metadata — none is ignored`
+    + `${stillIgnored.length
+      ? ` — STILL BARRED: ${stillIgnored.slice(0, 5).join(', ')}${stillIgnored.length > 5 ? ` (+${stillIgnored.length - 5})` : ''}`
       : ''}`);
 
-  // ...and the gate must not swallow its own documentation.
-  let gateTracked = false;
+  // THE AUDIO IS THE OTHER HALF OF "EVERYTHING SHIPS", and it is the easier one
+  // to lose: one file, in its own directory, that nothing else in this check
+  // would look at. It was barred for longer than the art was.
+  const audio = readdirSync(join(OVERLAY, '..', 'audio')).map((f) => `kaizo/assets/audio/${f}`);
+  ok(audio.length > 0, `the overlay carries mod audio (${audio.length} file(s))`);
+  let audioIgnored = [];
   try {
-    execFileSync('git', ['check-ignore', '-q', join(OVERLAY, '..', '.gitignore')],
-      { cwd: repo, stdio: 'pipe' });
-  } catch {
-    gateTracked = true; // exit 1 == not ignored == committable
+    const out = execFileSync('git', ['check-ignore', '--', ...audio],
+      { cwd: repo, encoding: 'utf8' });
+    audioIgnored = out.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  } catch (err) {
+    if (err.status !== 1) ok(false, `audio: git check-ignore failed (${err.status})`);
   }
-  ok(gateTracked, 'kaizo/assets/.gitignore is itself committable, so the gate survives a clone');
+  ok(audioIgnored.length === 0,
+    `git ships all ${audio.length} audio file(s) — none is ignored`
+    + `${audioIgnored.length ? ` — STILL BARRED: ${audioIgnored.join(', ')}` : ''}`);
 }
 
 console.log('');
