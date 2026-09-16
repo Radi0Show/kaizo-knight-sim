@@ -151,10 +151,30 @@ at its Draw event; the sim renderer's per-entity draw arguments (sprite,
 subimage, origin, position, scales, angle, blend, alpha) compared against it.
 Until then: work the render workflow's critic list (`kaizo/RENDER-CRITIC.md`,
 copied out of that workflow's scratch output at the 2026-09-02 split) and the 33 open review findings
-across the eight family files in `kaizo/render/draw/`. Known holes: the
-B-Side tension bar, hero sprites never drawn, the boxsplitter hell surface
-depth vs the box, `obj_roaringknight_quickslash_big` missing from the
-registry, `spr_custom_box` being a runtime surface sprite, the snow sheets.
+across the eight family files in `kaizo/render/draw/`.
+
+**THE "KNOWN HOLES" LIST THAT USED TO SIT HERE IS CLOSED — re-checked
+2026-09-16.** It named six, and each now has an ENFORCED check standing over
+it, wired into `verify:kaizo`:
+
+| hole | closed by |
+|---|---|
+| the B-Side tension bar | `check-tensionbar-draw` (the sliced bar, its +32 readout drop, the shard bleed) |
+| hero sprites never drawn | `check-heroes-draw` (obj_heroparent's Draw deltas, the gloom tint, the frozen statue) |
+| boxsplitter hell surface depth vs the box | `check-render-depth-kaizo` |
+| `obj_roaringknight_quickslash_big` missing from the registry | `check-render-depth-kaizo` |
+| the snow sheets | `check-snowflake-art` (spr_icespell_snowflake, bg_snowfall — VANILLA art no pack carried) |
+| `spr_custom_box` as a runtime surface sprite | drawn at `kaizo/render/draw/stream.js:471`; the GML makes it with `sprite_create_from_surface` and that origin is documented at :432-455 |
+
+**THIS DOC AND `RENDER-CRITIC.md` WERE BOTH FROZEN AT THE 2026-09-02 SPLIT
+COMMIT (013cf7e) while the code shipped to v0.1.23+.** Read every gate number
+and every "open" in either of them as a 2026-09-02 reading, not a current one —
+`verify:kaizo` is the only current answer, and RENDER-CRITIC.md's own header
+says the same about its numbers. What is still genuinely open on rendering is
+in the audit's own list: `obj_fake_gt`'s arena shake computes offsets for RNG
+parity that no renderer reads, four objects never receive their
+object-definition `sprite_index`, and `check-colours-sheet` is red on all five
+launches because of those two plus half-up `merge_color`.
 
 ## 5. Lever four — the step-order migration (structural)
 

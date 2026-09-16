@@ -601,6 +601,11 @@ if (KV.C) {
     //   check-kaizo-hitboxes      the two masks the mod changed and the
     //                             B-Side blade dash windup.
     //   check-quickslash-draw     the finisher's Draw.
+    //   (check-quickslash-draw was listed here too and is DROPPED from this
+    //    block: it is already wired in the 2026-09-10 block above. A Set
+    //    swallows the duplicate silently, so the count read 71 entries / 70
+    //    unique and any audit of "how many checks are enforced" was off by
+    //    one. Removed 2026-09-16; the check itself is unaffected.)
     //   check-spellenemy-row      the spell's enemy row is DRAWN. It was a
     //                             submenu nothing painted, which is what the
     //                             extra Enter on Rude Buster really was.
@@ -612,7 +617,7 @@ if (KV.C) {
     //                             -> the Weird Route title.
     //   check-heal-roster         the no-hit heal no longer fills a padded
     //                             empty slot on a two-member roster.
-    'check-lightorb', 'check-kaizo-hitboxes', 'check-quickslash-draw',
+    'check-lightorb', 'check-kaizo-hitboxes',
     'check-spellenemy-row', 'check-aside-messages', 'check-spellphase-kaizo',
     'check-knight-mode', 'check-opening-msg', 'check-proceed-route',
     'check-heal-roster',
@@ -903,6 +908,62 @@ if (KV.C) {
     'check-oracle-quickslash', 'check-oracle-crescent', 'check-oracle-splitter',
     // The last one in: its blocker was the alarm-ordering model, fixed above.
     'check-oracle-weird',
+    // ═══ WIRED 2026-09-16 — THE THIRTEEN THAT RAN AND GUARDED NOTHING ═════
+    //
+    // Every one of these passed, printed, and could not fail the gate. That
+    // is the same defect this Set has now closed three times (2026-09-10,
+    // -09-11, -09-12) and the audit found it again at THIRTEEN checks, which
+    // is more than were ever wired in any one of those rounds. An unwired
+    // check is not "extra coverage held in reserve": it is a file that will
+    // go red one day and print a line nobody reads, under an exit code that
+    // says everything is fine.
+    //
+    // Each was measured at exit 0 on this machine before being named here,
+    // and the two that could not simply be wired as-is were FIXED first
+    // rather than left out:
+    //
+    //   check-act-tables      WAS RED SINCE THE COMMIT THAT ADDED IT, and
+    //                         never once enforced, so nobody found out. Its
+    //                         section D expected `descb: ''` where
+    //                         scr_monster_actreset.gml:8 writes a single
+    //                         SPACE (`global.actdesc[arg0][__fj] = " ";`) and
+    //                         the engine's own WIRED verify-actmodel.mjs:74
+    //                         already said so. The check was the stale side,
+    //                         not the engine — fixed here, along with
+    //                         check-act-pages-kaizo and kaizo/party/noelle.js,
+    //                         which all carried the same wrong ''.
+    //   check-sprite-frames   exited 1 on any machine without ~/knight-research,
+    //                         because it ASSERTED the data-file sprite tables
+    //                         were present. Wiring that would have reddened a
+    //                         fresh clone for a file no repo may ever contain
+    //                         (law 7). Its research-dependent half is a LOUD
+    //                         SKIP now, the contract check-oracle-schedule
+    //                         keeps; its manifest-vs-IHDR half needs nothing
+    //                         outside the repo and still runs either way.
+    //
+    // The other eleven needed no change. What each stands over:
+    //   check-act-pages-kaizo   the ACT pages' rows, costs and page splits.
+    //   check-act-selector      which ACT the selector can actually reach.
+    //   check-audio-cues        every cue the code names has an entry, and
+    //   check-audio-files       every entry has a file. BOTH CARRY INVERTED
+    //                           ASSERTIONS: a cue in KNOWN_ABSENT that GAINS a
+    //                           file reddens them on purpose, so that the day
+    //                           board_ocean arrives the gate says so instead of
+    //                           staying quietly green with a stale exception.
+    //                           That is the intended failure, not a regression.
+    //   check-castername-kaizo  the caster's name on the spell row.
+    //   check-controls-page     the vendored CONTROLS block (its header still
+    //                           called that block PENDING while it shipped).
+    //   check-deployed-assets   see its own note below — wired, and run TWICE.
+    //   check-overlay-shadow    the overlay's drop shadow.
+    //   check-render-smoke-kaizo a whole frame is painted without throwing.
+    //   check-shipped-voice     the shipped text's register.
+    //   check-spare-row         the SPARE row.
+    'check-act-pages-kaizo', 'check-act-selector', 'check-act-tables',
+    'check-audio-cues', 'check-audio-files', 'check-castername-kaizo',
+    'check-controls-page', 'check-deployed-assets', 'check-overlay-shadow',
+    'check-render-smoke-kaizo', 'check-shipped-voice', 'check-spare-row',
+    'check-sprite-frames',
   ]);
 
   const here = dirname(fileURLToPath(import.meta.url));
@@ -935,6 +996,44 @@ if (KV.C) {
     }
     for (const w of WIRED) {
       if (!checks.includes(`${w}.mjs`)) ok(false, `${w}.mjs is WIRED but its check file is missing`);
+    }
+
+    // ── check-deployed-assets, A SECOND TIME, AGAINST THE DEPLOYED TREE ────
+    //
+    // The loop above ran it with no argument, so its root was THIS REPO — and
+    // that run is worth having (14 assertions, all real) but it is not the
+    // question the check was written to ask. Its own header says so: "the page
+    // the player actually loads is not this repo", and its last two assertions
+    // — that the deployed overlay matches the source overlay name for name,
+    // and that the deployed audio index matches the source's — are
+    // structurally VACUOUS when root and source are the same directory. They
+    // are the two that would have caught a vendor step that silently dropped
+    // half the art, which is exactly the failure that shipped invisibly for
+    // weeks: the renderer falls back to collision masks, so missing art looks
+    // like art.
+    //
+    // So the deployed root gets its own run. It is a LOUD SKIP when thedevice
+    // is not on this machine — the vendored copy lives in a different repo and
+    // this gate deliberately does not require it — and it is ENFORCED when it
+    // is, which is every machine that can actually publish.
+    {
+      const deployed = join(here, '..', '..', '..', 'thedevice', 'DEVICE_KAIZO');
+      const dep = join(checkDir, 'check-deployed-assets.mjs');
+      if (!existsSync(deployed)) {
+        console.log('  --  check-deployed-assets (deployed root): SKIP — no '
+          + `thedevice/DEVICE_KAIZO beside this repo (${deployed}).`);
+        console.log('      NOTHING HERE IS HELD AGAINST THE PAGE A PLAYER LOADS without it;');
+        console.log('      the run above asserted this repo against its own manifests only.');
+      } else {
+        let passed = true;
+        try {
+          execFileSync(process.execPath, [dep, deployed], { stdio: 'pipe' });
+        } catch {
+          passed = false;
+        }
+        ok(passed, 'check-deployed-assets against thedevice/DEVICE_KAIZO '
+          + '(the tree the player actually loads)');
+      }
     }
 
     // THE ORACLE CHECK'S OWN SABOTAGE TEST, run as part of the gate rather
@@ -1060,10 +1159,15 @@ if (KV.C) {
       } catch {
         csPassed = false;
       }
+      // THREE CAUSES, NOT FOUR. `merge_color` was the fourth and it is FIXED —
+      // the engine rounds half-to-even over a float32 mix as of knight-sim
+      // v1.0.60, vendored here. Naming a closed cause in a WIP line is how a
+      // reader comes to believe there is more wrong than there is, and how a
+      // fix gets done twice; the ledger's 2026-09-16 entry has the receipt.
       console.log(`  ${csPassed ? '--  ' : 'WIP '} check-colours-sheet: `
         + `${csPassed ? 'skipping or passing' : 'FAILING'} (not enforced — obj_particle_generic`
-        + ' and obj_fake_gt unmodelled, four objects with sprite_index unset, and merge_color'
-        + " rounds half-UP where the game rounds half-to-EVEN; see the ledger's 2026-09-10 section)");
+        + ' and obj_fake_gt unmodelled, and four objects with sprite_index unset;'
+        + " see the ledger's 2026-09-10 section, and 2026-09-16 for merge_color, which is closed)");
 
       let csSab = true;
       try {

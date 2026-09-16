@@ -142,16 +142,24 @@ export const GLOOM_TEXT = {
  * `kaizo_gloomcolor()` — `merge_color(c_blue, #268CAC, 0.5)`.
  *
  * Derivation: c_blue is RGB(0, 0, 255); #268CAC is RGB(38, 140, 172). Halved
- * per channel that is R 19, G 70, B 213.5. The runner stores colour channels
- * as bytes, so the blue channel lands on 213 under truncation and 214 under
- * rounding — a 1/255 difference in a value nothing measures. Truncation is
- * assumed; FLAGGED, not verified.
+ * per channel that is R 19, G 70, B 213.5.
+ *
+ * ~~Truncation is assumed; FLAGGED, not verified.~~ **VERIFIED 2026-09-16, AND
+ * THE ASSUMPTION WAS WRONG.** `merge_color` is, per channel,
+ * `round_half_to_even(f32(f32(c1 * f32(1 - f32(amount))) + f32(c2 * f32(amount))))`
+ * — measured on 4,969 recorded rows across two object families with zero
+ * misses (kaizo-mod/ORACLE-GROUND-TRUTH.md, 2026-09-10, gap G9; truncation
+ * misses 1,368 and 1,843 of those rows). 213.5 rounds to the EVEN neighbour,
+ * so the blue channel is **214**, and this constant now says so.
+ *
+ * The flag did its job: it named the exact ambiguity, so when the recording
+ * arrived there was one number to change and no guessing about which.
  */
-export const KAIZO_GLOOM_COLOR = '#1346d5';
+export const KAIZO_GLOOM_COLOR = '#1346d6';
 
 /** The same, as the {r,g,b} a canvas renderer wants. */
 export function kaizoGloomcolor() {
-  return { r: 19, g: 70, b: 213, css: KAIZO_GLOOM_COLOR };
+  return { r: 19, g: 70, b: 214, css: KAIZO_GLOOM_COLOR };
 }
 
 /**
@@ -159,19 +167,27 @@ export function kaizoGloomcolor() {
  * render/draw/gm.js's `tinted()` takes the ARRAY and throws on a string, so a
  * mote cannot be handed `KAIZO_GLOOM_COLOR` directly.
  *
- * IT IS ONE BLUE OFF FROM `kaizo/party/heroes.js`'s `GLOOM_COLOR`, and that is
- * recorded rather than reconciled. Both are `merge_color(c_blue, #268CAC,
- * 0.5)`; the blue channel lands on 213.5, and this file's constant TRUNCATES
- * (the derivation above says so, and flags it as assumed) while heroes.js
- * builds the same colour through `sim/gml.js`'s `mergeColor`, which ROUNDS to
- * 214 — the helper 60 vanilla suites are pinned to. Neither is provably the
- * runner's answer without a capture of a glooming hero. Picking one here
- * would silently move whichever of the two is right, so the disagreement
- * stays visible: the HUD band, the HP number and the motes are all 213 (this
- * file's), the hero's 30%-opacity body tint is 214 (heroes.js's), and at that
- * opacity one unit of blue is below anything either surface can show.
+ * ~~IT IS ONE BLUE OFF FROM `kaizo/party/heroes.js`'s `GLOOM_COLOR`.~~ THE
+ * DISAGREEMENT IS RESOLVED, 2026-09-16, AND heroes.js WAS THE RIGHT ONE. Both
+ * are `merge_color(c_blue, #268CAC, 0.5)` and the blue channel lands on 213.5;
+ * this file truncated to 213 on a flagged assumption while heroes.js built the
+ * colour through `sim/gml.js`'s `mergeColor` and got 214. The recording says
+ * 214 (G9: half-to-even, 4,969 rows, zero misses), so every surface reads the
+ * same number now — the HUD band, the HP number, the motes and the hero's
+ * 30%-opacity body tint.
+ *
+ * WHY IT WAS RIGHT TO LEAVE THEM DISAGREEING UNTIL NOW: neither was provable
+ * without a capture, picking one would have silently moved whichever was
+ * wrong, and at 30% opacity one unit of blue is below anything either surface
+ * can show — so a visual check could never have settled it. The measurement
+ * did.
+ *
+ * (`sim/gml.js`'s `mergeColor` reached 214 for the wrong reason at the time —
+ * it rounded half-UP in f64, which happens to agree with half-to-even on this
+ * particular .5. It was corrected to the measured model in knight-sim
+ * v1.0.60, so the agreement is no longer a coincidence.)
  */
-export const GLOOM_BLEND = Object.freeze([19, 70, 213]);
+export const GLOOM_BLEND = Object.freeze([19, 70, 214]);
 
 /**
  * obj_herosusie's object index in the kaizo dump. kaizo_gloomemit branches on

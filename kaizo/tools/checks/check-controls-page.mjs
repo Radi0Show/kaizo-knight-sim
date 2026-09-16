@@ -23,13 +23,15 @@
 // title — so what is asserted is what the shipped driver does with a stored
 // object, not what its source happens to mention.
 //
-// THE SECOND BLOCK is the page itself, driven through the VENDORED engine. It
-// is PENDING, loudly, on a snapshot taken before the page existed: this repo
-// never hand-edits `sim/`, so the page arrives here with the next
-// `npm run vendor:engine` and the block starts enforcing itself on that copy.
-// The skip prints the measured reason (the export is absent) rather than
-// disappearing, which is the same shape verify-all.mjs uses for the suites
-// that need the research repo.
+// THE SECOND BLOCK is the page itself, driven through the VENDORED engine.
+// ~~It is PENDING, loudly, on a snapshot taken before the page existed.~~
+// THE PAGE ARRIVED — it came with the v1.0.57/v1.0.58 re-vendors (533cc5e,
+// 13edbc1), so the block enforces itself now: all 27 assertions run, the
+// PENDING branch further down is not taken, and this check is in
+// verify-kaizo's WIRED set as of 2026-09-16. The skip path is kept because it
+// is the right behaviour if the export ever goes missing again — it prints the
+// measured reason rather than disappearing, the same shape verify-all.mjs uses
+// for suites that need the research repo.
 
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';

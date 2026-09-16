@@ -400,17 +400,47 @@ export const RED = [255, 0, 0];
 export const GRAY = [128, 128, 128];
 
 /**
- * GML `merge_color(c1, c2, amount)` — a per-channel lerp. GameMaker does not
- * clamp `amount`, but it does clamp the resulting bytes, so clamping here is
- * equivalent for every caller in this project (all of which feed it a cosine).
+ * GML `merge_color(c1, c2, amount)` — a per-channel lerp, MEASURED:
+ *
+ *     round_half_to_even( f32( f32(c1 * f32(1 - f32(amount)))
+ *                            + f32(c2 * f32(amount)) ) )
+ *
+ * The amount narrows to float32, the mix is computed in float32, and the
+ * rounding is GML `round`, which is half-to-EVEN. This is nothing new — it is
+ * two of this file's own standing laws ("built-ins narrow to float32",
+ * "`round` is half-to-even") applied at a site that had NEITHER.
+ *
+ * THE RECEIPT (kaizo-mod/ORACLE-GROUND-TRUTH.md, 2026-09-10, gap G9). Derived
+ * from 21 steps of obj_tracking_sword1's `merge_color(c_white,
+ * get_swordcolor(), timer / 30)` (Step_0:51), then VALIDATED on two other
+ * object families it was not fitted to: 2,232 obj_knight_pointing_starchild
+ * rows (Draw_0:14) and 2,737 obj_roaringknight_split_bullet rows (Draw_0:14).
+ * 4,969 rows, every channel, ZERO misses. The rejected models, on the same
+ * rows: `Math.round` (half-up) misses 72 and 89; truncation misses 1,368 and
+ * 1,843.
+ *
+ * WHAT IT WAS BEFORE, AND WHY IT MATTERED. This was `Math.round` on an f64
+ * lerp — half-UP, wrong on exactly the .5 rows, which the f32 mix produces
+ * often. The visible symptom is one channel unit: the tracking sword's fade
+ * printed 145/111/77 against the game's 144/110/76 at steps 13, 17 and 21 of
+ * 30. `gmlRound` — the correct primitive, measured the hard way twice — was
+ * already sitting fifty lines above this function and was not being used,
+ * which is this project's own recorded defect class.
+ *
+ * THE `amount` CLAMP IS KEPT AND IS NOT PART OF THE MEASUREMENT. GameMaker
+ * does not clamp `amount`; it clamps the resulting bytes, which is NOT the
+ * same thing once `amount` leaves [0,1] (extrapolating from 100 to 150 at
+ * amount 2 gives 200 there and 150 here). Every caller in this project feeds a
+ * cosine or a clamp01, so no recorded row discriminates the two, and the
+ * measured rows are all inside [0,1]. Do not remove the clamp on the strength
+ * of this docblock — measure it.
  */
 export function mergeColor(a, b, t) {
-  const k = t < 0 ? 0 : t > 1 ? 1 : t;
-  return [
-    Math.round(a[0] + (b[0] - a[0]) * k),
-    Math.round(a[1] + (b[1] - a[1]) * k),
-    Math.round(a[2] + (b[2] - a[2]) * k),
-  ];
+  const f = Math.fround;
+  const k = f(t < 0 ? 0 : t > 1 ? 1 : t);
+  const inv = f(1 - k);
+  const ch = (c1, c2) => gmlRound(f(f(c1 * inv) + f(c2 * k)));
+  return [ch(a[0], b[0]), ch(a[1], b[1]), ch(a[2], b[2])];
 }
 
 /**

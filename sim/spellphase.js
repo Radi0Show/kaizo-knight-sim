@@ -1,21 +1,33 @@
 // THE SPELL / ITEM RESOLVE PHASE — `obj_spellphase`, and the branch of
 // `scr_attackphase` that creates it.
 //
-// STATUS, 2026-09-09: TRANSLATED AND UNWIRED. Nothing imports this file, no
-// suite exercises it, and it has never been run. It is committed on this branch
-// so the translation is not lost, not because it is trusted.
+// STATUS, 2026-09-16: WIRED AND EXERCISED. `sim/scenes/practice.js:43` imports
+// needsSpellphase / createSpellphase / stepSpellphase and drives all three at
+// :1167-1189, `tools/verify-spellphase.mjs` is a registered suite, and
+// `sim/menu.js:1110` opens the bmenuno-3 enemy picker the old note below asked
+// for. Every one of those was the work the header called outstanding.
+//
+// ~~STATUS, 2026-09-09: TRANSLATED AND UNWIRED. Nothing imports this file, no
+// suite exercises it, and it has never been run.~~ SUPERSEDED — and left
+// visible rather than deleted, because a status line that certifies the
+// opposite of its own file is this project's own recorded defect class ("a
+// comment describing the right design while the code does otherwise"), and
+// this one sat at the top of the file a reader opens FIRST. It was true for
+// one day. The lesson is that a STATUS line dates faster than anything else in
+// a comment and has to be re-read whenever the thing it describes is wired.
 //
 // WHAT IS LINE-CITED: the three events above (Create / Alarm_0 / Step_0, all 78
 // lines of the Step quoted verbatim), scr_attackphase's branch, the hero's
 // state-2/4 timing (obj_heroparent Step_0:118-124 arming spelltimer = 16 and
 // :444-461 firing scr_spell when it reaches 0), and scr_spelltext's lines.
 //
-// WHAT IS INFERRED AND STILL NEEDS A LINE: itemSpelldelay's kind/target mapping
-// (scr_spell sets 15 or 20 per item CASE; this groups them instead of listing
-// them), and the PACIFY variant in SPELL_TEXT (the dump's case 3 branches on
-// monsterstatus and mercymod; the Knight is neither TIRED nor sparable, so the
-// "wasn't TIRED" line is the reachable one — say so at the table when it is
-// wired). The colour codes (\cB ... \cW) are dropped from every line.
+// BOTH INFERENCES THE OLD HEADER FLAGGED ARE NOW CITED, further down this same
+// file: scr_spell's per-case spelldelay is listed case by case with its line
+// numbers at spellSpelldelay's docblock (the conditional arms that are NOT
+// modelled are named there too), and SPELL_TEXT's docblock says why case 3
+// takes the "wasn't TIRED" line — the Knight is neither TIRED nor sparable, so
+// the other two branches are unreachable in this fight. The colour codes
+// (\cB ... \cW) are still dropped from every line.
 //
 // A SECOND SKIP LOOP DOES NOT BELONG HERE — AND THE RETRACTION THAT SAID SO
 // WAS ITSELF HALF WRONG. CORRECTED 2026-09-10.
@@ -42,19 +54,30 @@
 // citation is a claim, an unread citation is a fabrication, and a citation
 // that does not say WHICH dump is an ambiguity that will be read as both.
 //
-// TO WIRE IT (the work this does not do): sim/scenes/practice.js must create
-// this object INSTEAD of the bar when any charaction is 2 or 4 and create the
-// bar on the frame this returns true, replacing the `maxdelay = 25 + 15 * n`
-// model it has now — which translates obj_attackpress's Draw block that NEVER
-// RUNS (Create_0:1-6 sets `fastmode = 1 -> active = 1` and :58 clears
-// `spelluse` after the caster loop). sim/menu.js must open the ENEMY picker for
-// a spelltarget-2 spell (obj_battlecontroller Step_0:648-651, bmenuno 3), which
-// it skips today. The oracle is the kaizo _rev1 whole fight: its f8556 menu is
-// the only one of thirty in which the mash lands on MAGIC, and it predicts the
-// second writer at f8575, the bar at f8644 and ac 108 at f8730. No vanilla
-// whole-fight recording casts anything (checked: no tension drop over 20 in any
-// of the six), so the vanilla gate can only prove this INERT — which is worth
-// proving, and is the first thing to run after wiring it.
+// HOW IT WAS WIRED — the list the old "TO WIRE IT" note asked for, each half
+// now pointing at where it landed rather than at what was owed:
+//
+//   sim/scenes/practice.js:1167-1189 creates this object INSTEAD of the bar
+//   when any charaction is 2 or 4 and creates the bar on the frame this
+//   returns true, replacing the `maxdelay = 25 + 15 * n` model — which
+//   translated obj_attackpress's Draw block that NEVER RUNS (Create_0:1-6 sets
+//   `fastmode = 1 -> active = 1` and :58 clears `spelluse` after the caster
+//   loop). Note the one-frame rule recorded at that site: an object created
+//   during a Step does not run its own Step or Alarm that frame, and it is
+//   worth exactly one frame of the _rev1 spell turn.
+//
+//   sim/menu.js:1110 opens the ENEMY picker for a spelltarget-2 spell
+//   (obj_battlecontroller Step_0:648-651, bmenuno 3); :1321 is the transition
+//   into it.
+//
+// THE ORACLE IS STILL THE KAIZO _rev1 WHOLE FIGHT, and it is still the only
+// one: its f8556 menu is the only one of thirty in which the mash lands on
+// MAGIC, and it predicts the second writer at f8575, the bar at f8644 and ac
+// 108 at f8730. No vanilla whole-fight recording casts anything (checked: no
+// tension drop over 20 in any of the six), so the VANILLA gate can only ever
+// prove this INERT — which it does, and which is not the same as proving it
+// right. The claim this file can defend is the kaizo lane's byte gate, whose
+// front has been past the f8699 spell turn since 2026-09-09.
 //
 // A turn in which anyone chose MAGIC or ITEM does not go straight to the
 // attack bar. scr_attackphase (gml_GlobalScript_scr_attackphase.gml:20-47)

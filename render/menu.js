@@ -846,16 +846,22 @@ export function drawMenu(ctx, state, sprites) {
     // time when selecting Rude Buster" — the press was never dropped, only
     // the picker it opened was invisible.
     //
-    // The warning below existed to catch exactly this and could not: nothing
-    // in `render/` is exercised by a suite, so the console line was written
-    // to a browser console nobody was reading. check-spellenemy-row.mjs (the
-    // kaizo lane) now asserts the dispatch from the outside.
+    // The warning below existed to catch exactly this and could not, BECAUSE
+    // AT THE TIME nothing in `render/` was exercised by a suite — the console
+    // line went to a browser console nobody was reading. That is no longer
+    // true: verify-render-smoke, verify-charbox-band, verify-rudebuster-layer,
+    // verify-actspare, verify-intro-actors, verify-selectflash, verify-writer
+    // and verify-textsound all drive the real renderer against a recording
+    // stub canvas, and check-spellenemy-row.mjs (the kaizo lane) asserts this
+    // dispatch from the outside.
     drawEnemyRow(ctx, state, sprites, font);
   } else if (menu.open) {
     // AN UNHANDLED SUBMENU IS A BUG, AND A SILENT ONE. Nothing in `sim/` cares
-    // what the renderer knows, and no suite covers `render/`, so when ACT's
-    // two stages were renamed the only symptom was a button that did nothing.
-    // Say so once instead of quietly drawing the battle message over it.
+    // what the renderer knows, and when ACT's two stages were renamed the only
+    // symptom was a button that did nothing. Say so once instead of quietly
+    // drawing the battle message over it. (The render suites listed above
+    // cover specific surfaces; none enumerates every submenu name, so this
+    // console line is still the only thing standing over an unhandled one.)
     if (menu.submenu && !warnedSubmenus.has(menu.submenu)) {
       warnedSubmenus.add(menu.submenu);
       console.error(

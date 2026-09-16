@@ -50,8 +50,13 @@ own handoff is `docs/engine/KNIGHT-SIM-HANDOFF.md`, on demand. Run the gates
 - *(2026-08-28 state. Since 2026-09-02 the repo is `D:\ShadowCrystal\kaizo-knight-sim`,
   private, with knight-sim vendored under `sim/` -- see `docs/VENDOR.md`.)*
 - Repo: `D:\ShadowCrystal\knight-sim`, `main` @ `247b1ba` ("Windows
-  portability"), remote `github.com/Radi0Show/knight-sim` (public, in sync,
-  Pages live at radi0show.github.io/knight-sim/web/).
+  portability"), remote `github.com/Radi0Show/knight-sim` (public, in sync).
+  ~~Pages live at radi0show.github.io/knight-sim/web/.~~ **THAT PAGE IS 404 —
+  checked 2026-09-16. There is no GitHub Pages deployment of anything in this
+  family and no staging of any kind.** Everything a player can reach is served
+  from Cloudflare, built from `thedevice`'s `prod` branch: the kaizo build is
+  shadowcrystal.dev/DEVICE_KAIZO/, the vanilla one DEVICE_KNIGHT/. Read the
+  deployed `web/version.js` under either to see what is actually live.
 - **All 60 main suites green on this machine** (`npm run verify`, judged by
   exit code — never by grepping output). The six whole-fight sim traces live
   in `D:\tmp\knight-fullfight\`; if they go stale, regenerate per the
@@ -333,10 +338,13 @@ placeholder 10 is the dump's own number and is exempted with citation).
   support namespaced so `verify-share`'s round-trip is untouched. The main
   page gets at most a labelled link. This is the zero-regression wiring:
   the existing page's code paths don't change.
-- **K6 — Ship gate.** When it goes live: version bump in `web/version.js` +
-  `CACHE` in `web/sw.js` (add the new page to the precache list), same
-  commit; no trailer; both verifies green; commit/push only on the user's
-  word.
+- **K6 — Ship gate. DONE — IT IS LIVE.** The page is served from
+  shadowcrystal.dev (vendored into `thedevice/DEVICE_KAIZO`, built from the
+  `prod` branch on Cloudflare), with the sprite overlay and `kaizoknight.ogg`
+  on it since 43c15a9. The gate's own terms are now standing practice rather
+  than a task: version bump in `web/version.js` + `CACHE` in `web/sw.js` in the
+  same commit as any player-visible change; no trailer; both verifies green;
+  commit, push and prod promotion only on the user's word.
 - **K7 — (later, user-driven) V-B design doc**, then build.
 - **K8 — V-C oracle recreation: IN PROGRESS (user-directed, 2026-08-28).**
   The user obtained Kaizo Roaring Knight v2.3.3; it is patched, dumped and

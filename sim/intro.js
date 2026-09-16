@@ -198,9 +198,39 @@ export function createIntroScene() {
     camX: CAM_X,
     done: false,
     // The party, halted where the run left them (con 3's walkdirects).
+    //
+    // A HALTED obj_actor DOES NOT ANIMATE. IT SNAPS TO FRAME 0 AND HOLDS.
+    // obj_actor's Step, inside `auto_walk == 1 && walk == 1` (both set by its
+    // own Create, so this branch always runs for a cutscene actor):
+    //
+    //     if (v_speed == 0)
+    //     {
+    //         stopped = 1;
+    //         image_index = 0;
+    //         image_speed = 0;
+    //     }
+    //
+    // and obj_actor's Create opens with `image_speed = 0` besides, so there
+    // are two independent routes to the same value. obj_ch3_PTB02 sets
+    // image_speed on the ROARING KNIGHT and on markers — sixteen times — and
+    // never once on a party actor. They stand on frame 0 for the whole roar.
+    //
+    // THIS WAS A PLAYER-REPORTED BUG, and the mechanism is worth keeping
+    // because it is not obvious: "in the intro. the snow at susie's legs keeps
+    // appearing and disappearing" (aaser_). These three were idling at 0.2, a
+    // 20-frame loop over the four frames of spr_susie_idle_serious. There is a
+    // 3-pixel notch between Susie's boots that is OPEN on frames 1-3 and SHUT
+    // on frame 0, and the intro backdrop behind her is pixel-static snow — so
+    // the loop was chopping a hole in her legs and closing it again 1.5 times
+    // a second, and what showed through the hole was the snow. Nothing was
+    // wrong with the snow; the backdrop never changed a pixel (measured, 0
+    // changed pixels over 60 frames in her band). She was blinking, and the
+    // snow was what the blink revealed.
+    //
+    // Ralsei was already 0 — by accident, not by this reading.
     actors: {
-      kris: { x: 2356, y: 104, sprite: 'spr_krisb_idle', index: 0, speed: 0.2 },
-      susie: { x: 2310, y: 142, sprite: 'spr_susie_idle_serious', index: 0, speed: 0.2 },
+      kris: { x: 2356, y: 104, sprite: 'spr_krisb_idle', index: 0, speed: 0 },
+      susie: { x: 2310, y: 142, sprite: 'spr_susie_idle_serious', index: 0, speed: 0 },
       ralsei: { x: 2288, y: 190, sprite: 'spr_ralsei_walk_right_unhappy', index: 0, speed: 0 },
     },
     // First-run staging: created at (2350, cameray() + 100) in con 0, then

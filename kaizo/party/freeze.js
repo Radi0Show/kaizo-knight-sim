@@ -397,14 +397,31 @@ export function stepSnowgraveFreeze(state, { target } = {}) {
 
 /**
  * `merge_color(c_navy, c_white, 0.8)` — obj_frozennpc's `specialcolor`.
- * BGR channel lerp, truncated, the way GameMaker's merge_color composes.
- * PURE VISUAL: recorded on the statue record, never drawn here.
+ * BGR channel lerp, PURE VISUAL: recorded on the statue record, never drawn
+ * here.
+ *
+ * ~~truncated, the way GameMaker's merge_color composes.~~ IT DOES NOT
+ * TRUNCATE — corrected 2026-09-16. `merge_color` is, per channel,
+ * `round_half_to_even(f32(f32(c1 * f32(1 - f32(amount))) + f32(c2 * f32(amount))))`,
+ * measured on 4,969 recorded rows with zero misses (ORACLE-GROUND-TRUTH.md,
+ * 2026-09-10, gap G9). Truncation misses 1,368 and 1,843 of those rows. This
+ * helper packs BGR, which `sim/gml.js`'s `mergeColor` does not, so it stays a
+ * local function — but its arithmetic is that one's now, not Math.trunc's.
+ *
+ * WHAT IT MOVED: the red channel of this one colour, 229 -> 230 (128 and 255
+ * half way to 0.8 lands on 229.6, which no rounding model disputes; it was
+ * TRUNCATION that was throwing the 0.6 away). Packed 15060172 -> 15125708.
+ * Nothing draws it, so nothing on screen changes — the value is right now
+ * rather than merely recorded.
  */
 function mergeColor(c1, c2, amt) {
+  const f = Math.fround;
+  const k = f(amt);
+  const inv = f(1 - k);
   const ch = (c, i) => (c >> (i * 8)) & 255;
   let out = 0;
   for (let i = 0; i < 3; i++) {
-    const v = Math.trunc(ch(c1, i) + (ch(c2, i) - ch(c1, i)) * amt);
+    const v = gmlRound(f(f(ch(c1, i) * inv) + f(ch(c2, i) * k)));
     out |= (v & 255) << (i * 8);
   }
   return out >>> 0;

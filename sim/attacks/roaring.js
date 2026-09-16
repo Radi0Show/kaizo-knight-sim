@@ -39,9 +39,12 @@
 // in the roar below.
 //
 // The 282-line Draw event IS ported now (render/draw/roaring.js), along with
-// the roaring_timer 275 wind-up. NOT translated: the `do_fake_screen` finale at
+// the roaring_timer 275 wind-up — AND SO IS the `do_fake_screen` finale at
 // roaring_timer 299, which snapshots the composite into two sprites and flings
-// them apart as the screen is cut.
+// them apart as the screen is cut. This header said "NOT translated" while the
+// endStep below armed it at :951-966 and :1174-1177 and
+// render/draw/roaring.js:29 flatly said the opposite six lines into its own
+// header. Corrected 2026-09-16; of the two, the renderer's was the true one.
 
 import { spawn, destroy } from '../entity.js';
 import { lengthdirX, lengthdirY, pointDirection, pointDistance, scrApproach, gmlEq } from '../gml.js';

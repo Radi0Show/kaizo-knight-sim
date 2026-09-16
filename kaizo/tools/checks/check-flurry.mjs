@@ -579,8 +579,25 @@ function scenarioI() {
       const at1 = r.find((x) => x.col === 1);
       assert(at1 && eqRgb(at1.blend, [138, 165, 255]),
         `blue: and starts cooling on its first step (got ${JSON.stringify(at1 && at1.blend)})`);
+      // COLTIMER 15 IS THE ONE TIE IN THIS RAMP, and this expectation was the
+      // stale side of it. `merge_color(#86A2FF, c_white, 15 / 30)` puts R on
+      // exactly 67 + 127.5 = 194.5 and G on 81 + 127.5 = 208.5, and GML
+      // `round` is HALF TO EVEN, so the game paints **194 / 208 / 255**. This
+      // line said 195 / 209 / 255 — the half-UP answer — because it was
+      // written against what the sim produced rather than against the mod.
+      //
+      // THE RECORDING SETTLES IT, and it is this very object: the engine's
+      // merge_color model was validated on **2,737 obj_roaringknight_split_bullet
+      // rows of this exact expression** (Draw_0:14), zero misses, alongside
+      // 2,232 starchild rows — ORACLE-GROUND-TRUTH.md, 2026-09-10, gap G9.
+      // Half-up misses 89 of those rows. Corrected 2026-09-16 with the engine
+      // fix (knight-sim v1.0.60), which is what turned this red.
+      //
+      // The other four frames in this block (0, 1, 29, 30) are NOT ties and
+      // read the same under either model, which is exactly why one assertion
+      // went red and the rest did not — and why nothing here caught it before.
       const mid = r.find((x) => x.col === 15);
-      assert(mid && eqRgb(mid.blend, [195, 209, 255]),
+      assert(mid && eqRgb(mid.blend, [194, 208, 255]),
         `blue: the tooth is half-cooled at coltimer 15 (got ${JSON.stringify(mid && mid.blend)})`);
       const done = r.find((x) => x.col >= 30);
       assert(done && eqRgb(done.blend, [255, 255, 255]) && done.over === true,

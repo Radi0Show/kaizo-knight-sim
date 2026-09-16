@@ -290,8 +290,29 @@ const GT_FILES = ['sprites_vanilla.csv', 'sprites_kaizo.csv', 'frames_vanilla.cs
   'frames_kaizo.csv', 'drawn_vanilla.csv', 'drawn_kaizo.csv']
   .map((f) => join(SPRITE_DATA, f));
 const haveGroundTruth = GT_FILES.every((f) => existsSync(f));
-ok(haveGroundTruth, 'the data files\' own sprite tables are readable '
-  + `(${SPRITE_DATA})`);
+
+// A LOUD SKIP, NOT A FAILURE — the same contract check-oracle-schedule keeps.
+// Everything above this line is answerable from the repo alone: the packed
+// PNGs' own IHDRs against the manifest the renderer positions with. Everything
+// BELOW compares those packs against the DATA FILES' sprite tables, which live
+// in ~/knight-research and are not in any repo and never will be (CLAUDE.md
+// law 7). Asserting their presence made this check exit 1 on a fresh clone, so
+// it could not be wired into the gate without reddening every machine without
+// an oracle on it — and an unwired check guards nothing.
+//
+// The skip is LOUD because a silent one is worse than the failure: a reader
+// who sees a green gate and no such line would reasonably believe the packs
+// had been held against the real data files, which is the expensive half.
+if (!haveGroundTruth) {
+  console.log('SKIP check-sprite-frames: no data-file sprite tables on this machine');
+  console.log(`     looked in ${SPRITE_DATA}`);
+  for (const f of GT_FILES.filter((p) => !existsSync(p))) {
+    console.log(`     missing ${f.slice(SPRITE_DATA.length + 1)}`);
+  }
+  console.log('     Regenerate them with knight-research/kaizo-mod/tools (sprite tables),');
+  console.log('     THE PACKS ARE NOT COMPARED AGAINST THE REAL SPRITES WITHOUT THEM —');
+  console.log('     only against their own manifest, which is what the assertions above do.');
+}
 
 if (haveGroundTruth) {
   const SPRITES = {}; const FRAMES = {}; const DRAWN = {};

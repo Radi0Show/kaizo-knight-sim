@@ -411,8 +411,14 @@ export function noelleSpellCost(spellId, weapon, maxtension = 100) {
  *
  * `actsimul* = 0` on every companion entry: none of these act simultaneously.
  */
-export const ACT_N_ACTION = { name: 'N-Action', descb: '', simul: 0 };
-export const ACT_HOLD_BREATH = { name: 'HoldBreath', descb: '', simul: 0 };
+// `descb` IS A SPACE, NOT THE EMPTY STRING — scr_monster_actreset.gml:8 sets
+// `global.actdesc[arg0][__fj] = " "`, and scr_monstersetup only ever overwrites
+// index 0, so an undescribed row keeps the reset's space. The engine has it
+// right at sim/spells.js:146; this side carried the empty string and disagreed
+// with the seam it mirrors. Nothing rendered differently — render/menu.js:340
+// splits on '#' and a space inks nothing — which is why it survived.
+export const ACT_N_ACTION = { name: 'N-Action', descb: ' ', simul: 0 };
+export const ACT_HOLD_BREATH = { name: 'HoldBreath', descb: ' ', simul: 0 };
 
 /**
  * CHAR-INDEXED act table for monstertype 104 (index 0 unused, as global.char
@@ -422,10 +428,10 @@ export const ACT_HOLD_BREATH = { name: 'HoldBreath', descb: '', simul: 0 };
 export const KAIZO_ACTS_BY_CHAR = {
   1: [
     { name: 'Check', descb: 'Useless#analysis' },
-    { name: 'HoldBreath', descb: '' },
+    { name: 'HoldBreath', descb: ' ' },
   ],
-  2: [{ name: 'S-Action', descb: '', simul: 0 }],
-  3: [{ name: 'R-Action', descb: '', simul: 0 }],
+  2: [{ name: 'S-Action', descb: ' ', simul: 0 }],
+  3: [{ name: 'R-Action', descb: ' ', simul: 0 }],
   4: [ACT_N_ACTION],
 };
 

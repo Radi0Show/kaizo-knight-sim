@@ -305,9 +305,11 @@ section('B — Draw_0:1058-1095, painted: each slot shows its OWN character\'s a
 section('C — scr_monstersetup:1869-1880 + Step_0:933-946: no Kris, three HoldBreaths');
 {
   deep(kaizoActsForRoster([2, 3, 4]),
-    [[{ name: 'HoldBreath', descb: '', simul: 0 }],
-      [{ name: 'HoldBreath', descb: '', simul: 0 }],
-      [{ name: 'HoldBreath', descb: '', simul: 0 }]],
+    // descb is a SPACE — scr_monster_actreset.gml:8 writes " " and the 104
+    // block never overwrites actdesc[1]. See check-act-tables section D.
+    [[{ name: 'HoldBreath', descb: ' ', simul: 0 }],
+      [{ name: 'HoldBreath', descb: ' ', simul: 0 }],
+      [{ name: 'HoldBreath', descb: ' ', simul: 0 }]],
     'a Kris-less roster replaces slot 0 for ALL THREE companions');
   deep(kaizoActsForRoster([1, 4, 0]), [KAIZO_ACTS_BY_CHAR[1], KAIZO_ACTS_BY_CHAR[4]],
     'the Weird Route has Kris, so it keeps N-Action (the gate is membership)');

@@ -107,6 +107,8 @@ const SUITES = [
 ['verify-render-smoke.mjs', 'the renderer survives a real fight without throwing'],
   ['verify-rudebuster-layer.mjs', 'Rude Buster draws at Susie’s depth, with no gap'],
   ['verify-charbox-band.mjs', 'the battle band’s seams are bcolor, not c_navy'],
+  ['verify-intro-actors.mjs', 'the halted intro party hold frame 0 — the “flickering snow”'],
+  ['verify-mergecolor.mjs', 'merge_color — a float32 mix, rounded half-to-even'],
 ['verify-touch.mjs', 'the touch binder — pad sectors, latch, two thumbs'],
 ['verify-bindings.mjs', 'rebindable controls — three profiles, detection, capture'],
 ['verify-windowsize.mjs', 'SMALL is the window size obj_time would pick'],

@@ -369,8 +369,26 @@ console.log('L5 — what a mote is');
     && !before.includes(e));
   ok(motes.length === 2, `repeat (2) — two obj_particle_generic per emit (got ${motes.length})`);
   const hero = st.kaizo.roster[0];
+  // TWO ASSERTIONS, AND THE SECOND IS THE ONE THAT CAN FAIL.
+  //
+  // The identity test below proves the mote carries THE module's constant and
+  // not a copy — worth having, because `image_blend` is an array and a
+  // per-mote clone would drift. But on its own it CERTIFIES ITSELF: it
+  // compares an imported constant against the value that constant produced, so
+  // `GLOOM_BLEND = [99, 99, 99]` passed it. Verified by doing exactly that.
+  //
+  // So the channels are asserted as LITERALS, derived from the measured model
+  // rather than from the module: `merge_color(c_blue, #268CAC, 0.5)` is
+  // `round_half_to_even(f32(f32(c1 * f32(1 - f32(a))) + f32(c2 * f32(a))))`
+  // per channel (ORACLE-GROUND-TRUTH.md, gap G9 — 4,969 rows, zero misses), so
+  // (0,0,255) and (38,140,172) at 0.5 give 19, 70 and 213.5 -> **214**, the
+  // even neighbour. This is the assertion that would have caught the
+  // truncated 213 the module carried until 2026-09-16.
   ok(motes.every((m) => m.image_blend === GLOOM_BLEND),
-    'each carries image_blend = kaizo_gloomcolor()');
+    'each carries THE module constant, not a per-mote copy');
+  ok(GLOOM_BLEND[0] === 19 && GLOOM_BLEND[1] === 70 && GLOOM_BLEND[2] === 214,
+    'kaizo_gloomcolor() is merge_color(c_blue, #268CAC, 0.5) = 19/70/214 — '
+    + `half-to-even on the .5 blue channel (got ${GLOOM_BLEND.join('/')})`);
   ok(motes.every((m) => m.sprite_index === 'spr_whitepx' && m.image_xscale === 2),
     'sprite_index = spr_whitepx at image_xscale 2');
   ok(motes.every((m) => m.image_yscale >= 8 && m.image_yscale <= 12

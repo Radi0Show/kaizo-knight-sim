@@ -249,8 +249,15 @@ export const knightTunnelSlasher = {
     // still holding its create value.
     //
     // The same trick appears at obj_knight_slasher_Step_0.gml:29 as
-    // `state = "slash";`. That object is not modelled by this sim, so that
-    // one is unimplemented — see the table in sim/attacks/nbc.js.
+    // `state = "slash";`. THAT ONE IS NOT UNIMPLEMENTED — THERE IS NOTHING TO
+    // IMPLEMENT. obj_knight_slasher has exactly one creator in the whole dump,
+    // obj_dbulletcontroller_Step_0.gml:2073 inside `if (type == 100)`, and
+    // nothing anywhere assigns `type = 100` — checked mechanically over all
+    // 7,603 vanilla code entries, and the mod does not add one either. The
+    // object never exists, in the game or in the mod, so the inserted line
+    // cannot fire. sim/attacks/nbc.js:132-150 carries the proof. Calling it
+    // "unimplemented" read as work owed, which is the opposite of what the
+    // measurement says.
     if (nbcOn(state)) e.behavior = 'slash';
 
     if (e.behavior === 'slash') {

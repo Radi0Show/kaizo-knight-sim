@@ -245,7 +245,15 @@ const RECORDINGS = [
   },
   {
     tag: '_cs_splitter1', entry: 'atk_Splitter1', raw: 'cs_splitter1-raw', sideb: false,
-    what: 'the teeth ramp (G9 rounding): obj_roaringknight_split_bullet 4,066 rows',
+    // G9 IS CLOSED (2026-09-16). This lock is what measured merge_color's
+    // model in the first place, and with the engine fixed (half-to-even over
+    // a float32 mix — knight-sim v1.0.60) obj_roaringknight_split_bullet now
+    // reports NO colour-column disagreement here at all: the only difference
+    // left on it is a POPULATION one, three extra sim frames of coltimer
+    // (69/70/71). The lock is kept under its own name because it is still the
+    // teeth ramp and still the best colour evidence on this family — but the
+    // rounding it was named for is no longer why this launch diverges.
+    what: 'the teeth ramp (G9 CLOSED): obj_roaringknight_split_bullet 4,066 rows',
   },
 ];
 

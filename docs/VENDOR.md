@@ -5,7 +5,7 @@ tools/ are a snapshot of knight-sim; never hand-edit them here (see the
 script's header and CLAUDE.md).
 
 - source: D:\ShadowCrystal\knight-sim
-- commit: d16db14502e3aca28af840a01728ed9dcdfc7cf4
+- commit: 36aa2235b0c1fd80cae513651591a88e1ce81550
 - vendored: 2026-09-16
 - the mirrored directories were clean in the source tree
 
@@ -27,6 +27,21 @@ gate can see, and the gate says so: `_tok3` trace AND bullets byte-exact
 (12637 / 13001 frames), `_rev1` still first diverging at trace f12492 /
 bullets f12499. The entries below are kept as the record of WHY each seam
 exists; they are history now, not a to-do list.
+
+**MEASURED 2026-09-16, so it is a fact and not a claim: NOTHING IN THE MIRROR
+IS AHEAD OF knight-sim ANY MORE.** All 110 `.js` files under `sim/`, `render/`
+and `input/` were read on both sides and compared byte for byte — 110
+identical, 0 differing, 0 missing. So every "is AHEAD of the snapshot above —
+a labelled stand-in" heading below is describing a state that no longer
+exists, including the four `sim/damage.js` / `items.js` / `spells.js` /
+`dmgnumbers.js` files and `render/title.js` and `render/menu.js`. Re-run that
+comparison rather than trusting this paragraph the moment anything is
+hand-edited here — which law 6 forbids, which is why it stays true.
+
+THE ONE LIVE EXCEPTION IS `kaizo-lane4-seams`, immediately below, and it is a
+deliberate ABSENCE rather than a stand-in: the branch is intact in knight-sim
+and this repo is deliberately WITHOUT it, because merging it cost 3,763 frames
+of the gate.
 
 **`kaizo-lane4-seams` (2f3e932) IS NOT IN THAT RELEASE, and this repo's
 `sim/spells.js` is deliberately WITHOUT it.** It was merged, vendored and
@@ -485,10 +500,25 @@ spelltimer, snd_hurt1/snd_laz_c cues, render nine-slice + split-box tint at
 build time); kaizo/ scenes that duplicate any of that are this repo's own
 to reconcile.)
 
-## Pending port-backs — NINE AUDIO FILES (2026-09-12, lane 3)
+## ~~Pending port-backs~~ — CLOSED: NINE AUDIO FILES (2026-09-12, lane 3)
+
+**THIS SECTION'S OWN EXIT CONDITION IS MET. It is history, not a queue.**
+`kaizo-audio-seams` is committed (knight-sim 786f27b) and merged (b2b999a),
+and the re-vendor happened (kaizo 13edbc1). All nine files and their nine
+`index.json` lines are present in BOTH `D:\ShadowCrystal\knight-sim\assets\
+audio\` and this mirror — checked file by file, 2026-09-16. The "Re-vendor
+once the branch is merged and this section goes away" instruction at the
+bottom has been carried out; the prose below is left as the record of what
+those nine files are and where each came from, because that provenance is
+not written down anywhere else.
+
+The section stayed on a **"Pending port-backs"** heading for four days after
+its own condition was met, which is the failure mode this file is most prone
+to: a heading is read before its body, and a stale one turns finished work
+back into an open task for whoever reads it next.
 
 `assets/audio/` here carries **nine sound files and nine `index.json` lines
-that the vendored snapshot above does not**: `snd_icespell.ogg`,
+that the vendored snapshot did not at the time**: `snd_icespell.ogg`,
 `snd_ghostappear.ogg`, `snd_great_shine.ogg`, `snd_spell_pacify.ogg` (copied
 unmodified from the oracle build's loose audio) and `snd_knight_laser.wav`,
 `snd_knight_beam.wav`, `snd_rocket_bc.wav`, `snd_leaf_dodge.wav`,
@@ -505,10 +535,10 @@ these nine `index.json` lines, and the v1.0.50 -> **v1.0.51** bump in
 `web/version.js` + `CACHE` in `web/sw.js`. The files here are byte-identical
 to the ones there (`cmp` on all ten, index.json included).
 
-A full `npm run vendor:engine` was deliberately NOT run: the mirrored
-directories in this repo are dirty with several other lanes' stand-ins right
-now, and the mirror deletes before it copies. Re-vendor from knight-sim once
-`kaizo-audio-seams` is merged and this section goes away.
+A full `npm run vendor:engine` was deliberately NOT run AT THE TIME: the
+mirrored directories in this repo were dirty with several other lanes'
+stand-ins, and the mirror deletes before it copies. **That re-vendor has since
+happened** (kaizo 13edbc1, and again at v1.0.59), so the caveat is spent.
 
 Gates after the mirror: `_tok3` trace AND bullets byte-exact (12637 / 13001
 frames), `_rev1` unmoved at trace f12492 / bullets f12499. knight-sim's own

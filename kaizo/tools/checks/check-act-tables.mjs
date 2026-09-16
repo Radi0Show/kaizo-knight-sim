@@ -122,8 +122,11 @@ section('A — scr_monstersetup:1843-1881, the char-keyed table (noelle.js KAIZO
     'char 1 KRIS: canact[0] Check, canact[1] HoldBreath');
   eq(KAIZO_ACTS_BY_CHAR[CHAR_KRIS][0].descb, 'Useless#analysis',
     'canact[0] actdesc is "Useless#analysis"');
-  eq(KAIZO_ACTS_BY_CHAR[CHAR_KRIS][1].descb, '',
-    'canact[1] HoldBreath has NO actdesc — the 104 block never writes actdesc[1]');
+  // "never written" is not "empty". scr_monster_actreset.gml:8 seeds every row
+  // with " " before scr_monstersetup runs, and the 104 block writes actdesc[0]
+  // only — so the row the block skips keeps the RESET's space.
+  eq(KAIZO_ACTS_BY_CHAR[CHAR_KRIS][1].descb, ' ',
+    'canact[1] HoldBreath keeps the reset SPACE — the 104 block never writes actdesc[1]');
   deep(KAIZO_ACTS_BY_CHAR[CHAR_SUSIE].map((a) => a.name), ['S-Action'],
     'char 2 SUSIE: canactsus[0] "S-Action" — the GAME\'s name, byte-identical in v105');
   deep(KAIZO_ACTS_BY_CHAR[CHAR_RALSEI].map((a) => a.name), ['R-Action'],
@@ -192,13 +195,25 @@ section('C — Ralsei and Noelle DO have an act row; asserting it by name');
 // ── D. THE ENGINE DEFAULT IS ALREADY THE MOD'S TABLE ───────────────────────
 section('D — sim/spells.js ACTS is the 104 block verbatim; kaizo must never edit it');
 {
+  // A ROW THE 104 BLOCK LEAVES UNDESCRIBED KEEPS A SPACE, NOT AN EMPTY STRING.
+  // scr_monster_actreset.gml:8 is `global.actdesc[arg0][__fj] = " "`, and
+  // scr_monstersetup writes only `actdesc[myself][0]` — so every other row
+  // still carries the reset's space. sim/spells.js:146 has it right
+  // (ACT_ROW_DEFAULT.descb is a space), and upstream pins it in a WIRED, green
+  // suite: knight-sim tools/verify-actmodel.mjs:75, "actdesc defaults to a
+  // SPACE".
+  //
+  // This check asked for the empty string and had therefore NEVER passed —
+  // spells.js already held the space when the check was written. A born-red
+  // assertion, not a regression, which is exactly why it sat unwired and
+  // unenforced for its whole life. Fixed and WIRED 2026-09-16.
   deep(ACTS, [
     [
       { name: 'Check', descb: 'Useless#analysis' },
-      { name: 'HoldBreath', descb: '' },
+      { name: 'HoldBreath', descb: ' ' },
     ],
-    [{ name: 'S-Action', descb: '' }],
-    [{ name: 'R-Action', descb: '' }],
+    [{ name: 'S-Action', descb: ' ' }],
+    [{ name: 'R-Action', descb: ' ' }],
   ], 'the vendored engine\'s ACTS matches scr_monstersetup\'s 104 block for slots 0..2');
   eq(ACTS.length, 3, 'three slots — the vanilla fight\'s fixed party');
   ok(!JSON.stringify(ACTS).includes('N-Action'),

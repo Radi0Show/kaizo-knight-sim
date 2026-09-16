@@ -1936,9 +1936,15 @@ boot('starting…');
 // moment anything else does.
 //
 // MEASURED on this driver and on knight-sim's identical loop, in a real browser
-// with a virtual monitor standing in for the compositor. knight-sim's numbers —
-// kaizo/tools/checks/check-rafloop.mjs carries this page's own, and runs the
-// same loop headlessly:
+// with a virtual monitor standing in for the compositor. The vendored
+// tools/verify-rafloop.mjs guards THIS file: its findDriver() tries web/main.js
+// then web/kaizo.js, and this repo has no main.js, so the engine suite's own
+// rafloop check reads the driver below. (There WAS a kaizo-only fork of it,
+// deleted 2026-09-16 — it was born stale, sliced the function body with LF-only
+// markers against a CRLF checkout, and reported three phantom offences: two
+// prose comments and the one legitimate call inside scheduleFrame(). knight-sim
+// had fixed exactly that bug fifteen minutes before the fork was committed.)
+// The numbers:
 //
 //   before a tab switch      60.1 frame()/s    1 live rAF(frame) chain
 //   after one switch        490.5 frame()/s    8 chains

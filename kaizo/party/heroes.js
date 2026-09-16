@@ -209,11 +209,17 @@ function stepHero(h, spec, down) {
  * `c_blue` is RGB(0, 0, 255); GML's `#RRGGBB` literal is RGB, so #268CAC is
  * (38, 140, 172). Half way is (19, 70, 213.5).
  *
- * THE HALF-PIXEL IS AMBIGUOUS AND PURELY VISUAL: GameMaker's merge_colour
- * truncates its channels while sim/gml.js's `mergeColor` rounds, so the blue
- * channel is 213 in the engine and 214 here. Recorded rather than special-
- * cased — the sim's helper is the one 60 suites are pinned to, and one unit
- * of blue in a tint capped at 30% opacity changes nothing that is measured.
+ * ~~THE HALF-PIXEL IS AMBIGUOUS AND PURELY VISUAL: GameMaker's merge_colour
+ * truncates its channels.~~ IT DOES NOT TRUNCATE, and the half-pixel is no
+ * longer ambiguous — corrected 2026-09-16. `merge_color` rounds HALF TO EVEN
+ * over a float32 mix (ORACLE-GROUND-TRUTH.md, gap G9: 4,969 recorded rows,
+ * zero misses; truncation misses 1,368 and 1,843 of them). 213.5 goes to the
+ * even neighbour, so the blue channel is **214** — which is what this line
+ * already produced, because `sim/gml.js`'s `mergeColor` rounded half-UP and
+ * half-up agrees with half-to-even on this particular .5. Right answer,
+ * wrong reason; the engine helper carries the measured model as of knight-sim
+ * v1.0.60, and `kaizo/party/gloom.js`'s constant — which truncated to 213 —
+ * was corrected to match.
  */
 export const GLOOM_COLOR = mergeColor([0, 0, 255], [38, 140, 172], 0.5);
 

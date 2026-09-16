@@ -51,10 +51,15 @@ recordings in `~/knight-research/kaizo-mod/fullfight/`:
   v1.0.22). It must stay exact.
 - `_rev1` — revive keep-alive (the recorder now runs scr_revive after the
   HP pin), the THREE-CHARACTER fight, adopted 2026-09-09: the FIDELITY
-  reference, and its front is the metric now. 2026-09-09: trace exact to
-  f8698, bullets to f8712; the front is the fight's one SPELL turn (Susie's
-  Rude Buster at the f8556 menu — obj_spellphase and the enemy picker; the
-  ledger's "2026-09-09 — _rev1 ADOPTED" has the whole diagnosis).
+  reference, and its front is the metric now. **2026-09-16: trace exact to
+  f12492, bullets to f12499.** The front is the SPLITSLASH's `inv` column —
+  obj_roaringknight_splitslash's Other_15 sets `global.inv = -1` one frame
+  early, and the rotated-rect soul-x window 313..320 has to EXCLUDE 320. It
+  needs more atk_Splitter2 pose receipts from the recording, which exists.
+  (The old front — the fight's one SPELL turn, Susie's Rude Buster at the
+  f8556 menu, obj_spellphase and the enemy picker — CLOSED at 867c4cd, and
+  four commits walked the front from f8698 past it to here. The ledger's
+  "2026-09-09 — _rev1 ADOPTED" has that diagnosis; it is history now.)
 Both verify in one `npm run verify:fullfight`; the regen reads the keep-alive
 mode off each recording's party receipt. Set `KAIZO_SIM_OUT=<dir>` when two
 regens may run at once — the default output folder is shared.
@@ -159,10 +164,15 @@ know which is which.
 - Sim traces land in `%TEMP%/kaizo-fullfight/` (`KAIZO_SIM_OUT` overrides).
 - `core.autocrlf` is true system-wide; this clone sets it false locally, and
   `.gitattributes` pins `* text=auto eol=lf`, which wins for text files either way.
-- **A fresh clone has no `kaizo/assets/sprites/`** — that overlay is publish-gated
-  by its own `.gitignore` (EnderCat8's art). Regenerate it with
-  `node kaizo/tools/pack-kaizo-sprites.mjs` before the gates; `verify:kaizo`'s
-  check-sprites hard-exits without it.
+- **The kaizo sprite overlay SHIPS — a fresh clone has all 534 files.** It was
+  publish-gated by its own `.gitignore` until 43c15a9 (v0.1.23, 2026-09-16),
+  which tracked the whole pack and deleted every ignore rule; `kaizo/assets/
+  .gitignore` no longer exists and the root `.gitignore`'s blanket `*.png`
+  block is gone. `node kaizo/tools/pack-kaizo-sprites.mjs` REBUILDS it from the
+  mod's data file and is no longer a prerequisite for the gates. What is
+  unchanged is law 7: no `data.win`, `game.ios`, `.xdelta`, GML dump or oracle
+  build enters this repo, which is a research-path rule and never was an art
+  rule.
 - Dev server: `npm run serve` on **8178** (knight-sim uses 8177 — a different
   origin, so the two never share a cache or a settings key locally).
 - One repo = one session (`D:\ShadowCrystal\WORKSPACES.md`). Open sessions
