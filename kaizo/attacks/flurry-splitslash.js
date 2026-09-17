@@ -90,7 +90,7 @@ import { scrBulletInit, scrBulletInherit } from '../../sim/bullets/regularbullet
 // obj_marker and scr_dark_marker are UNCHANGED by the mod — one shared source,
 // never a private copy (the same rule this file already applies to the palette).
 import { scrDarkMarker } from '../../sim/attacks/splitslash.js';
-import { QUICKSLASH_SHAPE, scrPreciseHitRotatedRect } from '../../sim/masks.js';
+import { QUICKSLASH_MASK, collisionRectanglePrecise } from '../../sim/masks.js';
 import { splitGrowtangle } from './flurry-split-growtangle.js';
 import { gmlChoose, gmlRandom, gmlRandomRange, gmlRandomsign, gmlIrandom } from '../../sim/rng.js';
 import { afterimage } from '../../sim/fx.js';
@@ -521,15 +521,52 @@ export const splitslash = {
   /**
    * The contact test: KAIZO `if (active == 1 && scr_precise_hit(2))`
    * (Other_15 line 1) — vanilla passed 3. scr_precise_hit halves the arg, so
-   * this is a 2x2 box around the soul's CENTRE (x+10, y+10) against the
-   * cut's rotated, scaled bbox (sim/masks.js).
+   * this is `collision_rectangle(hx - 1, hy - 1, hx + 1, hy + 1, id, true,
+   * false)` about the soul's CENTRE (x + 10, y + 10).
+   *
+   * THE PROBE IS RASTERISED, NOT OVERLAPPED — and that is the whole of the
+   * _rev1 f12492 front. `collision_rectangle` does not ask whether two shapes
+   * intersect. sim/masks.js:442 `collisionRectanglePrecise` is the runner's
+   * own rule, CALIBRATED on two oracle sweeps (15,795 unrotated points, 0
+   * mismatches; 14,884 rotated-children points, 12 residual): rint the float
+   * intersection bounds half-to-even, walk the integer cells inclusive,
+   * sample each cell CENTRE at +0.5 about an rint anchor, floor-inverse into
+   * the mask. This site used `scrPreciseHitRotatedRect` instead — a
+   * continuous OBB-vs-AABB separating-axis test, which is a DIFFERENT
+   * QUESTION — only because a RotatedRect sprite stores no bitmap.
+   *
+   * IT WAS THE SPOT-CHECK THAT DOCBLOCK ASKED FOR AND NOBODY RAN: "the sweep
+   * did not cover rotated targets; a rotated scr_precise_hit target should
+   * get its own spot-check" (sim/masks.js:439-441).
+   *
+   * At _rev1 f12492 the continuous test lets a 0.237 px sliver of the probe's
+   * CORNER count as contact. The runner never samples there: the nine cell
+   * centres inverse-map to mask rows 25/25/24 — v = -2.4209, -3.4203,
+   * -4.4197 against the ink band v in [-2, +4] — a clean 0.4209 px miss. One
+   * frame later they map to rows 27/27/26 (v = +1.5767, +0.5773, -0.4221)
+   * and the strike lands, which is where the recording puts it.
+   *
+   * A RotatedRect mask has no bitmap, so it walks QUICKSLASH_MASK — the same
+   * bbox as a solid grid, already built at sim/masks.js:1045 for the graze
+   * path. NOTHING ELSE MOVED: not the mask, not the origin, not the GML
+   * literal (still n = 2 -> +-1), not the read timing. Across 76 cut-pose
+   * windows and 26,002 frames of _tok3 and _rev1 this flips exactly ONE
+   * active-window verdict, and it is f12492. Both _tok3 strikes survive —
+   * f11471 is the tightest keep in either recording at 0.617 px.
+   *
+   * THE VANILLA SITE (sim/attacks/splitslash.js:474, n = 3) IS UNTOUCHED and
+   * deliberately so: sim/ here is a vendored snapshot (law 6). The same
+   * argument applies to it, and retiring scrPreciseHitRotatedRect belongs in
+   * knight-sim behind its own suites and six vanilla recordings.
    */
   collides(e, heart, state) {
     // A scene that REPLAYS contacts from a recording must suppress the
     // computed one, or it gets both.
     if (state && state.replayContacts) return false;
     if (e.active !== true && e.active !== 1) return false;
-    return scrPreciseHitRotatedRect(heart, e, QUICKSLASH_SHAPE, 2);
+    const hx = heart.x + 10;
+    const hy = heart.y + 10;
+    return collisionRectanglePrecise(hx - 1, hy - 1, hx + 1, hy + 1, e, QUICKSLASH_MASK);
   },
 
   other15(e, state) {

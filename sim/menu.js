@@ -86,16 +86,30 @@ function recordItem(state, c, slot, target) {
   // The item leaves the snapshot NOW — that is what cancel restores.
   const id = takeItem(state, slot, bagOf(state));
   if (id === null) return null;
-  state.charaction[c] = 4;
-  // `global.faceaction[global.charturn] = 3` — scr_itemconsumeb:3, again
-  // beside the charaction. Same rule as the spell.
-  setFace(state, c, FACE_ITEM);
 
-  // `_tensionhealed`: applied here, never queued.
+  // `_tensionhealed`: applied here, never queued — AND THE POSE IS NOT ITS TO
+  // SET. The TP branch's whole body is scr_tensionheal, the healanim,
+  // scr_itemshift_temp and scr_nexthero; `global.faceaction` and
+  // `global.charaction` appear in none of them. Both writes live only inside
+  // `scr_itemconsumeb`, which is the `!_tensionhealed` ELSE — the comment
+  // below named that function correctly and then sat above the branch anyway.
+  //
+  // Setting the pose here stranded the character in `itemready` for the rest
+  // of the turn. `charactionOf` reads the QUEUES, and a TP item queues
+  // nothing, so obj_spellphase's alarm0 never counted them, `spelltimer` was
+  // never armed, and the one line that clears the face — heroes.js:199,
+  // `if (spec.spellframes > 0) h.faceaction = FACE_IDLE` — only runs on the
+  // way out of state 2/4. Reported from play: "when using the TensionMax [they]
+  // will keep having the Sprite 1 or getting ready to take out an item".
   if (ITEMS[id]?.kind === 'tension') {
     applyItem(state, id, target);
     return ITEMS[id]?.name ?? 'Item';
   }
+
+  state.charaction[c] = 4;
+  // `global.faceaction[global.charturn] = 3` — scr_itemconsumeb:3, again
+  // beside the charaction. Same rule as the spell.
+  setFace(state, c, FACE_ITEM);
 
   state.pendingItem = state.pendingItem ?? [];
   state.pendingItem[c] = { id, target };

@@ -17,7 +17,7 @@ import { makeInputTable } from '../../../input/state.js';
 import { soul } from '../../../sim/soul.js';
 import { battlebox, settleBox } from '../../../sim/battlebox.js';
 import { gmlCreate, gmlRandom } from '../../../sim/rng.js';
-import { QUICKSLASH_SHAPE, scrPreciseHitRotatedRect } from '../../../sim/masks.js';
+import { QUICKSLASH_MASK, collisionRectanglePrecise } from '../../../sim/masks.js';
 
 import { boxsplitterAttack } from '../../../kaizo/attacks/flurry-boxsplitter-attack.js';
 import { splitslash } from '../../../kaizo/attacks/flurry-splitslash.js';
@@ -417,11 +417,21 @@ function catchScenario({ label, sideb = false, defend = false, hp0, expectHp0, e
 // ── G: scr_precise_hit tightened 3 -> 2 ────────────────────────────────────
 function scenarioG() {
   const bar = { x: 320, y: 170, image_xscale: 1, image_yscale: 2, image_angle: 1.5 };
+  // THE DISCRIMINATOR HAS TO BE FOUND ON THE ROUTE collides() ACTUALLY TAKES.
+  // This swept the continuous OBB test while collides() now walks the
+  // runner's rasterised collision_rectangle (sim/masks.js:442) — so it picked
+  // a dy the old geometry called 3-only and the new one hits with both, and
+  // the assertion below went red on a point that no longer means anything.
+  // Same primitive, same mask, same n on both sides now.
+  const preciseHitRect = (heart, n) => collisionRectanglePrecise(
+    heart.x + 10 - n / 2, heart.y + 10 - n / 2,
+    heart.x + 10 + n / 2, heart.y + 10 + n / 2, bar, QUICKSLASH_MASK,
+  );
   let found = null;
   for (let dy = -30; dy <= 30 && !found; dy += 0.25) {
     const heart = { x: 320 - 10, y: 170 - 10 + dy };
-    const hit3 = scrPreciseHitRotatedRect(heart, bar, QUICKSLASH_SHAPE, 3);
-    const hit2 = scrPreciseHitRotatedRect(heart, bar, QUICKSLASH_SHAPE, 2);
+    const hit3 = preciseHitRect(heart, 3);
+    const hit2 = preciseHitRect(heart, 2);
     if (hit3 && !hit2) found = { heart, dy };
   }
   assert(found !== null,

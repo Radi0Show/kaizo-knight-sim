@@ -51,15 +51,34 @@ recordings in `~/knight-research/kaizo-mod/fullfight/`:
   v1.0.22). It must stay exact.
 - `_rev1` — revive keep-alive (the recorder now runs scr_revive after the
   HP pin), the THREE-CHARACTER fight, adopted 2026-09-09: the FIDELITY
-  reference, and its front is the metric now. **2026-09-16: trace exact to
-  f12492, bullets to f12499.** The front is the SPLITSLASH's `inv` column —
-  obj_roaringknight_splitslash's Other_15 sets `global.inv = -1` one frame
-  early, and the rotated-rect soul-x window 313..320 has to EXCLUDE 320. It
-  needs more atk_Splitter2 pose receipts from the recording, which exists.
-  (The old front — the fight's one SPELL turn, Susie's Rude Buster at the
-  f8556 menu, obj_spellphase and the enemy picker — CLOSED at 867c4cd, and
-  four commits walked the front from f8698 past it to here. The ledger's
-  "2026-09-09 — _rev1 ADOPTED" has that diagnosis; it is history now.)
+  reference. **2026-09-16: CLOSED. Trace AND bullets byte-exact over the
+  whole fight, 12,637 / 13,001 frames.** Both pairs are one-to-one and both
+  must stay that way; there is no first-divergence frame left to quote.
+  The last front was the SPLITSLASH's `inv` column at f12492 (bullets
+  f12499), and it was NOT what it looked like. The window was correctly
+  placed and correctly sized; `collides()` was asking the wrong QUESTION —
+  a continuous OBB overlap where `collision_rectangle(..., prec = true)` is
+  a RASTERISED probe. sim/masks.js:442 `collisionRectanglePrecise` already
+  held the runner's calibrated rule (15,795 unrotated + 14,884 rotated
+  oracle points), and its own docblock had asked for exactly this
+  spot-check: "the sweep did not cover rotated targets". Routing the site
+  through it flipped ONE verdict in 26,002 frames. No constant was fitted,
+  nothing about the mask, the origin, the GML literal or the read timing
+  moved. The ledger's "2026-09-16 — THE _rev1 FRONT f12492" block has the
+  full diagnosis, including the two hypotheses it killed on the way.
+  (The two earlier fronts — the SPELL turn at f8556, CLOSED at 867c4cd, and
+  the whole-pixel soul mask at f8906, CLOSED at b8d529f — are history.)
+
+  WHAT THE METRIC IS NOW. With both Normal-Route recordings one-to-one, the
+  first-divergence number no longer moves and cannot be the project's one
+  number. The open fidelity questions are the ones the byte gate has never
+  been able to see: `check-colours-sheet` (still red — obj_particle_generic
+  and obj_fake_gt unmodelled, plus a depth gap), and the WEIRD ROUTE, for
+  which no gateable recording exists at all — `fullfight/` is Normal Route
+  on both pairs, so every B-Side mechanism is held by dump-derived
+  positive assertions only. Recording a flag[456] save is the next real
+  measurement; budget Frames/20 + 60 s and stage it outside `traces/` and
+  `fullfight/`.
 Both verify in one `npm run verify:fullfight`; the regen reads the keep-alive
 mode off each recording's party receipt. Set `KAIZO_SIM_OUT=<dir>` when two
 regens may run at once — the default output folder is shared.

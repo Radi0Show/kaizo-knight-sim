@@ -77,6 +77,7 @@ const SUITES = [
   ['verify-items.mjs', 'items — 12 slots, chapter 3 heal values'],
   ['verify-fightbar.mjs', 'FIGHT bar — schedule, window, one-button scoring'],
   ['verify-itemmenu.mjs', 'item menu — the 2x6 grid, pages, clamped cursor'],
+  ['verify-itempose.mjs', 'the item pose — TP items do not pose, every other item does'],
   ['verify-spells.mjs', 'MAGIC and ACT — lists, TP costs, HoldBreath'],
   ['verify-spellphase.mjs', 'obj_spellphase — a caster’s turn holds the bar'],
   ['verify-dmgnumbers.mjs', 'damage numbers + impacts — stack, squash, bounces'],
