@@ -41,6 +41,7 @@ import { createState, stepFrame } from '../../../sim/index.js';
 import { spawn } from '../../../sim/entity.js';
 import { gmlCreate } from '../../../sim/rng.js';
 import { gmlRound } from '../../../sim/gml.js';
+import { VC_KNIGHT } from '../../versions/vc-script.js';
 import { MAX_TENSION } from '../../../sim/tension.js';
 import { castSpell } from '../../../sim/spells.js';
 import { buildKaizoScene } from '../../scenes/kaizo-fight.js';
@@ -120,8 +121,13 @@ section('IceShock — the live path: menu -> attackpress delay -> seam -> obj_ic
   press(s, 'right');                        // MAGIC
   press(s, 'confirm');
   assertEq(s.menu.submenu, 'magic', 'MAGIC grid');
-  press(s, 'down');                         // 0 -> 2, IceShock
-  assertEq(s.menu.gridIndex, 2, 'cursor on IceShock');
+  // THE FIRST ROW IS N-ACTION, NOT A SPELL. scr_spellmenu_setup builds the
+  // caster's ACT rows ahead of the spells for anyone who is not Kris, so
+  // Noelle's grid is [N-Action, Heal Prayer, SleepMist, IceShock, SnowGrave]
+  // and IceShock is at 3, not 2. Two columns, so down is +2 and right is +1.
+  press(s, 'down');                         // 0 -> 2, SleepMist
+  press(s, 'right');                        // 2 -> 3, IceShock
+  assertEq(s.menu.gridIndex, 3, 'cursor on IceShock');
   const before = draws(s);
   press(s, 'confirm');
   // ICESHOCK TARGETS AN ENEMY, so picking it off the grid does not commit it:
@@ -325,11 +331,14 @@ section('X-Slash — Step_0:980-1033, Alarm_4');
   const s = bare({ seed: 61 });
   const at = statFor(s, 0).at;
   let red = 0.15 + (0.18 - 0.15) * 1.25;
-  const want = Math.ceil(Math.ceil(gmlRound((at * 160) / 20 - 0) * red) * 2);
+  // , read from the version record rather than typed:
+  // this line held a literal 0 and so agreed with the vanilla DF the sim
+  // was wrongly using, which is how a wrong number stayed green.
+  const want = Math.ceil(Math.ceil(gmlRound((at * 160) / 20 - VC_KNIGHT.df * 3) * red) * 2);
   assertEq(xslashDamage(s), want, `_xslashdmg = ceil(ceil(round(at*160/20 - df*3) * red) * 2) = ${want} at dr 0.18`);
   s.knight.damagereduction = 0.9;
   red = 1.05;
-  assertEq(xslashDamage(s), Math.ceil(Math.ceil(gmlRound((at * 160) / 20) * red) * 2), '_xslashred capped at 1.05');
+  assertEq(xslashDamage(s), Math.ceil(Math.ceil(gmlRound((at * 160) / 20 - VC_KNIGHT.df * 3) * red) * 2), '_xslashred capped at 1.05');
   s.knight.damagereduction = 0.18;
   // Resolve through the seam's acting block, then step the controller's alarm.
   const hp0 = s.knight.hp;

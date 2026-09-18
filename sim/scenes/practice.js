@@ -21,6 +21,7 @@ import { battlebox, settleBox } from '../battlebox.js';
 import { gmlCreate, gmlChoose, gmlIrandom, gmlRandom } from '../rng.js';
 import { FIGHT_TABLE, launchAttack, openArena, clearTurn, nextTurn, phase4Entry, turnLength, deliverHeart } from './fight.js';
 import { battleMsgFor, OPENING_MSG } from '../battlemsg.js';
+import { nbcOn } from '../attacks/nbc.js';
 import { createMenu, stepMenu, openMenu, bagOf } from '../menu.js';
 import {
   partyWiped, PARTY as PARTY_STATS, isUp, PARTY_POS,
@@ -693,12 +694,30 @@ const director = {
         else if (e.phase === 4) p4 = e.turn + 1;
         else if (state.knight?.haveusedroaring) p4 = 3;
 
+        // NO BULLET COOLDOWNS — sites T2/T3/T4. `battleMsgFor` gates all
+        // eighteen rewritten strings on `opts.nbc`, and THIS IS THE ONLY
+        // CALLER IN THE RUNNING SIM: every other reference is a verifier
+        // handing the function `{ nbc: true }` directly. So the whole overlay
+        // was reachable from `tools/verify-nbc.mjs` and from nowhere a player
+        // can stand — the strings were typed into the repo, asserted green,
+        // and never once drawn. The two keys below are what arms it.
+        //
+        // `balloonturn` is the second, INDEPENDENT half: the mod inserts
+        // `if (balloonturn >= 6) susiedown = "* Susie realised she should've
+        // kept quiet.&"` under Susie's knockdown line, and `nbcDownMsg` reads
+        // `(balloonturn ?? 0) >= 6`. Passing `nbc` alone leaves that branch
+        // just as dead, because the fallback answers 0 forever. The counter is
+        // live on the same state — `sim/dialogue.js` advances it and
+        // `sim/trace.js:192` already traces it — so this is a read, not a
+        // new mechanism.
         const msg = battleMsgFor(e.phase, state.phaseturn ?? 0, {
           phase4turn: p4,
           partyHp: state.partyHp,
           haveusedroaring: state.knight?.haveusedroaring,
           progamer: state.knight?.progamer,
           downSeen: state.downSeen,
+          nbc: nbcOn(state),
+          balloonturn: state.dialogue?.balloonturn,
         });
         if (msg) state.battlemsg = msg;
       }

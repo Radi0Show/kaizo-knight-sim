@@ -108,6 +108,24 @@ export const C_LIME = [0, 255, 0];
  */
 export const MSG_MAX = 3;
 
+/**
+ * `type = 6` — NOELLE's yellow. obj_dmgwriter's Create builds the four
+ * character tints together (`lightf` purple, `lightb` aqua, `lightg` lime,
+ * `lighty` yellow) and its Draw branches on all four; only three were here,
+ * so a type-6 writer fell through to the `c_white` default and Noelle's
+ * numbers drew the same colour as damage TAKEN.
+ *
+ * VANILLA, not a mod addition: the branch is byte-identical in the retail
+ * Chapter 3 dump and in v105. This fight never fields her, so nothing in
+ * this repo could reach it — the kaizo Weird Route can, which is where it
+ * surfaced.
+ *
+ * `merge_color(c_yellow, c_white, 0.3)` through the verified model
+ * (verify-mergecolor) is [255, 255, 76].
+ */
+const LIGHTY = [255, 255, 76];
+export const TYPE_NOELLE = 6;
+
 /** The colour for a writer's `type`, exactly as the Draw's branches pick it. */
 export function dmgColor(type) {
   if (type === 0) return LIGHTB;
@@ -115,7 +133,15 @@ export function dmgColor(type) {
   if (type === 2) return LIGHTG;
   if (type === TYPE_HEAL) return C_LIME;
   if (type === TYPE_DEAD) return C_RED;
+  if (type === TYPE_NOELLE) return LIGHTY;
   if (type === TYPE_SWOON) return C_RED;
+  // TWO BRANCHES OF THE DRAW ARE DELIBERATELY NOT HERE, because neither is a
+  // function of `type` alone and this signature only has `type`:
+  //   `if (type == 5 && damage < 0)  draw_set_color(c_ltgray)`
+  //   `if (type == 13)               draw_set_color(aqcolor)`
+  // Type 5 is the shop/boogie writer's and type 13 is the Chapter-4 aqua;
+  // neither is assigned anywhere the Knight fight reaches. Add them with the
+  // damage argument if a caller ever needs one, rather than guessing here.
   return C_WHITE;
 }
 

@@ -337,7 +337,7 @@ console.log('\nPASS  party and knight animation (no oracle — see header)');
   };
   const btnName = (s, c) => {
     const n = BUTTONS[s.menu.selected[c]].name;
-    return typeof n === 'function' ? n(c) : n;
+    return typeof n === 'function' ? n(s, c) : n;
   };
   const open = (c) => {
     const s = st();

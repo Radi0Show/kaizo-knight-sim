@@ -40,11 +40,25 @@ import { real, int } from '../../sim/trace.js';
 // direction and easing of `rotation`, lock-on, fan angle generation, and slash
 // spawn cadence. Extending it needs an oracle run where the soul is pinned for
 // the whole attack.
-// 62..281 covers SIX complete intro/aim/slash/cooldown cycles, including the
-// per-cycle shortening of the aim phase. At 282 the oracle enters its "return"
-// state — the attack's wind-down, which involves delayed scripts, alarms and
-// the aim_type 2 finale, and is not translated.
-export const T7_WINDOW = { from: 62, to: 281 };
+// 62..300 covers SIX complete intro/aim/slash/cooldown cycles, including the
+// per-cycle shortening of the aim phase, AND the wind-down after them.
+//
+// It used to stop at 281 on the grounds that "at 282 the oracle enters its
+// return state — the attack's wind-down ... and is not translated". The state
+// machine's half of that wind-down always was translated; the note outlived
+// the gap. Rows 282..300 are 19 more frames of `state = "return"`, the
+// `slashes` count draining 4 -> 0 as the last fan expires, and every other
+// column holding — and they match.
+//
+// WHAT THIS DOES NOT COVER, said plainly because the temptation is to read it
+// as more than it is: the recording's columns are the SOUL and the attack's
+// STATE (state, timer, aim_direction, rotation, slash_number, aim_x/aim_y,
+// live slash count, spin, offset, fan list). The manager's own x and y are
+// not among them, so the `scr_lerpvar(... anchor_x ...)` glide home that
+// rotating-slash.js runs through exactly these frames is NOT verified here.
+// Extending the window was measured to pass with and without that glide.
+// Pinning it needs a recording that traces the instance's position.
+export const T7_WINDOW = { from: 62, to: 300 };
 const SPAWN_FRAME = 61;
 
 // Recorded from the oracle. `spin` is re-rolled by choose() on every entry

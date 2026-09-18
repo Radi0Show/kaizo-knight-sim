@@ -69,8 +69,16 @@ const n1 = BUTTONS[1].name;
 if (typeof n1 !== 'function') {
   failures.push('BUTTONS[1].name is not a function — ACT/MAGIC cannot both work');
 } else {
-  if (n1(0) !== 'ACT') failures.push(`Kris's button 1 is "${n1(0)}", expected ACT`);
-  if (n1(1) !== 'MAGIC') failures.push(`Susie's button 1 is "${n1(1)}", expected MAGIC`);
+  // `(state, slot)`. A bare state stands in for a vanilla party, where
+  // charIdForSlot answers slot + 1 — which is the mapping being asserted.
+  const bs = {};
+  if (n1(bs, 0) !== 'ACT') failures.push(`Kris's button 1 is "${n1(bs, 0)}", expected ACT`);
+  if (n1(bs, 1) !== 'MAGIC') failures.push(`Susie's button 1 is "${n1(bs, 1)}", expected MAGIC`);
+  // ...and it is the CHARACTER that decides, not the slot: seat Kris in slot 1
+  // and the ACT label follows him.
+  const swapped = { partyCharIds: [2, 1, 3] };
+  if (n1(swapped, 1) !== 'ACT') failures.push(`Kris in slot 1 reads "${n1(swapped, 1)}", expected ACT`);
+  if (n1(swapped, 0) !== 'MAGIC') failures.push(`Susie in slot 0 reads "${n1(swapped, 0)}", expected MAGIC`);
 }
 
 // ── The lists ────────────────────────────────────────────────────────────

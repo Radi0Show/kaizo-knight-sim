@@ -89,7 +89,15 @@ export function resetTensionBar() {
  * agree exactly once the bar has come to rest, which is the only time
  * anything has ever published one. Each entry is
  * `{sprite, subimage, x, y, xscale, yscale, blend, alpha}` — `draw_sprite_ext`
- * with the manifest origin, which is what the caller's GML issued.
+ * with the manifest origin, which is what the caller's GML issued. `angle` is
+ * optional and is obj_marker's `image_angle`, in GML's counter-clockwise
+ * degrees; omitted means 0, which is what every bleed particle has.
+ *
+ * `early` is a DRAW-ORDER request, not a draw: set it and render/canvas.js
+ * paints the whole bar before the depth-sorted entity pass instead of after
+ * everything, so an entity can get in front of it. The kaizo TP cut is what
+ * needs it — obj_knight_enemy takes `obj_tensionbar.depth - 1` for the
+ * shear (Step_0:1965) and restores it after (:2009). Nothing else sets it.
  */
 function skinOf(state) {
   return state.tensionBar ?? null;
@@ -209,6 +217,14 @@ export function drawTensionBar(ctx, state, sprites) {
       ctx.save();
       ctx.globalAlpha = Math.min(1, alpha);
       ctx.translate(m.x, m.y);
+      // `image_angle`, optional. Every marker published until now was a bleed
+      // particle, which never sets one — but obj_marker draws with
+      // draw_sprite_ext and the angle is one of its arguments, so a caller
+      // that does set it (the sheared bar top, which spins off on a
+      // random_range(1, 10)) had it silently dropped. NEGATED because GML
+      // measures image_angle counter-clockwise and the canvas y axis points
+      // down.
+      if (m.angle) ctx.rotate((-m.angle * Math.PI) / 180);
       ctx.scale(m.xscale ?? 1, m.yscale ?? 1);
       ctx.drawImage(m.blend ? tinted(img, m.blend) : img, -(ent.meta?.ox ?? 0), -(ent.meta?.oy ?? 0));
       ctx.restore();

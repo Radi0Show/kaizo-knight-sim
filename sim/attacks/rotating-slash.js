@@ -134,6 +134,10 @@ export const rotatingSlash = {
     e.aim_type = 0;
     e.anchor_x = e.x;
     e.anchor_y = e.y;
+    // The pending `scr_script_delayed(scr_lerpvar, 8, ...)` of the non-spiral
+    // return, declared here with every other field so a reader of create()
+    // sees the whole instance. Null until that branch arms it.
+    e.returnLerp = null;
     e.aim_x = e.x;
     e.aim_y = e.y;
     e.slash_list = [];
@@ -242,41 +246,92 @@ export const rotatingSlash = {
     },
   },
 
-  step(e, state) {
-    // NO BULLET COOLDOWNS: THIRTY OF THESE, NOT ONE.
-    //
-    //     obj_dbulletcontroller_Step_0.gml, the `type == 104` arm
-    //     -   if (made == false)
-    //     +   if (instance_number(obj_knight_rotating_slash) < 30)
-    //
-    // The controller's gate stops being “once ever” and becomes “while there
-    // are fewer than thirty alive”, so it keeps creating managers every frame
-    // until the arena holds thirty of them.
-    //
-    // WHY IT LIVES HERE. This sim has no obj_dbulletcontroller entity —
-    // sim/scenes/fight.js calls spawnRotatingSlash once, directly — so there
-    // is no controller Step for the gate to sit in. The FIRST manager carries
-    // the controller's job instead: it is the one the dispatch created, it is
-    // marked at creation, and it alone tops the population up. Putting this in
-    // every instance would have each new manager spawn more, which is not a
-    // faster attack but an exponential one.
-    //
-    // ROTATING SLASH CLOSES EVERY PHASE, which is why this being missed was
-    // worth finding: it measured EXACTLY x1.00 on every metric at every
-    // difficulty while the toggle was on, and it is the attack a player sees
-    // more than any other.
+  /**
+   * THE CONTROLLER'S OWN STEP, AND IT IS AN END STEP FOR A MEASURED REASON.
+   *
+   * NO BULLET COOLDOWNS: THIRTY OF THESE, NOT ONE.
+   *
+   *     obj_dbulletcontroller_Step_0.gml, the `type == 104` arm
+   *     -   if (made == false)
+   *     +   if (instance_number(obj_knight_rotating_slash) < 30)
+   *
+   * The controller's gate stops being “once ever” and becomes “while there
+   * are fewer than thirty alive”, so it keeps creating managers every frame
+   * until the arena holds thirty of them.
+   *
+   * WHY IT LIVES ON A MANAGER. This sim has no obj_dbulletcontroller entity
+   * for type 104 — sim/scenes/fight.js calls spawnRotatingSlash once,
+   * directly — so there is no controller Step for the gate to sit in. The
+   * FIRST manager carries the controller's job instead: it is the one the
+   * dispatch created, it is marked at creation, and it alone tops the
+   * population up. Putting this in every instance would have each new manager
+   * spawn more, which is not a faster attack but an exponential one.
+   *
+   * WHY IT IS THE END STEP AND NOT THE STEP. GameMaker runs a Step event by
+   * visiting instances grouped by OBJECT INDEX, and the three objects in this
+   * frame are ordered
+   *
+   *     obj_knight_rotating_slash   669
+   *     obj_battlecontroller       1393
+   *     obj_dbulletcontroller      1432
+   *
+   * so every manager steps, THEN the battle controller decrements the clock
+   * and sweeps the turn if it has run out, and only THEN does the controller
+   * top the population up. This engine's equivalents of the middle one are
+   * `turnClock` (stepOrder -100) and the director, and both do their work in
+   * the END STEP phase — so an end-step top-up at the default order lands in
+   * exactly the controller's slot, after every manager's Step and after the
+   * sweep. It used to run at the TOP of the lead manager's Step, which put
+   * each extra's `spin` and `random_offset` draws ahead of twenty-nine
+   * managers' own teleport draws instead of behind them.
+   *
+   * It also means a swept turn does not top up: `runPhase` skips entities the
+   * director has already killed, which is what the game gets from the dc
+   * being an obj_bulletparent the sweep destroys.
+   *
+   * ROTATING SLASH CLOSES EVERY PHASE, which is why this being missed was
+   * worth finding: it measured EXACTLY x1.00 on every metric at every
+   * difficulty while the toggle was on, and it is the attack a player sees
+   * more than any other.
+   */
+  endStep(e, state) {
     if (e.nbcController && nbcOn(state)) {
       let live = 0;
       for (const o of state.entities) {
         if (o.alive && o.type === rotatingSlash) live += 1;
       }
       if (live < 30) {
-        const extra = spawn(state, rotatingSlash, { x: e.x, y: e.y });
+        // AT THE KNIGHT, NOT AT THIS MANAGER. The GML line is
+        //
+        //     instance_create(creatorid.x, creatorid.y,
+        //                     obj_knight_rotating_slash)
+        //
+        // and `creatorid` is obj_knight_enemy — scr_bulletspawner.gml:5 sets
+        // `__dc.creatorid = id;` and the only assigners of type 104 are the
+        // knight's own Step. The body of the arm is byte-identical in both
+        // dumps; the mod changed only the gate above it, so all thirty are
+        // born AT HIS POST and fan out from there.
+        //
+        // This used to read `{ x: e.x, y: e.y }` — the LEAD manager, which
+        // lerps all over the arena (an aim hop per cycle, and a teleport
+        // every ~3 frames through the difficulty-2 spiral), so it is the
+        // knight's position on the very first ramp frame and nowhere near it
+        // afterwards. Measured on a difficulty-2 drill: 60 of 60 extras born
+        // at least 11.27px off, worst 85.57px. The picture is the difference
+        // between thirty knights peeling off the one knight and thirty
+        // budding off a wandering clone.
+        const src = state.entities.find(
+          (x) => x.alive && x.type.name === 'obj_knight_enemy',
+        ) ?? e;
+        const extra = spawn(state, rotatingSlash, { x: src.x, y: src.y });
         extra.difficulty = e.difficulty;
         rotatingSlash.init(extra);
       }
     }
 
+  },
+
+  step(e, state) {
     // `obj_knight_enemy.siner2 = 0;` — THE FIRST LINE OF THIS STEP, and it
     // runs every frame the slash is alive. It PINS THE KNIGHT'S BOB: the
     // Draw ticks siner2 to 1 immediately afterwards, so his y sits at a
@@ -286,12 +341,27 @@ export const rotatingSlash = {
     // to every traced column because the knight's y is not among the 176.
     // obj_knight_tunnel_slasher_2_revised and obj_knight_swordfall open with
     // the same line.
+    //
+    // `anchor_x = obj_knight_enemy.x; anchor_y = obj_knight_enemy.y;` are the
+    // Step's NEXT TWO LINES, and they are a per-frame RE-DERIVATION, not a
+    // one-off. create() seeds the pair from the spawn point (the dump's own
+    // `anchor_x = x` at Create:35-36) and this overwrites it every frame
+    // thereafter, so the return glide below always aims at wherever the
+    // knight is STANDING NOW rather than wherever this instance was born.
+    // The sim only had the create-time seed, which is the same value in
+    // vanilla — one manager, born at the knight — and a different one for
+    // every NBC top-up that was born somewhere else.
     {
       const kx = state.entities.find(
         (x) => x.alive && x.type.name === 'obj_knight_enemy',
       );
-      if (kx) kx.siner2 = 0;
+      if (kx) {
+        kx.siner2 = 0;
+        e.anchor_x = kx.x;
+        e.anchor_y = kx.y;
+      }
     }
+    tickReturnLerp(state, e);
     // The decrement is ABOVE the `done` guard deliberately. There is no `done`
     // in the original — the object keeps running its Step, doing nothing,
     // until Alarm_3 destroys it, and `local_turntimer` keeps counting down the
@@ -622,6 +692,20 @@ export const rotatingSlash = {
             e.state = 'return';
             e.timer = 0;
             e.done = true;
+            // The non-spiral twin of the glide below (`final_counter === 28`),
+            // and the only difference is that both legs are DELAYED:
+            //
+            //     scr_script_delayed(scr_lerpvar, 8, "x", x, anchor_x,
+            //                        12, 1, "out");
+            //     scr_script_delayed(scr_lerpvar, 8, "y", y, anchor_y,
+            //                        12, 1, "out");
+            //
+            // `x` and `anchor_x` are read NOW, eight frames before the tween
+            // that uses them exists, so he holds where he stopped and then
+            // slides. No `with (obj_lerpvar)` cancel on this arm — the
+            // original does not have one, and the aim hop it would cancel has
+            // long since finished.
+            delayedReturnLerp(e, e.x, e.anchor_x, e.y, e.anchor_y);
             e.alarm[3] = 22;
             return;
           }
@@ -653,10 +737,35 @@ export const rotatingSlash = {
         if (e.final_counter === 28) {
           e.state = 'return';
           e.done = true;
+          // HE GLIDES BACK TO HIS POST — the three lines this branch was
+          // missing, and the reason the silhouette used to blink out from
+          // wherever the last teleport had dropped it:
+          //
+          //     with (obj_lerpvar) { if (target == other.id)
+          //                              instance_destroy(); }
+          //     scr_lerpvar("x", x, anchor_x, 12, 1, "out");
+          //     scr_lerpvar("y", y, anchor_y, 12, 1, "out");
+          //
+          // The CANCEL comes first and is not optional: the spiral arms a
+          // fresh pair of teleport tweens every ~3 frames (see the else arm
+          // below), so one is almost always mid-flight here and two live
+          // tweens writing the same `x` would fight over it — last writer per
+          // frame wins, and which one that is depends on spawn order.
+          //
+          // `anchor_x/anchor_y` are the knight's CURRENT position, re-derived
+          // at the top of this Step. Measured on the frame before Alarm_3
+          // fires with the toggle off: difficulty 0 ended 43.94px from the
+          // knight, difficulty 1 30.73px, difficulty 2 89.50px. Vanilla-path,
+          // so it was wrong before the mod existed — but under the toggle it
+          // is thirty knights blinking out of the arena at once instead of
+          // thirty sliding home.
+          cancelLerps(state, e);
+          scrLerpvar(state, spawn, e, 'x', e.x, e.anchor_x, 12, 1);
+          scrLerpvar(state, spawn, e, 'y', e.y, e.anchor_y, 12, 1);
           // Alarm_3 is one line, `instance_destroy()`. 22 frames after the
           // 28th slash the attack object goes away — measured at frame 363 in
           // the difficulty-2 recording, where the instance simply stops
-          // appearing.
+          // appearing. 12 of those 22 are the glide above.
           e.alarm[3] = 22;
         } else {
           // He teleports around the box between shots. The two irandom draws
@@ -677,6 +786,49 @@ export const rotatingSlash = {
     }
   },
 };
+
+/**
+ * `with (obj_lerpvar) { if (target == other.id) instance_destroy(); }` —
+ * kill every tween still pointed at this instance.
+ *
+ * The original iterates the live obj_lerpvar instances and destroys the ones
+ * whose `target` is the caller; `sim/lerpvar.js` holds the target as the
+ * entity itself, so the test is an identity check rather than an id compare.
+ */
+function cancelLerps(state, e) {
+  for (const t of state.entities) {
+    if (t.alive && t.type.name === 'obj_lerpvar' && t.target === e) destroy(t);
+  }
+}
+
+/**
+ * `scr_script_delayed(scr_lerpvar, 8, ...)` for the non-spiral return, both
+ * axes at once — the pair is always armed and cancelled together.
+ *
+ * **THE STORED DELAY IS 7, NOT 8, AND THAT IS THE DOCUMENTED n-1.**
+ * `scr_script_delayed` arms an alarm n frames out; GameMaker runs alarms
+ * BEFORE Step, so the obj_lerpvar that alarm creates gets its own first Step
+ * on that same frame and its first write lands n frames after the call. Here
+ * the countdown is ticked from the manager's own Step and this engine freezes
+ * the entity list at the start of each phase, so a tween spawned during a
+ * Step does not move until the frame after. Storing 8 would land the first
+ * write on n+1. CLAUDE.md records the same correction for the roar's
+ * ball_darkness fade, where 16 ran a frame behind the recording all the way.
+ */
+function delayedReturnLerp(e, fromX, toX, fromY, toY) {
+  e.returnLerp = { delay: 7, fromX, toX, fromY, toY };
+}
+
+/** Runs the pending return glide; called at the top of the manager's Step. */
+function tickReturnLerp(state, e) {
+  const r = e.returnLerp;
+  if (!r) return;
+  r.delay -= 1;
+  if (r.delay > 0) return;
+  e.returnLerp = null;
+  scrLerpvar(state, spawn, e, 'x', r.fromX, r.toX, 12, 1);
+  scrLerpvar(state, spawn, e, 'y', r.fromY, r.toY, 12, 1);
+}
 
 /**
  * `scr_get_box`, index for index — and the indices are NOT in the order the

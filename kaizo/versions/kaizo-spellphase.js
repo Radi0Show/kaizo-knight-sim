@@ -167,8 +167,19 @@ function fire(state, sp, c, opts) {
   const it = state.pendingItem?.[c];
   if (p) {
     state.spelldelay = SPELLDELAY_DEFAULT;
+    const kdBefore = state.kaizo?.spelldelay;
     opts.castSpell(state, c, p.id, p.target);
-    if (state.spelldelay === SPELLDELAY_DEFAULT) {
+    // `scr_spell` sets `global.spelldelay` itself on the cases that have one
+    // — case 10 writes 140 at scr_spell.gml:271 — and the kaizo cast hook
+    // puts that write on `state.kaizo.spelldelay`. Reading it back here is
+    // the same single-cell rule the step applies, taken at the one moment
+    // the step cannot see: the cast happens INSIDE this call, after the
+    // step's own mirror has already run for the frame.
+    const kdAfter = state.kaizo?.spelldelay;
+    if (typeof kdAfter === 'number' && kdAfter > 0 && kdAfter !== kdBefore) {
+      state.spelldelay = kdAfter;
+      sp.kaizoSpelldelayMirror = kdAfter;
+    } else if (state.spelldelay === SPELLDELAY_DEFAULT) {
       state.spelldelay = spellSpelldelay(p.id);
     }
   } else if (it) {
@@ -204,6 +215,40 @@ export function stepKaizoSpellphase(state, sp, e, opts = {}) {
   if (sp.alarm > 0) {
     sp.alarm -= 1;
     if (sp.alarm === 0) alarm0(state, sp, o);
+  }
+
+  // ── THE TWO SPELLDELAY CELLS ARE ONE CELL IN THE GAME ────────────────────
+  //
+  // `global.spelldelay` is a single global, and obj_spellphase's Step is the
+  // only thing that reads it. In this repo it became TWO: `state.spelldelay`,
+  // which this file writes and the gate below reads, and
+  // `state.kaizo.spelldelay`, which kaizo/party/scenes.js writes — 140 on a
+  // successful case-10 cast (scr_spell.gml:271), 999999 at k_sgscene == 1
+  // (obj_knight_enemy Step_0:1561), back to 1 at state 8 (:1761).
+  //
+  // THAT 999999 IS THE WHOLE OF THE SNOWGRAVE SCENE'S HIJACK. Unlike
+  // k_tpscene and k_nhscene, k_sgscene never writes `special_con` — it stalls
+  // the spell phase and nothing else, so the battle keeps drawing while the
+  // cutscene plays. With the cells split, the scene's stall was invisible
+  // here: the phase would release the turn after the table's default while a
+  // scene that runs for hundreds of frames was still on screen.
+  //
+  // MIRRORED ON CHANGE, NOT EVERY FRAME. One cell means LAST WRITE WINS, and
+  // both sides write: the scene at its three points, this file at the chain
+  // and the default. Copying the kaizo cell unconditionally each step would
+  // make the scene's last value permanent and clobber every later chain write
+  // — including for spells that have nothing to do with SnowGrave, since
+  // `state.kaizo.spelldelay` persists after the scene releases it. Adopting
+  // it only on the frame it MOVES reproduces the single cell exactly, and the
+  // phase's own writes stand in between.
+  //
+  // When the kaizo seam is absent the field is undefined, `mirrored` stays
+  // undefined and nothing below changes — which is what keeps the A-Side byte
+  // gates still.
+  const kd = state.kaizo?.spelldelay;
+  if (typeof kd === 'number' && kd !== sp.kaizoSpelldelayMirror) {
+    sp.kaizoSpelldelayMirror = kd;
+    if (kd > 0) state.spelldelay = kd;
   }
 
   // STEP — the mod's, :5-94.

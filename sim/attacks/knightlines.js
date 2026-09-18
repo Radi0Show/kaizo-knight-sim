@@ -285,7 +285,31 @@ export const knightTunnelSlasher = {
         const sy = getBox(state, 1) + getBox(state, 5) * 0.5 + offset;
         const slash = spawn(state, roaringknightSlash, { x: sx, y: sy });
         slash.direction = 240 + gmlRandom(state.gmlRng, 60);
-        slash.image_angle = slash.direction;
+        // NO `image_angle` HERE — THIS SPAWNER IS THE ODD ONE OUT.
+        //
+        // obj_knight_tunnel_slasher's block sets image_angle on the BULLET
+        // only, inside the inner `with (scr_fire_bullet(...))` (see the spear
+        // below, `b.image_angle = slash.direction`). The slash itself is
+        // never given one and keeps GML's default 0. The line that used to
+        // sit here — `slash.image_angle = slash.direction;` — was the
+        // generalisation of roaringknight-slash.js's own note that "every
+        // real spawner sets image_angle = direction", which is true of the
+        // other three creators and false of this one.
+        //
+        // It is not cosmetic. roaringknight-slash.js's `collides()` passes
+        // `image_angle` into `masksOverlap` as the mask's rotation, and
+        // CLAUDE.md's contact study is explicit that an axis-aligned mask at
+        // image_yscale 0.1 cannot connect while a rotated one connects at any
+        // diagonal. So the extra line turned a wedge that deals no contact
+        // damage at all into a live AOE hitbox: measured over the knightlines
+        // drill on a 5px soul grid, ~500 hitting positions with the line and
+        // exactly 0 without it, each one taking the `aoe = true` branch of
+        // Other_15 for 75 party-wide (69 under the mod).
+        //
+        // Unconditional, so it was wrong on both toggle paths. knightlines is
+        // ac 20 — UNUSED content the selector cannot reach — so nothing in
+        // the fight order or the byte gate ever saw it; it is reachable only
+        // through SINGLE.
 
         // The spear, fired from the SLASH at speed zero. `choose` picks the
         // slash's heading or its opposite, so half the volley points back the

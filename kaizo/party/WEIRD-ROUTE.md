@@ -194,15 +194,28 @@ gloom array, and the divergence only bites when Noelle is in the party:
 | `gml_GlobalScript_scr_damage_maxhp.gml:254-259` | char id | yes |
 | `gml_Object_obj_battlecontroller_Draw_0.gml:1390-1392` | `global.char[i]`, char id | yes |
 | `gml_Object_obj_heroparent_Draw_0.gml:42` | `global.char[myself]`, char id | yes |
-| **`gml_GlobalScript_scr_charbox.gml:740, 759, 763`** | **`c + 1`, i.e. slot+1** | **NO** |
+| `gml_GlobalScript_scr_charbox.gml:740, 759, 763` | `c + 1`, and `c` is a CHAR INDEX — char id | yes |
 
-With `global.char = [1, 4, 0]`, `scr_charbox` draws slot 1's (Noelle's) gloom
-band from `k_gloom[2]` — **Susie's** meter, which nothing in a Kris/Noelle
-party ever writes. So Noelle's HP-bar gloom overlay reads permanently empty
-while the DoT is really running. **ORIGINAL BUG. Translate it at the call
-site, label it, and do not correct it.** (`obj_battlecontroller`'s own gloom
-band, l.1390, is correct — the two HUDs disagree with each other in the real
-mod.)
+**RETRACTED 2026-09-18.** This row used to read **`c + 1`, i.e. slot+1 — NO**,
+and the paragraph under it called the site an ORIGINAL BUG that must be
+translated wrong on purpose. Both were wrong, and the shipped code never
+followed them: `kaizo/party/gloom.js:67-87` already reproduces the
+char-indexed read, with the receipt, and `check-gloom` is green on it.
+
+`c` in `scr_charbox` is a CHARACTER index, not a slot.
+`gml_Object_obj_battlecontroller_Create_0.gml:187/196/205/214` builds
+`havechar[0] = Kris, [1] = Susie, [2] = Ralsei, [3] = Noelle` and keeps the
+slot SEPARATELY in `charpos[c]` — so `havechar` is a character table and
+`c + 1` is the char id. The same expressions read `global.hp[c + 1]` (:730,
+:746, :753, :756) and `global.maxhp[c + 1]` (:749, :765-766), which are
+char-indexed for certain, so `k_gloom[c + 1]` agrees with the DoT engine
+(Step_2:17, `i = 1..4`) and with `scr_damage.gml:254`
+(`k_gloom[chartarget]`). Noelle's gloom band reads Noelle's meter.
+
+What IS real here, and worth keeping: `scr_charbox` mixes the two indexings
+in one function — `mmy[c]` and `hpcolor[c]` are char-indexed while the row's
+own visibility test is `gc == charpos[c]`, slot-indexed. That mix is the
+oddity; a wrong gloom band was not.
 
 `k_freeze` has the same shape but no divergence: every reader uses a char id
 (`gml_Object_obj_heroparent_Draw_0.gml:18`, `_CleanUp_0.gml:1-5`,
@@ -574,9 +587,20 @@ type 105   combination 1-2-5 -> vanilla 4-2-3 chain          (atk_Frenzy3)
    is not being played.
 5. **`k_freeze` and the frozen statue** (B-2). Only reachable through the
    SnowGrave scene, so it depends on item 6.
-6. **The B-Side scenes — the missing third of the fight.** All three hijack a
+6. **The B-Side scenes — the missing third of the fight.** They take the turn
+   two DIFFERENT ways, and the difference is the whole wiring:
+   `k_tpscene` and `k_nhscene` (and `k_hpscene`, `Step_0:1776`) hijack the
    whole turn via `special_con = 1; global.myfight = 99; global.mnfight = 99;
-   global.charturn = -1`:
+   global.charturn = -1`. **`k_sgscene` does NOT** — corrected 2026-09-18,
+   this item used to say all three did. Its block (`Step_0:1547-1770`)
+   contains no `special_con` write and never touches `global.charturn`; its
+   only `mnfight = 99` pair is inside the nohitmode abort at state 6
+   (`:1695-1696`). It stalls the SPELL PHASE ALONE, with
+   `global.spelldelay = 999999` at `:1561`, released to 1 at state 8
+   (`:1761`). `kaizo/party/scenes.js:60-104` already carries the correction
+   and splits `sceneHijacksTurn` (specialCon) from `sceneStallsSpellphase`
+   (spelldelay) at `:455-465`; wiring SnowGrave through specialCon freezes
+   the whole battle, which is the opposite of what the mod does.
    * **`k_tpscene`** — `gml_GlobalScript_scr_mnendturn.gml:152-159` +
      `gml_Object_obj_knight_enemy_Step_0.gml:1930-2049`. The Knight slices the
      TP bar; from then on TP caps at 125.

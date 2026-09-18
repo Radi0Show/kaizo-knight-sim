@@ -197,7 +197,17 @@ section('gap 1 — the damage layer, through sim/damage.js\'s own entry point');
   c2.invTimer = -1;
   c2.knight.aoedamage = true;
   scrDamageSingle(c2, 1000, 0, { aoe: true });
-  eq(c2.partyHp[0], -80, 'V-C control: the engine still gives Kris round(-160 / 2)');
+  // V-C gets the mod's PERMANENT FALL too, and it always should have. The
+  // deletion of vanilla's `if (target == 0)` arm is in both damage scripts
+  // (scr_damage.gml:224-232, scr_damage_maxhp.gml:225-231) with no k_sideb
+  // gate on it, so it is an A-Side delta. It arrives through the engine's
+  // `state.permanentFell` seam (kaizo/scenes/kaizo-fight.js, set on
+  // `v.knight`) rather than through the mod's whole scr_damage, because
+  // installing that on a version with NO ROSTER drops the party's DF to 0 —
+  // measured, a 100 hit landed 100 where it should land 85, which is the
+  // assertion twenty lines above this one.
+  eq(c2.partyHp[0], -999, "V-C: the mod deleted Kris's mercy on the A-Side too");
+  eq(c2.chardead[0], 1, '...and scr_dead ran on V-C as well');
 
   // The kaizo single entry is what the engine called: same function, same
   // result on a fresh state.

@@ -127,17 +127,31 @@ section('V-D slot 1 is NOELLE, not Susie');
   for (const k of ['spellInfo', 'spellList', 'actList', 'spellCost', 'castSpell', 'resolveActPages', 'actBusy']) {
     assert(!!s.kaizo.hooks[k], `hook ${k} installed`);
   }
-  assertDeep(kaizoSpellList(s, 1), [2, 8, 9], 'global.spell[4] = 2, 8, 9 (scr_gamestart:202-204)');
+  // THE SHIPPED V-D LIST IS FOUR, NOT THREE. scr_gamestart:202-204 still hands
+  // out exactly [2, 8, 9] — NOELLE_SPELLS below is that claim, unchanged — and
+  // the Weird Route scene grants spell 10 on top of it, because SnowGrave
+  // arrives on the save file (scr_load_chapter2.gml:170) and not from this
+  // chapter's gamestart. kaizo/scenes/kaizo-fight.js has the reasoning at the
+  // grant.
+  assertDeep(kaizoSpellList(s, 1), [2, 8, 9, 10],
+    'global.spell[4] = the gamestart 2, 8, 9 plus the transferred SnowGrave');
   assertDeep(kaizoSpellList(s, 0), [7], 'global.spell[1] = 7 — Kris\'s "MAGIC" is ACT');
   assertDeep(kaizoSpellList(s, 2), [], 'the empty slot has no list');
   assertDeep(SPELLS_BY_CHAR[4], NOELLE_SPELLS, 'SPELLS_BY_CHAR[4] agrees with noelle.js');
   const magic = rowsFor(s, 1, 'magic');
-  assertDeep(magic.map((r) => r.label), ['Heal Prayer', 'SleepMist', 'IceShock'],
-    'MAGIC rows for slot 1 (was Rude Buster / UltraHeal)');
-  assertDeep(magic.map((r) => r.descb), ['Heal#Ally', 'Spare#TIRED foes', 'Damage#w/ ICE'],
-    'spelldescb per scr_spellinfo cases 2 / 8 / 9');
-  assertDeep(magic.map((r) => r.id), [2, 8, 9], 'row ids are the spell ids');
-  assert(magic.every((r) => r.usable === false), 'all three greyed at 0 TP (shown, not hidden)');
+  assertDeep(magic.map((r) => r.label), ['N-Action', 'Heal Prayer', 'SleepMist', 'IceShock', 'SnowGrave'],
+    'MAGIC rows for slot 1 — the ACT row first (scr_spellmenu_setup), then the spells');
+  assertDeep(magic.map((r) => r.descb), [' ', 'Heal#Ally', 'Spare#TIRED foes', 'Damage#w/ ICE', 'Fatal'],
+    "the act row's reset space, then spelldescb per scr_spellinfo cases 2 / 8 / 9 / 10");
+  assertDeep(magic.filter((r) => !r.act).map((r) => r.id), [2, 8, 9, 10], 'row ids are the spell ids');
+  assertDeep(magic.map((r) => !!r.act), [true, false, false, false, false],
+    "exactly one row carries scr_spellmenu_setup's -1 act marker, and it is first");
+  // THE ACT ROW IS NOT A SPELL AND DOES NOT GREY. scr_spellmenu_setup gives it
+  // cost 0 and the -1 marker; only the four spells answer to the TP check, and
+  // an unaffordable one is drawn c_gray rather than hidden.
+  assert(magic.filter((r) => !r.act).every((r) => r.usable === false),
+    'all four spells greyed at 0 TP (shown, not hidden)');
+  assert(magic.find((r) => r.act)?.usable !== false, 'the ACT row stays usable at 0 TP');
   const acts = rowsFor(s, 1, 'actgrid');
   assertDeep(acts.map((r) => r.label), ['N-Action'], 'ACT row for slot 1 is N-Action (scr_monstersetup:1866-1868)');
   const btn = BUTTONS[1].name;
@@ -173,7 +187,8 @@ section('costs — scr_spellinfo:103-128 and scr_spellconsumeb:3');
   assertEq(scrSpellconsumebTp(21, MAX_TENSION), 20, '...and would floor an off-grid cost (21 -> 20): the check is not vacuous');
   s.tension = 20;
   const magic = rowsFor(s, 1, 'magic');
-  assertDeep(magic.map((r) => r.usable), [false, false, true], 'at 20 TP only IceShock lights up');
+  assertDeep(magic.filter((r) => !r.act).map((r) => r.usable), [false, false, true, false],
+    'at 20 TP only IceShock lights up');
 }
 
 // ── 4. X-Slash on Kris's grid ───────────────────────────────────────────────
@@ -329,8 +344,9 @@ section('the settings sign (obj_npc_sign Draw_0:31-41, 89-90, 124-125, 152-155) 
   const s = vd(99);
   stepFrame(s, IDLE);
   s.kaizo.spells = { 4: [2, 8, 9, 10] };
-  assertDeep(rowsFor(s, 1, 'magic').map((r) => r.label), ['Heal Prayer', 'SleepMist', 'IceShock', 'SnowGrave'],
-    'state.kaizo.spells[4] adds SnowGrave to the MAGIC list');
+  assertDeep(rowsFor(s, 1, 'magic').map((r) => r.label),
+    ['N-Action', 'Heal Prayer', 'SleepMist', 'IceShock', 'SnowGrave'],
+    'state.kaizo.spells[4] adds SnowGrave to the MAGIC list, under the ACT row');
   s.tension = MAX_TENSION;
   assertEq(rowsFor(s, 1, 'magic')[3].usable, true, 'SnowGrave lights up at a full bar with the ring (cost 250)');
 }

@@ -283,9 +283,10 @@ import { spawn, destroy } from '../../sim/entity.js';
 import { gmlRandom, gmlRandomRange, gmlChoose } from '../../sim/rng.js';
 import { lerp, lengthdirX, lengthdirY, pointDirection, gmlRound } from '../../sim/gml.js';
 import { cue, cueStop } from '../../sim/audio.js';
+import { spawnDmgNumber } from '../../sim/dmgnumbers.js';
 import { scrLerpvar } from '../../sim/lerpvar.js';
 import { scrShakescreen } from '../../sim/shake.js';
-import { KNIGHT } from '../../sim/actors.js';
+import { KNIGHT, partyActor } from '../../sim/actors.js';
 import { PARTY as SIM_PARTY } from '../../sim/damage.js';
 import { getSwordcolor } from '../attacks/kaizo-colors.js';
 import { stepSnowgraveFreeze, ensureFreezeState } from './freeze.js';
@@ -479,9 +480,25 @@ function draw(state, who, n = 1) {
   ensureScenes(state).draws[who] += n;
 }
 
-/** `global.battlemsg[0] = ...` / `k_msgsetloc(0, ...)`. Recorded, not drawn. */
+/**
+ * `global.battlemsg[0] = ...` / `k_msgsetloc(0, ...)`.
+ *
+ * RECORDED **AND** DELIVERED. This used to only push to the ledger, and the
+ * ledger has no readers outside the checks — so the Knight cut the TP bar in
+ * silence, and k_hpscene's "Not so fast." never appeared either. The seam the
+ * rest of the mod's turn-end text already uses is `state.battlemsg`
+ * (kaizo/scenes/kaizo-vc-hooks.js:310); this call site simply was not taking
+ * it. The downstream half of the same block WAS wired — `k_nospellsaw` travels
+ * and feeds the later taunt — which is what made the gap hard to see.
+ *
+ * LAST WRITE WINS, which is what the GML does: the tp scene's `!k_didspell`
+ * branch (Step_0:2034) overwrites the :2031 line in the same frame, and
+ * `scr_mnendturn()` — called one line later — never touches `battlemsg`, so
+ * the string survives into the next turn's message box.
+ */
 function msg(state, text) {
   ensureScenes(state).msgs.push({ frame: state.frame, text });
+  state.battlemsg = text;
 }
 
 /**
@@ -906,6 +923,19 @@ export const shakeObjTarget = {
  *
  * @returns {object|null} the shakeobj, or null when the target is gone.
  */
+/**
+ * The party actor standing in `slot` — `charinstance[slot]`, which the GML
+ * names directly (`obj_heronoelle`) and this engine keeps as a spawned actor
+ * carrying its slot. Returns null for an empty slot or before the actors
+ * exist, and every caller here treats that as "shake nobody", which is what
+ * `with (obj_heronoelle)` does when the instance is absent.
+ */
+function heroActorAt(state, slot) {
+  return (state.entities ?? []).find(
+    (e) => e.alive && e.type === partyActor && e.slot === slot,
+  ) ?? null;
+}
+
 export function scrMinishakeobj(state, target) {
   if (!target || !target.alive) return null;
   const sh = spawn(state, shakeObjTarget, { x: target.x, y: target.y });
@@ -1110,6 +1140,11 @@ function battlecontrollerDepth(state) {
 
 /** GameMaker's `c_white`, as this engine's RGB triple. */
 const C_WHITE = [255, 255, 255];
+
+// obj_tensionbar's depth. NOT MEASURED: the object assigns none in any event,
+// so it lives on the object definition, which the CodeEntries dump does not
+// carry. Declared stand-in; override on `state.kaizo.tensionbarDepth`.
+const TENSIONBAR_DEPTH_STANDIN = 0;
 
 /**
  * One frame of the max-HP shear. Everything below is Step_0:1771-1929 in
@@ -1522,7 +1557,17 @@ export function stepTpscene(state) {
     // afterimage depth juggle (Step_0:1967-1973). He goes IN FRONT of the TP
     // bar for the cut and the trail follows him there.
     kt.remdepth = kt.depth;
-    kt.depth = (state.kaizo.tensionbarDepth ?? 0) - 1;
+    // TENSIONBAR_DEPTH IS A DECLARED STAND-IN, not a measurement.
+    // obj_tensionbar assigns no depth in any event, so its real one lives on
+    // the object definition — CLAUDE.md's `depth` hole, which the CodeEntries
+    // dump does not carry. 0 is the stand-in; a recording can override it on
+    // `state.kaizo.tensionbarDepth`, the same seam battlecontrollerDepth has.
+    // What actually decides the beat is not this number: the engine paints its
+    // bar in screen space after every entity, so the ordering is carried by
+    // the skin's `early` flag (kaizo/party/tensionbar.js's publishSkin, true
+    // over exactly this 4..11 window) and this depth only orders the Knight
+    // against other ENTITIES, where -1 keeps him in front of them too.
+    kt.depth = (state.kaizo.tensionbarDepth ?? TENSIONBAR_DEPTH_STANDIN) - 1;
     reparentAfterimages(state, kt.depth);
     setScene(state, 'tp', 4.1);
     scrDelayVar(state, 'tp', 5, 1);
@@ -1552,6 +1597,33 @@ export function stepTpscene(state) {
       sprite: 'spr_tensionbar_sliced_top',
       imageAngle, hspeed, vspeed, gravity: 0.25,
       spawnedFrame: state.frame,
+    };
+    // AND PUBLISH IT, so it is a thing on screen and not only a row in the
+    // ledger. The record above carried the three rolls and nothing else — no
+    // position, no motion, no reader anywhere — so the Knight cut the bar,
+    // 51 orange shards bled, and the half he cut off simply was not there.
+    //
+    // `state.kaizo.deadtp` rather than a direct call, because tensionbar.js
+    // is the module that owns the bar's markers and THIS file imports from
+    // it; a call the other way would close a cycle. It steps the record and
+    // puts it in `state.tensionBar.markers`.
+    //
+    // (0, 0) is BAR-LOCAL — the GML is `with (obj_tensionbar) { deadtp =
+    // scr_marker(x, y, ...) }`, i.e. the bar's own origin, which is exactly
+    // what the markers seam's local frame means.
+    //
+    // NO LIFE AND NO LERPS. Unlike a bleed particle this has no
+    // `scr_script_delayed(instance_destroy, N)`; it flies until k_tpscene 12
+    // destroys it, which is the `sc.tp.deadtp = null` at the bottom of this
+    // machine.
+    //
+    // ONE DEVIATION, LABELLED: the GML puts it at `obj_tensionbar.depth + 1`
+    // — BEHIND the bar — and the markers list is painted in front. It clears
+    // the bar's 25px footprint inside two frames at hspeed -5..-7, so the
+    // cost is two frames of the piece not being occluded. Writing that down
+    // beats inventing a second seam for it.
+    state.kaizo.deadtp = {
+      x: 0, y: 0, hspeed, vspeed, gravity: 0.25, imageAngle,
     };
     // `inst = instance_create(x, y, obj_shake); inst.shakex = 8;
     //  inst.shakespeed = 1;` — Step_0:1999-2004. UNGUARDED, unlike
@@ -1595,6 +1667,7 @@ export function stepTpscene(state) {
     state.kaizo.specialCon = 0;
     kt.knightState = 0;
     sc.tp.deadtp = null;   // with (obj_tensionbar) instance_destroy(deadtp)
+    state.kaizo.deadtp = null;
   }
 
   // `if (state == 10 && k_scenefloat) y = ystart + k_yoff + cos(siner2/8)*8`
@@ -1869,6 +1942,14 @@ export const snowgraveSpell = {
   // tensionbar.js's own Draw uses).
   endStep(e, state) {
     e.timer += 1;
+    // :138-141 — `if (timer == 1) audio_play_sound(snd_snowgrave, 50, 0);`
+    // The spell's signature cue, and the one sound in this scene that was
+    // neither called nor shipped: the other five (snd_wing, snd_knight_cut,
+    // snd_rocket_bc, snd_graze, snd_damage) were cued correctly all along,
+    // so the scene played with everything EXCEPT the sound that announces
+    // it. check-audio-cues scans for cues named in shipped code, which is
+    // why an unnamed one was invisible to it by construction.
+    if (e.timer === 1) cue(state, 'snd_snowgrave');
     const [lo, hi] = SNOWGRAVE_SPAWN_WINDOW;
     if (e.timer >= lo && e.timer <= hi) {
       const vx = state.view?.x ?? 0;
@@ -2453,15 +2534,31 @@ export function stepSgscene(state) {
     setScene(state, 'sg', 7.1);
     const a = writerAnchor(state, sc.sg.target);
     const casterChar = charIdOf(state, sc.sg.caster);
+    const sgdmg = state.kaizo.sgdmg ?? 0;
+    // `dm.type = global.char[k_sgcaster] - 1`, then overridden to 6 when the
+    // caster is Noelle — which on the Weird Route it always is.
+    const writerType = casterChar === 4 ? 6 : casterChar - 1;
     sc.writers.push({
       frame: state.frame,
       x: a.x + 24,
       y: a.y,
-      damage: state.kaizo.sgdmg ?? 0,
-      // `dm.type = global.char[k_sgcaster] - 1`, then overridden to 6 when the
-      // caster is Noelle — which on the Weird Route it always is.
-      type: casterChar === 4 ? 6 : casterChar - 1,
+      damage: sgdmg,
+      type: writerType,
     });
+    // AND ACTUALLY SPAWN IT. The record above is the scene's own ledger, which
+    // the checks read; it is not a writer, and nothing painted it, so the one
+    // number that tells the player what the spell just did — the whole
+    // accumulated k_sgdmg, in Noelle's type-6 yellow — existed as data with
+    // zero consumers. Same shape as the xslashGridHeads defect: computed,
+    // never read.
+    //
+    // Through the ENGINE's entry point, not a private drawer, so it inherits
+    // obj_dmgwriter's pose, its bounces and its kill ramp. `delay = 2` is the
+    // Create's own. The `random(600)` placeholder roll inside spawnDmgNumber
+    // is obj_dmgwriter's and is what the GML spends here too, so the scene's
+    // draw budget gains exactly the draw the game gains.
+    spawnDmgNumber(state, a.x + 24, a.y, sgdmg, writerType, 2);
+    draw(state, 'sg', 1);
     if (state.kaizo.faceaction) state.kaizo.faceaction[sc.sg.target] = 0;
     const targetChar = charIdOf(state, sc.sg.target);
     if (targetChar !== 4) {
@@ -2469,7 +2566,12 @@ export function stepSgscene(state) {
         sc.recruitanim = { frame: state.frame, x: a.x + 38, y: a.y - 32, imageIndex: 12 };
       }
     } else {
-      sc.noelleShake = state.frame;    // scr_minishakeobj on obj_heronoelle
+      // `scr_minishakeobj(obj_heronoelle)` (:1745-1751) — the target is Noelle
+      // herself, who cannot be frozen, so the spell shakes her instead. This
+      // recorded a frame number and shook nobody; scrMinishakeobj is right
+      // here in this file and takes the actor.
+      sc.noelleShake = state.frame;
+      scrMinishakeobj(state, heroActorAt(state, sc.sg.target));
     }
   } else if (s === 8) {
     // ── TEARDOWN (:1757-1765) ───────────────────────────────────────────

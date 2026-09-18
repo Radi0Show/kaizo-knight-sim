@@ -452,6 +452,22 @@ export function vcHooks({ sideb = false, roster = null } = {}) {
     // stamps `k_hpscene = 1` back over whatever state the scene had reached —
     // the scene would replay its first frame forever.
     knightFirstStep: (state) => {
+      // PRACTICE MODE: THE KNIGHT CANNOT BE KILLED. Step_0:5-8, the very top
+      // of his Step, every frame:
+      //
+      //     if (practicemode) global.monsterhp[myself] = global.monstermaxhp[myself];
+      //
+      // Modelled here because this hook is the one that runs FIRST, and the
+      // order is the mechanic: the pin sits above the 60% tempflag test at
+      // :9-12, so a practice run can never trip the phase-4 gate. Without it
+      // the party's damage accumulated normally, phase 4 opened, ROARING
+      // played and practice could reach the ending — while in the mod the
+      // loop simply never ends, which is what a practice mode is for. The
+      // party half of practicemode (the HP doubling and restore) was already
+      // modelled in kaizo/party/damage.js; this is the Knight's half.
+      if (state.knight?.practicemode) {
+        state.knight.hp = state.knightMaxhp ?? VC_KNIGHT.maxhp;
+      }
       // …AND, riding the only per-frame hook this file owns that runs from
       // frame 0, the A-Side spell seam (B-3 / ledger G-22 + G-45). It is
       // idempotent (`??=`) and has to be installed before the FIRST menu,
@@ -635,6 +651,24 @@ export function vcHooks({ sideb = false, roster = null } = {}) {
         const knightPhaseNow = gateTripped ? 4 : prevPhase;
         const phase4turn = gateTripped ? 0 : (prevPhase === 4 ? prevTurn + 1 : 0);
         kaizoTurnEndMessages(state, { prevatk, phase: knightPhaseNow, phase4turn });
+        // `kaizo_prevatk` — PUBLISHED, not just used for the message.
+        //
+        // scr_mnendturn:152 arms the TP-cut scene on
+        // `kaizo_prevatk == "atk_Frenzy1"`, comparing the STRUCT ID, and
+        // nothing anywhere wrote `state.kaizo.prevatk` — so armTpscene fell
+        // through to its display-name fallback and read the row that
+        // LAUNCHED. That is right on an ordinary turn and wrong both ways on
+        // a phase-4 gate turn, because the launch block pre-advances
+        // `kaizo_attack` to the finished row's nextAttack (Step_0:528-529)
+        // and the gate copies THAT into prevatk (:574) — which is exactly the
+        // `gateTripped` arm computed one line above.
+        //
+        // Ordering is already right: the `advance` hook parks the row on the
+        // sweep frame and `fireTurnEndAlarm` calls scrMnendturnScenes fifteen
+        // frames later (kaizo-practice.js). The ids in vc-script.js are
+        // already `atk_Frenzy1` and friends, so scenes.js's string branch
+        // takes over from the fallback with no other change.
+        state.kaizo.prevatk = prevatk;
       }
       // THE KNIGHT REPORTS THE ROW HE IS LEAVING, not the one he is taking.
       // The mod's selector sets `phase = kaizo_AT.attackPhase`

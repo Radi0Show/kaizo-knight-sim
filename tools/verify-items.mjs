@@ -160,7 +160,7 @@ if (s.inventory.length !== n0 - 1) failures.push('a used item stayed in the bag'
   // is ACT for Kris and MAGIC for everyone else, so it cannot be indexed by a
   // plain indexOf on the name.
   const button = (want, c) => BUTTONS.findIndex(
-    (b) => (typeof b.name === 'function' ? b.name(c) : b.name) === want,
+    (b) => (typeof b.name === 'function' ? b.name(st, c) : b.name) === want,
   );
 
   // Kris: plain DEFEND, so slot 0's snapshot keeps the whole bag — which is
@@ -218,8 +218,11 @@ if (s.inventory.length !== n0 - 1) failures.push('a used item stayed in the bag'
 {
   const REVIVE_MINT = 2;
   const mints = (st) => st.inventory.filter((i) => i === REVIVE_MINT).length;
-  const button = (want, c) => BUTTONS.findIndex(
-    (b) => (typeof b.name === 'function' ? b.name(c) : b.name) === want,
+  // The state is a parameter here: this block's `st` is built fresh inside
+  // run(), so the helper cannot close over it. BUTTONS[0].name reads the
+  // CHARACTER in the slot (charIdForSlot), not the slot number.
+  const button = (want, c, s) => BUTTONS.findIndex(
+    (b) => (typeof b.name === 'function' ? b.name(s, c) : b.name) === want,
   );
   const run = (label, script) => {
     const st = createState({ seed: 3 });
@@ -240,7 +243,7 @@ if (s.inventory.length !== n0 - 1) failures.push('a used item stayed in the bag'
     return { st, before, after: mints(st) };
   };
   const pickMint = (st, tap) => {
-    st.menu.selected[0] = button('ITEM', 0);
+    st.menu.selected[0] = button('ITEM', 0, st);
     tap('confirm');
     const slot = bagOf(st).indexOf(REVIVE_MINT);
     st.menu.gridIndex = slot;
@@ -257,8 +260,8 @@ if (s.inventory.length !== n0 - 1) failures.push('a used item stayed in the bag'
     tap('cancel');             // Susie X -> scr_prevhero -> back to Kris
     if (st.menu.charturn !== 0) failures.push(`X should hand the turn back to Kris, got charturn ${st.menu.charturn}`);
     if (st.pendingItem?.[0]) failures.push('cancel left the item QUEUED — it will fire for free');
-    st.menu.selected[0] = button('DEFEND', 0); tap('confirm');
-    st.menu.selected[1] = button('DEFEND', 1); tap('confirm'); // Ralsei is down: the turn ends
+    st.menu.selected[0] = button('DEFEND', 0, st); tap('confirm');
+    st.menu.selected[1] = button('DEFEND', 1, st); tap('confirm'); // Ralsei is down: the turn ends
   });
   if (a) {
     if (a.st.partyHp[2] !== -30) failures.push(`the cancelled ReviveMint revived Ralsei (hp ${a.st.partyHp[2]})`);
@@ -270,7 +273,7 @@ if (s.inventory.length !== n0 - 1) failures.push('a used item stayed in the bag'
   // block above passes because nothing fires at all.
   const c = run('control mint', (st, tap) => {
     pickMint(st, tap);
-    st.menu.selected[1] = button('DEFEND', 1); tap('confirm');
+    st.menu.selected[1] = button('DEFEND', 1, st); tap('confirm');
   });
   if (c) {
     if (c.st.partyHp[2] <= 0) failures.push(`the control's ReviveMint did not revive Ralsei (hp ${c.st.partyHp[2]})`);

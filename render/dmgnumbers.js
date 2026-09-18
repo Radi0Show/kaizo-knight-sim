@@ -47,7 +47,16 @@ export function drawAttackVfx(ctx, state, sprites) {
     const entry = sprites.get(v.sprite);
     if (!entry || !entry.frames.length) continue;
     const frame = Math.min(Math.floor(v.index), entry.frames.length - 1);
-    drawSpriteExt(ctx, entry, frame, v.x, v.y, v.scale, v.scale, 0, null, 1);
+    // PER-AXIS, falling back to the single `scale`. obj_basicattack's Create
+    // sets `image_xscale` and `image_yscale` separately and a caller is free
+    // to give them different signs — a paired swing MIRRORS the second hit
+    // (`xscale = 2` then `-2`), which is what makes an X an X rather than two
+    // identical slashes. Every row sim/attackvfx.js writes carries only
+    // `scale`, so both reads answer the same number and every vanilla impact
+    // draws exactly as before.
+    const xs = v.xscale ?? v.scale;
+    const ys = v.yscale ?? v.scale;
+    drawSpriteExt(ctx, entry, frame, v.x, v.y, xs, ys, 0, null, 1);
   }
   ctx.restore();
 }

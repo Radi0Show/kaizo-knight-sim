@@ -172,8 +172,24 @@ export function drawBackground(ctx, state, sprites) {
   const af = Math.min(1, frame / 120);
 
   // THE FIGHT'S PROGRESS, off the Knight's HP. `maxhp * 0.8` is 5840.
+  //
+  // THREE NUMBERS, ALL THREE OPTIONAL. obj_bgfountaintest's line is
+  // `1 - (((monsterhp - monstermaxhp * PIVOT) / monstermaxhp) * SLOPE)`, and
+  // a mod is free to move any of them — EnderCat8's moves all three at once
+  // (10000 / 0.6 / 2.5), which is what makes the ramp reach exactly 1 at his
+  // own phase-4 gate. With none of the fields set these are the vanilla
+  // 7300 / 0.8 / 5 and this fight is bit-identical.
+  //
+  // It matters beyond the colour: `battleprog` is the ALPHA of the two
+  // parallax sheets and the blend factor of the column. Vanilla's numbers on
+  // a 10000-HP Knight give -1.849 at full health, so both sheets were drawn
+  // at negative alpha from frame 0 and the blend sat clamped at 0 for the
+  // first 2700 HP.
   const hp = state.knight?.hp ?? KNIGHT_MAXHP;
-  const battleprog = 1 - ((hp - KNIGHT_MAXHP * 0.8) / KNIGHT_MAXHP) * 5;
+  const kmax = state.knightMaxhp ?? KNIGHT_MAXHP;
+  const pivot = state.knightProgPivot ?? 0.8;
+  const slope = state.knightProgSlope ?? 5;
+  const battleprog = 1 - ((hp - kmax * pivot) / kmax) * slope;
   const oceanspeed = battleprog > 0.65 ? 2 : 1;
 
   const shakex = state.shakeX ?? 0;

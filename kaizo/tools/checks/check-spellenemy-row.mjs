@@ -110,6 +110,7 @@ const { createState, stepFrame } = await import('../../../sim/index.js');
 const { buildPracticeScene } = await import('../../../sim/scenes/practice.js');
 const { buildKaizoScene } = await import('../../scenes/kaizo-fight.js');
 const simSpells = await import('../../../sim/spells.js');
+const { listRows } = await import('../../../sim/menu.js');
 const { drawMenu } = await import('../../../render/menu.js');
 const { createRenderer } = await import('../../../render/canvas.js');
 
@@ -166,6 +167,16 @@ function pressToCast(kind, gap) {
   for (let n = 1; n <= 12; n += 1) {
     tap('confirm');
     path.push(s.menu.open ? (s.menu.submenu ?? 'row') : 'closed');
+    // STEP OFF THE ACT ROW. scr_spellmenu_setup builds the caster's ACT rows
+    // ahead of the spells for anyone who is not Kris, so V-D's grid opens on
+    // N-Action and the next confirm would resolve an ACT instead of a spell.
+    // A direction press is not a confirm, so the count this check pins — the
+    // thing it exists to measure — is untouched. V-C and vanilla have no act
+    // row and this does nothing there.
+    if (s.menu.open && s.menu.submenu === 'magic'
+        && listRows(s)[s.menu.gridIndex ?? 0]?.act) {
+      tap('right');
+    }
     if (s.tension !== before) return { confirms: n, path, charged: before - s.tension };
     if (!s.menu.open) return { confirms: n, path, charged: 0, error: 'closed, nothing charged' };
   }

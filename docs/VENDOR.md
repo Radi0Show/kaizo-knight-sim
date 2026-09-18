@@ -5,15 +5,9 @@ tools/ are a snapshot of knight-sim; never hand-edit them here (see the
 script's header and CLAUDE.md).
 
 - source: D:\ShadowCrystal\knight-sim
-- commit: 36aa2235b0c1fd80cae513651591a88e1ce81550
-- vendored: 2026-09-17
-- the source tree was DIRTY inside the mirrored directories; these uncommitted files were vendored as they stood:
-     M sim/menu.js
-     M tools/verify-all.mjs
-    ?? tools/verify-itempose.mjs
-- also dirty in the source tree, OUTSIDE the mirrored directories (not vendored):
-     M web/sw.js
-     M web/version.js
+- commit: e4a7e1e9d58a6424fb419af658ff8492cf4a13d1
+- vendored: 2026-09-18
+- the mirrored directories were clean in the source tree
 
 ## Pending port-backs
 

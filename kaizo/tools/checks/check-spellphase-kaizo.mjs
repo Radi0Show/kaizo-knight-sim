@@ -254,7 +254,11 @@ section('WIRING — kaizo/scenes/kaizo-practice.js steps the MOD object, live');
   press(s, 'confirm');
   press(s, 'right');                // MAGIC
   press(s, 'confirm');
-  press(s, 'down');                 // IceShock
+  // The grid opens on N-Action (scr_spellmenu_setup puts the caster's ACT rows
+  // ahead of the spells for anyone who is not Kris), so IceShock is index 3:
+  // down is +2 down the two columns, right is +1 across.
+  press(s, 'down');                 // 0 -> 2, SleepMist
+  press(s, 'right');                // 2 -> 3, IceShock
   press(s, 'confirm');              // spelltarget 2 -> the enemy row
   press(s, 'confirm');              // commit
   assertEq(s.pendingSpell?.[1]?.id, 9, 'Noelle queued IceShock — the turn needs obj_spellphase');

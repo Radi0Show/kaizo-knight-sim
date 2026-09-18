@@ -78,6 +78,25 @@
 //       sim/attacks/tracking-swords.js       (a sword EVERY frame, on ac 11,
 //                                             14, 15, 16 and 17 — the largest
 //                                             single change the mod makes here)
+//   M8  obj_dbulletcontroller_Step_0.gml:1996  the STARS gate
+//       sim/attacks/stars-controller.js      `(made != 0 && btimer >= 4)`
+//                                            -> `btimer >= btimer` (a star
+//                                            every frame, not every fourth)
+//   M9  obj_dbulletcontroller_Step_0.gml:1972  the STARS window
+//       sim/attacks/stars-controller.js      `endtimer = 120;` -> `150;`, and
+//       sim/scenes/fight.js                  the untouched `if (difficulty
+//                                            >= 2)` block below it carries
+//                                            the pair to 240 (vanilla 210).
+//                                            A HIGHER endtimer STOPS THE
+//                                            SPAWNER EARLIER — the mod's
+//                                            Stars turn is denser AND shorter
+//   M10 obj_dbulletcontroller_Step_0.gml:2128  the ROTATING SLASH gate
+//       sim/attacks/rotating-slash.js        `if (made == false)` ->
+//                                            `if (instance_number(
+//                                                obj_knight_rotating_slash)
+//                                             < 30)` — one manager becomes
+//                                            thirty, one per frame, each born
+//                                            at obj_knight_enemy's position
 //
 // DAMAGE — the nerfs and buffs that travel with the density:
 //
@@ -112,18 +131,28 @@
 //   T4  obj_knight_enemy_Step_0.gml:712/719/726   the three knockdown lines,
 //       one of which gains a `balloonturn >= 6` variant
 //
-// ─── THE SITE THAT IS *NOT* HERE, AND WHY ──────────────────────────────────
+// ─── THREE THINGS THIS HEADER USED TO SAY THAT WERE FALSE ──────────────────
 //
-//   obj_dbulletcontroller_Step_0.gml:2128, the `dc.type == 104` arm:
+// Kept as a correction rather than quietly deleted, because each one was
+// believed long enough to be planned around, and the shape of the mistake is
+// the same all three times: the table above was read as the inventory of the
+// work instead of the CODE being read.
 //
-//       -   if (made == false)
-//       +   if (instance_number(obj_knight_rotating_slash) < 30)
+//   1. “obj_dbulletcontroller_Step_0.gml:2128 ... is a real mechanic and it
+//      is unimplemented.” It is M10 above and it has been implemented since
+//      the toggle shipped — `sim/attacks/rotating-slash.js`, on the lead
+//      manager's End Step.
+//   2. “D3 is the only place in the mod where the Stars attack changes at
+//      all.” Stars has two MECHANIC sites as well, M8 and M9, both in the
+//      type-98 arm of the same controller.
+//   3. “This sim has no obj_dbulletcontroller.” It has one:
+//      `sim/attacks/stars-controller.js` is literally
+//      `name: 'obj_dbulletcontroller'`. Type 104 has no controller ENTITY —
+//      that is the true and much narrower statement, and the reason M10 lives
+//      on a manager.
 //
-//   The rotating-slash turn spawns ONE manager in vanilla; under the mod the
-//   controller keeps spawning them every frame until THIRTY are alive. This
-//   sim has no `obj_dbulletcontroller`: `sim/scenes/fight.js` calls
-//   `spawnRotatingSlash` once, directly, so the change has nowhere to live in
-//   this lane's files. It is a real mechanic and it is unimplemented.
+// The lesson is CLAUDE.md's, landing again: a table of branches is not the
+// control flow through them, and a doc comment is not a measurement.
 //
 //   `obj_tracking_swords_manager_Create_0.gml:10` (`for (i = 0; i < 50)` ->
 //   `3000`) only pre-fills the `setdirection` array further; see

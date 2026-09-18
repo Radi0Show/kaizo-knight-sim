@@ -45,6 +45,23 @@ export const starsController = {
     // NO BULLET COOLDOWNS runs the STARS longer as well as denser:
     //     obj_dbulletcontroller Step_0, the `type == 98` branch
     //     -  endtimer = 120;   +  endtimer = 150;
+    //
+    // THE LAUNCH SITE OVERWRITES THIS AND THAT IS DELIBERATE, not a
+    // duplicate. The dump's next three lines are
+    //
+    //     if (difficulty >= 2) { endtimer += 30; ...; endtimer += 60; }
+    //
+    // and `dc.difficulty` is assigned AFTER `spawn()` returns, so a create()
+    // reading it gets undefined — the create-time-field trap CLAUDE.md
+    // records under the type-98 `side = choose(-1, 1)` draw. The whole
+    // expression therefore lives in `sim/scenes/fight.js` case 1, which
+    // pays 150/240 modded and 120/210 vanilla. The line below is the base
+    // only, kept so a controller spawned by a drill rather than by
+    // `launchAttack` still starts somewhere honest; it was ALSO the only
+    // toggle-aware endtimer in the repo for a while, and fight.js's
+    // hardcoded `difficulty >= 2 ? 210 : 120` silently clobbered it on every
+    // launch, which is how the mod's longer Stars turn never reached a
+    // player.
     e.endtimer = nbcOn(state) ? 150 : 120;
     e.init = 2;
     e.size = 0;

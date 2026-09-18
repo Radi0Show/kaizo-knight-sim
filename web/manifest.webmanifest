@@ -2,7 +2,7 @@
   "id": "kaizo-knight",
   "name": "Kaizo Knight Simulator",
   "short_name": "KaizoKnight",
-  "description": "A browser recreation of the Kaizo Roaring Knight mod. NOT the real fight.",
+  "description": "EnderCat8's Kaizo Roaring Knight mod, in your browser. Not the real mod.",
   "start_url": "./kaizo.html",
   "scope": "./",
   "display": "standalone",

@@ -146,7 +146,10 @@ section('LIVE — a V-D turn driven to obj_spellphase, reading state.battlemsg')
   press(s, 'right');                  // MAGIC
   press(s, 'confirm');
   assertEq(s.menu.submenu, 'magic', 'the MAGIC grid is open');
-  // `global.spell[4] = [2, 8, 9]` — Heal Prayer is row 0, no move needed.
+  // `global.spell[4] = [2, 8, 9, 10]`, but ROW 0 IS N-ACTION: scr_spellmenu_setup
+  // builds the caster's ACT rows ahead of the spells for anyone who is not
+  // Kris, so Heal Prayer is index 1 — one step right.
+  press(s, 'right');                  // 0 -> 1, Heal Prayer
   press(s, 'confirm');                // Heal Prayer is spelltarget 1 -> the ally picker
   assertEq(s.menu.submenu, 'target', 'Heal Prayer opens the ALLY picker');
   press(s, 'confirm');                // heal Noelle herself
@@ -170,7 +173,8 @@ section('LIVE — a V-D turn driven to obj_spellphase, reading state.battlemsg')
   press(s, 'confirm');
   press(s, 'right');                  // MAGIC
   press(s, 'confirm');
-  press(s, 'right');                  // row 0, column 1: SleepMist
+  // N-Action, Heal Prayer, SleepMist: index 2, which is one DOWN (+2).
+  press(s, 'down');                   // 0 -> 2, SleepMist
   press(s, 'confirm');
   assertEq(s.pendingSpell?.[1]?.id, 8, 'SleepMist queued on slot 1');
   let msg = null;

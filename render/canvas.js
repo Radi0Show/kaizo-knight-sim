@@ -897,6 +897,23 @@ export async function createRenderer(canvas, { overrides = null } = {}) {
     // speed are read off the Knight's HP.
     drawBackground(ctx, state, sprites);
 
+    // THE TP BAR, EARLY — only when the skin asks for it.
+    //
+    // obj_tensionbar is an ordinary depth-sorted instance in the game, so
+    // anything that takes `obj_tensionbar.depth - 1` paints OVER it. Here the
+    // bar is screen-space and painted after everything (see the call at the
+    // bottom of this function), so nothing can ever get in front of it. The
+    // one beat that needs to is the kaizo TP cut, where the Knight does
+    // exactly that for about 25 frames.
+    //
+    // DECLARED DEVIATION, not a translation: the bar does not join the depth
+    // pass, it moves to the FRONT of the frame, so during that window it is
+    // under the arena and the party too. In the window it is asked for, the
+    // bar's own band (y ~40) holds nothing else, so the visible result is the
+    // Knight crossing in front of it and the rest unchanged.
+    const tbEarly = !!state.tensionBar?.early;
+    if (tbEarly) drawTensionBar(ctx, state, sprites);
+
     ctx.save();
 
     // SCREEN SHAKE IS ALREADY IN state.view. obj_shake (sim/shake.js) moves
@@ -975,8 +992,10 @@ export async function createRenderer(canvas, { overrides = null } = {}) {
     ctx.restore();
 
     // THE CHARBOX ROW, last and in screen space — the party panels sit over
-    // everything, including a full-screen attack.
-    drawTensionBar(ctx, state, sprites);
+    // everything, including a full-screen attack. Unless the skin asked for
+    // the bar early, above — then it has already been painted, and drawing it
+    // twice would put it back on top, which is the whole thing being avoided.
+    if (!tbEarly) drawTensionBar(ctx, state, sprites);
     // Damage numbers go OVER the arena and UNDER the menu band — they are at
     // the enemy's depth, and the band is drawn on top of everything.
     // The impact lands UNDER the number — the number is thrown up out of it.

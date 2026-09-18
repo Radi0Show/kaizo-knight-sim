@@ -570,8 +570,19 @@ function drawEnemyRow(ctx, state, sprites, font) {
   ctx.fillStyle = MAROON;
   ctx.fillRect(420, 380, 80, 15);
   const hp = state.knight?.hp ?? KNIGHT_MAXHP;
+  // `global.monstermaxhp[myself]`, NOT the literal — the same optional plain
+  // state field this file already uses for the party's max HP
+  // (`state.partyMaxhp?.[i] ?? PARTY[i].maxhp`). A scene whose Knight is not
+  // this Knight publishes his own maximum and the bar scales to it; with no
+  // field set the vanilla 7300 stands and nothing about this fight moves.
+  //
+  // Written for a mod whose Knight has 10000: dividing 10000 by 7300 gave
+  // 109.6px of lime inside an 80px maroon track, so the bar overflowed and
+  // read FULL until he was under 7300 — the first 2700 damage of every fight
+  // moved nothing the player could see.
+  const kmax = state.knightMaxhp ?? KNIGHT_MAXHP;
   ctx.fillStyle = 'rgb(0,255,0)'; // c_lime
-  ctx.fillRect(420, 380, Math.max(0, (hp / KNIGHT_MAXHP) * 80), 15);
+  ctx.fillRect(420, 380, Math.max(0, (hp / kmax) * 80), 15);
 
   drawText(ctx, font, 'HP', 424, 364, { yscale: 0.5, color: '#ffffff' });
   drawText(ctx, font, '???', 424, 380, { yscale: 0.5, color: '#ffffff' });
@@ -704,7 +715,9 @@ export function drawMenu(ctx, state, sprites) {
       // own selection here).
       for (let b = 0; b < BUTTONS.length; b++) {
         const spec = BUTTONS[b];
-        const entry = sprites.get(spec.sprite(c));
+        // The CHARACTER in the slot — button 1's art is ACT for Kris and
+        // MAGIC for everyone else, and the game tests `global.char[charturn]`.
+        const entry = sprites.get(spec.sprite(state, c));
         if (!entry) continue;
         const lit = menu.selected[c] === b ? 1 : 0;
         drawSpriteExt(ctx, entry, lit, chunk + spec.x, 485 - BP, 1, 1, 0, null, 1);

@@ -286,7 +286,25 @@ export const BUTTONS = [
   //
   // and Kris's own spell list is `global.spell[1][0] = 7`, whose name is
   // literally "ACT". So it is ACT for Kris and MAGIC for the other two.
-  { x: 50, sprite: (c) => (c === 0 ? 'spr_btact' : 'spr_bttech'), name: (c) => (c === 0 ? 'ACT' : 'MAGIC') },
+  // KEYED BY CHARACTER ID, NOT BY SLOT. The test quoted just above is
+  // `global.char[charturn] != 1`, and this line keyed on `c === 0` while the
+  // docblock said otherwise. The two agree for every vanilla party, because
+  // `charIdForSlot` answers `slot + 1` with no roster installed — so this
+  // fight and both byte-gate recordings take exactly the branch they always
+  // did. They stop agreeing on a party with no Kris, which the mod's own
+  // settings sign can build: slot 0 would be Susie, Ralsei or Noelle and
+  // would be handed KRIS'S act grid.
+  //
+  // THE ARGUMENTS ARE `(state, slot)`, NOT a bare index. They used to be the
+  // slot alone and the body tested `c === 0`, which is a DIFFERENT QUESTION
+  // from the one the game asks; passing a bare char id instead would have read
+  // identically at every call site and been wrong at half of them. Taking the
+  // state makes the mapping explicit and impossible to get backwards.
+  {
+    x: 50,
+    sprite: (state, c) => (charIdForSlot(state, c) === 1 ? 'spr_btact' : 'spr_bttech'),
+    name: (state, c) => (charIdForSlot(state, c) === 1 ? 'ACT' : 'MAGIC'),
+  },
   { x: 85, sprite: () => 'spr_btitem', name: 'ITEM' },
   { x: 120, sprite: () => 'spr_btspare', name: 'SPARE' },
   { x: 155, sprite: () => 'spr_btdefend', name: 'DEFEND' },
@@ -688,7 +706,7 @@ export function listRows(state) {
     // CHARACTER-KEYED through the seam in sim/spells.js: `global.spell[
     // global.char[charturn]]`, which is the slot table only while slot i
     // holds character i + 1.
-    return (spellListFor(state, c) ?? []).map((id) => ({
+    const spells = (spellListFor(state, c) ?? []).map((id) => ({
       label: spellInfo(state, id).name,
       descb: spellInfo(state, id).descb,
       id,
@@ -696,6 +714,44 @@ export function listRows(state) {
       // is what the character knows, not what they can afford this second.
       usable: canAfford(state, id, c),
     }));
+    // ── A PARTNER'S ACT ROW LIVES IN THIS LIST, NOT IN A GRID OF ITS OWN ──
+    //
+    // `scr_spellmenu_setup` builds `global.battlespell[slot]` as the slot's
+    // ACT rows FIRST — each carrying the marker -1 — and then
+    // `global.spell[global.char[slot]]`. Only KRIS gets a picker of his own:
+    // obj_battlecontroller Step_0:483-492 sends `global.char[charturn] == 1`
+    // to bmenuno 11 and everyone else to bmenuno 2, the spell list. So
+    // S-Action, R-Action and N-Action have always been reached through MAGIC,
+    // and this engine's magic list omitted them — which is why every partner
+    // ACT in the project is built, asserted by calling it directly, and
+    // unreachable by a player.
+    //
+    // OPT-IN, AND DELIBERATELY SO. Turning it on unconditionally is a change
+    // to the COMMAND PHASE's frame accounting: one more row in the list, one
+    // more press to walk past it. docs/VENDOR.md records the measurement that
+    // rejected exactly that — vendored into the kaizo lane it took the `_rev1`
+    // whole-fight diff from f12492 back to f8729 on the TURN column, because
+    // the recorded input feed then plays into a menu of a different shape.
+    // Until a recording settles how many rows the partner's list really has
+    // and what its confirm costs in frames, the row is published only by a
+    // scene that asks for it. Nothing in `sim/` sets the field, so the
+    // vanilla fight and every byte-gated recording are bit-identical.
+    if (state.spellmenuActs && charIdForSlot(state, c) !== 1) {
+      const acts = (actsFor(state, c) ?? []).map((a, i) => ({
+        label: a.name,
+        descb: a.descb,
+        id: i,
+        // `act` is the marker -1: it is what tells the confirm handler this
+        // row is an ACT and not a spell id, since the two numberings overlap.
+        act: true,
+        usable: actUsable(state, c, a),
+        cost: a.cost ?? 0,
+        simul: a.simul ?? 0,
+        actor: a.actor ?? 1,
+      }));
+      return [...acts, ...spells];
+    }
+    return spells;
   }
   if (menu.submenu === 'actgrid') {
     // `global.canactsus[myself][0] = 0` — SUSIE'S ACT IS ONE USE. Her block
@@ -1237,7 +1293,12 @@ export function stepMenu(state, input) {
         const row = rows[menu.gridIndex];
         if (!row || !row.usable) {
           cue(state, 'snd_error');
-        } else if (menu.submenu === 'actgrid') {
+          // `row.act` is `scr_spellmenu_setup`'s -1 marker: a partner's ACT
+          // row reached through the MAGIC list, which is the only way a
+          // partner can reach one (see listRows). It confirms through the
+          // same block as Kris's grid because it IS the same act — the
+          // difference is the list it was picked from, not what happens next.
+        } else if (menu.submenu === 'actgrid' || row.act) {
           // THE GRID CONFIRMS SET onebuffer = 2, NOT 1 — the only four sites
           // in obj_battlecontroller that do: the MAGIC grid (Step_0:636), the
           // battlespell grid (:780), the ITEM grid (:937) and the ACT grid
@@ -1436,7 +1497,8 @@ export function stepMenu(state, input) {
     // menu, no error sound, no turn advance. ACT and MAGIC were unreachable
     // for exactly this reason.
     const nameOf = BUTTONS[menu.selected[c]].name;
-    const chosen = typeof nameOf === 'function' ? nameOf(c) : nameOf;
+    // The CHARACTER in the slot, not the slot — see BUTTONS.
+    const chosen = typeof nameOf === 'function' ? nameOf(state, c) : nameOf;
     if (chosen === 'FIGHT') {
       // `bmenucoord[0] == 0 -> global.bmenuno = 1` — FIGHT opens the ENEMY
       // ROW first, and that row is where the Knight's HP bar and its "???"
@@ -1455,7 +1517,7 @@ export function stepMenu(state, input) {
     // reads ACT where the others read MAGIC because it is one menu slot with
     // different contents, not a different button.
     if (chosen === 'MAGIC' || chosen === 'ACT') {
-      const isAct = chosen === 'ACT' || (chosen === 'MAGIC' && c === 0);
+      const isAct = chosen === 'ACT' || (chosen === 'MAGIC' && charIdForSlot(state, c) === 1);
       const listName = isAct ? 'actgrid' : 'magic';
       if (listRows({ ...state, menu: { ...menu, submenu: listName } }).length === 0) {
         cue(state, 'snd_error');

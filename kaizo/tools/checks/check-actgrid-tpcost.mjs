@@ -281,34 +281,40 @@ section('D — MAGIC still prints its own cost, at 496, and now on EVERY row');
   tap(s, 'confirm');
   eq(s.menu.submenu, 'magic', 'her MAGIC grid is open');
   s.frame = 200;
-  // THE PARTNER ACT ROW IS NOT IN THIS LIST, AND THAT IS THE CURRENT TRUTH
-  // RATHER THAN AN OVERSIGHT. N-Action / S-Action / R-Action are unreachable
-  // on both routes (sim/menu.js routes `isAct` by character, so only Kris
-  // reaches the grid, and listRows('magic') omits the act row for everyone
-  // else). A lane BUILT that fix, measured it against the whole-fight
-  // recording, and backed it out: the recording moved, and the recording is a
-  // capture of the real game while a GML reading is not. It is logged as an
-  // open gap, and these assertions describe the list as it IS — asserting the
-  // fixed shape here would be a check that can never go green, which is what
-  // this block was before.
-  eq(listRows(s)[0]?.label, 'Heal Prayer', 'her first MAGIC row is Heal Prayer');
+  // THE PARTNER ACT ROW IS IN THIS LIST NOW. This block used to assert the
+  // opposite, and said so at length: a lane had built the fix, measured it
+  // against the whole-fight recording, watched the recording move, and backed
+  // it out. What changed is not the GML reading but WHERE THE SEAM SITS.
+  // `state.spellmenuActs` is set only for a side-B version
+  // (kaizo/scenes/kaizo-fight.js, behind `kaizoSidebFor(version)`), and BOTH
+  // tracked recordings are Normal Route — CLAUDE.md, 'The one number':
+  // "`fullfight/` is Normal Route on both pairs". So the act row cannot reach
+  // the byte gate at all, and V-C's grid is byte-for-byte what it was.
+  //
+  // Noelle's grid is therefore [N-Action, Heal Prayer, SleepMist, IceShock,
+  // SnowGrave] (scr_spellmenu_setup: the caster's ACT rows, marker -1, then
+  // the spells), two columns wide — down is +2, right is +1.
+  eq(listRows(s)[0]?.label, 'N-Action', 'her first MAGIC row is the ACT row');
+  eq(costRun(paint(s)), undefined, 'the ACT row is free, so it prints no price at all');
+  tap(s, 'right');
+  s.frame = 200;
+  eq(listRows(s)[s.menu.gridIndex]?.label, 'Heal Prayer', 'RIGHT lands on the first spell');
   const first = costRun(paint(s));
   eq(first?.x, 496, 'the SPELL readout is still at 496 (spell_offset, not the ACT 500)');
-  eq(first?.text, expectedSpellPct(s), '...and row 0 prints its own floor()-ed cost');
+  eq(first?.text, expectedSpellPct(s), '...and it prints its own floor()-ed cost');
   // THE ROWS THE VANILLA TABLE DOES NOT HAVE. `SPELLS[sel.id]` gated this
   // readout, so the Weird Route's own ids (SleepMist 8, IceShock 9) printed
   // NOTHING while the vanilla id beside them printed its price.
-  // DOWN steps two along the 2-wide grid (0 -> 2).
+  // DOWN steps two along the 2-wide grid (1 -> 3).
   tap(s, 'down');
   s.frame = 200;
   eq(listRows(s)[s.menu.gridIndex]?.label, 'IceShock', 'DOWN lands on IceShock (id 9)');
   eq(costRun(paint(s))?.text, '8% TP',
     'IceShock prints a price now — and it is the CHARGED cost (spellCost 20), not its table 40');
   eq(costRun(paint(s))?.text, expectedSpellPct(s), '...which is what the seam says it will charge');
-  tap(s, 'up');
-  tap(s, 'right');
+  tap(s, 'left');
   s.frame = 200;
-  eq(listRows(s)[s.menu.gridIndex]?.label, 'SleepMist', 'RIGHT lands on SleepMist (id 8)');
+  eq(listRows(s)[s.menu.gridIndex]?.label, 'SleepMist', 'LEFT lands on SleepMist (id 8)');
   eq(costRun(paint(s))?.text, expectedSpellPct(s),
     'SleepMist prints a price too — neither id is in the vanilla SPELLS table this used to consult');
 }

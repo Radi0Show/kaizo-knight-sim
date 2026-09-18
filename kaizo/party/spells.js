@@ -79,7 +79,9 @@ import { gmlRound, clamp } from '../../sim/gml.js';
 import { cue } from '../../sim/audio.js';
 import { damageKnight, KNIGHT_DF } from '../../sim/knight.js';
 import { spawnDmgNumber, spawnSelfHealNumber, resetDmgStack } from '../../sim/dmgnumbers.js';
+import { KRIS_IMPACT } from '../../sim/attackvfx.js';
 import { MAX_TENSION } from '../../sim/tension.js';
+import { VC_KNIGHT } from '../versions/vc-script.js';
 import { ACT_PAGES } from '../../sim/dialogue.js';
 import { holdBreath } from '../../sim/spells.js';
 import {
@@ -1015,7 +1017,16 @@ export function xslashDamage(state) {
   let red = 0.15 + (dr - 0.15) * 1.25;
   if (red > 1.05) red = 1.05;
   const at = statFor(state, 0).at;
-  let dmg = gmlRound((at * 160) / 20 - KNIGHT_DF * 3);
+  // THE MOD'S DF, NOT THE ENGINE'S. scr_monstersetup sets the Knight's
+  // monstertype-104 block to HP 10000 / AT 52 / DF 5 where vanilla is
+  // 7300 / 40 / 0, and the GML reads `global.monsterdf[chartarget]` here
+  // like every other damage formula. This was the THIRD of the G-22 family
+  // and the last one left on the vanilla 0: the FIGHT bar and Rude Buster
+  // were both corrected (kaizo-vc-hooks.js:85 and :520, both VC_KNIGHT.df * 3)
+  // and X-Slash was deferred because check-spells-kaizo computed its own
+  // expectation with the df term written as a literal 0 — so the suite was
+  // green ON THE WRONG NUMBER. The check moves in this commit.
+  let dmg = gmlRound((at * 160) / 20 - VC_KNIGHT.df * 3);
   dmg = Math.ceil(dmg * red);
   dmg = Math.ceil(dmg * 2);
   return dmg;
@@ -1073,10 +1084,45 @@ function xslashHit(state, xs, slot, { xscale }) {
   const kx = knight?.x ?? 425;
   const ky = knight?.y ?? 78;
   const shard = gearOfChar(state, CHAR_KRIS).weapon === 26;
+  // `if (global.charweapon[1] == 26) att.sprite_index = spr_attack_shard;`
+  // — otherwise obj_basicattack's OBJECT-DEFINITION sprite, which no grep of
+  // the code dump can find and which the object-sprite dump resolved to
+  // spr_attack_cut1 (sim/attackvfx.js KRIS_IMPACT).
+  const sprite = shard ? 'spr_attack_shard' : KRIS_IMPACT;
   xs.vfx.push({
-    sprite: shard ? 'spr_attack_shard' : 'obj_basicattack', x: kx + 119, y: ky + 76,
+    sprite, x: kx + 119, y: ky + 76,
     image_xscale: xscale, image_yscale: 2,
   });
+  // AND DRAW IT. `xs.vfx` is this module's ledger and had no reader anywhere
+  // in the repo, so X-Slash played its text, its two snd_scytheburst cues,
+  // its two damage numbers and its 28-frame hold — and put nothing on
+  // screen. The engine already owns the machine: `state.attackVfx` is
+  // stepped by sim/attackvfx.js and painted by render/dmgnumbers.js.
+  //
+  // PUSHED DIRECTLY, NOT THROUGH `spawnImpact`. spawnImpact adds
+  // `+ random(6)` on both axes and cues snd_damage; the mod's site does
+  // neither — the position is the flat `x + 119, y + 76` and the sound is
+  // snd_scytheburst, already cued by the caller. Calling it would spend two
+  // RNG draws the game does not spend, which is precisely the class of fault
+  // that desyncs a stream.
+  //
+  // `xscale` is what makes it an X: hit one is +2 and hit two is -2, the
+  // same art mirrored. render/dmgnumbers.js reads `xscale ?? scale`.
+  if (Array.isArray(state.attackVfx)) {
+    state.attackVfx.push({
+      x: kx + 119,
+      y: ky + 76,
+      sprite,
+      index: 0,
+      // obj_basicattack's Create: `image_speed = 0.334; maxindex = 3`.
+      speed: 0.334,
+      maxindex: 3,
+      scale: 2,
+      xscale,
+      yscale: 2,
+      critical: false,
+    });
+  }
   if (xs.hits.length === 0) resetDmgStack(state);
   const dmg = xslashDamage(state);
   kaizoScrDamageEnemy(state, dmg, slot);

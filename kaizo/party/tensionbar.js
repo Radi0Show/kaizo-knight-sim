@@ -81,11 +81,15 @@
 //
 // NOT this module's: the knight-side k_tpscene machine itself, and the three
 // `random_range` its state-5 branch spends spawning the sheared bar top
-// (Step_0 1988-1995). Those belong to whoever translates Step_0; this module
-// only reads k_tpscene.
+// (Step_0 1988-1995). Those belong to kaizo/party/scenes.js, which owns
+// Step_0 and spends them in source order. What IS this module's is the
+// PIECE: scenes.js leaves it on `state.kaizo.deadtp` and stepDeadtp/
+// publishSkin below fly it and draw it, because the bar is this module's and
+// the import only runs one way (scenes.js imports from here).
 
 import { MAX_TENSION } from '../../sim/tension.js';
 import { gmlRandomRange } from '../../sim/rng.js';
+import { gmlLte } from '../../sim/gml.js';
 
 /** The B-Side ceiling. `clamp(global.tension, 0, 125)`. */
 export const KAIZO_SIDEB_TP_CAP = 125;
@@ -128,6 +132,8 @@ const MARKER_GRAVITY = 0.35;
 const C_ORANGE = [255, 128, 0];
 /** `scr_marker(..., spr_roaringknight_finalslash_mask)` — Draw_0:65. */
 const MARKER_SPRITE = 'spr_roaringknight_finalslash_mask';
+/** The half the Knight cuts off — obj_tensionbar's `deadtp`. */
+const DEADTP_SPRITE = 'spr_tensionbar_sliced_top';
 
 /** Re-exported so callers can compare the two without importing both files. */
 export { MAX_TENSION };
@@ -161,10 +167,18 @@ export function kaizoTpscene(state) {
  * CLAMP: tension is left wherever it was.
  */
 function endCutsceneVersion(state) {
+  // THE ENGINE'S NAME FOR IT IS `endCutscene` (sim/knight.js:110, set to 1 at
+  // :598), and render/tensionbar.js:101 already guards on that one. The two
+  // names read here before were `state.kaizo.endCutsceneVersion` and
+  // `state.knight.end_cutscene_version` -- NEITHER IS WRITTEN ANYWHERE in this
+  // repo, so this always answered 0 and the module kept clamping and kept
+  // walking the bleed loop for a bar the renderer had already stopped drawing.
+  // Inert today only because no TP is earned during the finale; the kaizo
+  // override is kept first so a scene can still drive it.
   if (typeof state.kaizo?.endCutsceneVersion === 'number') {
     return state.kaizo.endCutsceneVersion;
   }
-  return state.knight?.end_cutscene_version ?? 0;
+  return state.knight?.endCutscene ?? 0;
 }
 
 /**
@@ -394,6 +408,32 @@ function stepMarkers(state) {
 }
 
 /**
+ * THE SHEARED BAR TOP — Step_0:1986-1998, the other half of the cut.
+ *
+ * `with (obj_tensionbar) { deadtp = scr_marker(x, y,
+ *  spr_tensionbar_sliced_top); with (deadtp) { depth = obj_tensionbar.depth
+ *  + 1; image_angle = random_range(1, 10); hspeed = random_range(-5, -7);
+ *  vspeed = random_range(-2, -5); gravity = 0.25; } }`
+ *
+ * It is one prop, not a particle: no tweens, no destroy alarm, and the only
+ * thing that ends it is `instance_destroy(deadtp)` at k_tpscene 12. The
+ * three rolls and the record are kaizo/party/scenes.js's — that module owns
+ * the k_tpscene machine and spends the draws in source order. This module
+ * owns the BAR, so it owns the piece's motion and its draw, and reading it
+ * off a plain `state.kaizo` field keeps the import going one way (scenes.js
+ * imports from here).
+ *
+ * Same `markerMotion` the bleed uses — the runner's measured move step with
+ * gravity recomposed in f32 — because that is what a GameMaker instance
+ * handed hspeed/vspeed and a gravity does, whatever sprite it wears.
+ */
+function stepDeadtp(state) {
+  const d = state.kaizo?.deadtp;
+  if (!d) return;
+  markerMotion(d);
+}
+
+/**
  * The bar SKIN the renderer reads — `state.tensionBar`, the seam in
  * render/tensionbar.js (its "THE SKIN SEAM" header). Data only; the renderer
  * imports nothing from kaizo/ (HANDOFF §2.1).
@@ -413,22 +453,51 @@ function stepMarkers(state) {
 function publishSkin(state) {
   const sprites = kaizoTensionbarSprites(state);
   const bar = kaizoTpbar(state);
+  const markers = kaizoTpMarkers(state).map((m) => ({
+    sprite: MARKER_SPRITE,
+    subimage: 0,
+    x: m.x,
+    y: m.y,
+    xscale: m.image_xscale,
+    yscale: m.image_yscale,
+    blend: C_ORANGE,
+    alpha: m.image_alpha,
+  }));
+  // The sheared top rides the same list. No blend — obj_marker's
+  // `image_blend` default is c_white and the cut piece is drawn in its own
+  // colours, unlike the orange bleed — and it is the one marker that carries
+  // an `angle`.
+  const d = state.kaizo?.deadtp;
+  if (d) {
+    markers.push({
+      sprite: DEADTP_SPRITE,
+      subimage: 0,
+      x: d.x,
+      y: d.y,
+      xscale: 1,
+      yscale: 1,
+      angle: d.imageAngle,
+      alpha: 1,
+    });
+  }
+  // `early` — the draw-order request render/canvas.js honours. TRUE exactly
+  // between the GML's depth write and its restore: obj_knight_enemy takes
+  // `obj_tensionbar.depth - 1` at k_tpscene 4 (Step_0:1965) and takes its own
+  // depth back at k_tpscene 11 (:2009), dragging the afterimage trail with it
+  // both ways (:1967-1973, :2010-2013). The whole beat is staged IN FRONT of
+  // the bar, and the engine's screen-space bar is painted last, so without
+  // this the Knight is occluded by a 25px sprite for the ~25 frames of the
+  // shear. Measured before the seam existed: x 48 -> -16 across the bar's
+  // column, hidden the whole way.
+  const tp = kaizoTpscene(state);
   state.tensionBar = {
     bar: sprites.bar,
     cutout: sprites.cutout,
     tplogo: sprites.tplogo,
     yoff: kaizoTensionbarLayout(state).yoff,
     trail: bar,
-    markers: kaizoTpMarkers(state).map((m) => ({
-      sprite: MARKER_SPRITE,
-      subimage: 0,
-      x: m.x,
-      y: m.y,
-      xscale: m.image_xscale,
-      yscale: m.image_yscale,
-      blend: C_ORANGE,
-      alpha: m.image_alpha,
-    })),
+    markers,
+    early: tp >= 4 && tp < 11,
   };
 }
 
@@ -479,6 +548,7 @@ export function kaizoTensionbarDraw(state) {
   // Stepped BEFORE the loop spawns this frame's batch, because a marker
   // created in a Draw gets its first Step on the following frame.
   stepMarkers(state);
+  stepDeadtp(state);
 
   if (endCutsceneVersion(state) > 0) {
     publishSkin(state);
@@ -492,7 +562,12 @@ export function kaizoTensionbarDraw(state) {
     let i = 125.1;
     let sep = 4;
     if (state.tension >= 200) sep = 7.5;
-    while (i <= state.tension) {
+    // gmlLte, not `<=`: GameMaker compares reals with an epsilon (CLAUDE.md,
+    // measured facts) and `i` accumulates in f64 from the inexact 125.1.
+    // Tension is not always integer -- scrTensionheal adds (grazepoints / 30)
+    // * grazetpfactor per graze frame -- so a boundary case here is one
+    // iteration, three markers and NINE u32 draws: a stream divergence.
+    while (gmlLte(i, state.tension)) {
       // `_delay = ceil((_i - 125) / 20)` and the _hsp/_vsp swap at
       // k_tpscene >= 10 change the SPREAD the two random_ranges below sample
       // from — not how many they spend. Kept so the bounds are the mod's.

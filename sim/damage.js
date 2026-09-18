@@ -688,7 +688,19 @@ export function scrDamage(state, damage, target, opts = {}) {
     // the fight's real difficulty curve, and clamping either to 0 erases it.
     // `round(-global.maxhp[global.char[0]] / 2)` — the LIVE max HP, not the
     // literal. -80 for Kris at 160, and it tracks him if his max HP moves.
-    hp[target] = target === 0 ? Math.round(-partyMaxhp(state, 0) / 2) : -999;
+    //
+    // `state.permanentFell` REMOVES THE KRIS FORK, and it is a plain optional
+    // state field (undefined everywhere in vanilla, so this is a property read
+    // that finds nothing). The kaizo mod DELETED the `if (target == 0)` arm
+    // from both damage scripts — scr_damage.gml:224-232 and
+    // scr_damage_maxhp.gml:225-231 — with no side gate on the deletion, so
+    // every target takes doomtype 12 and -999 and a fall there is permanent.
+    // The field exists rather than a whole damage-script override because the
+    // override brings the mod's roster stat layer with it, and a version with
+    // no roster installed then reports every character unequipped and drops
+    // the party's DF to 0 — measured: a 100 hit landed 100 instead of 85.
+    hp[target] = (target === 0 && !state.permanentFell)
+      ? Math.round(-partyMaxhp(state, 0) / 2) : -999;
     scrDead(state, target);
   }
   // THE FLINCH. `obj_heroparent`'s Step gates every other state behind
@@ -703,9 +715,12 @@ export function scrDamage(state, damage, target, opts = {}) {
   // KRIS DOWNS, THE OTHERS SWOON — two doomtypes, two graphics. See
   // TYPE_SWOON. This used TYPE_DEAD for anyone felled, which drew DOWN over
   // Susie and Ralsei.
+  // ...and `state.permanentFell` takes Kris's fork here too: the mod's
+  // deleted arm is where doomtype 4 came from, so with it gone EVERY fall
+  // writes 12 and gets the SWOON graphic.
   const doomtype = hp[target] > 0
     ? TYPE_PARTY
-    : (target === 0 ? TYPE_DEAD : TYPE_SWOON);
+    : ((target === 0 && !state.permanentFell) ? TYPE_DEAD : TYPE_SWOON);
   spawnDmgNumber(state, PARTY_POS[target].x, PARTY_POS[target].y, t, doomtype, 2);
   return t;
 }
@@ -962,12 +977,25 @@ export function scrDamageMaxhp(state, fraction, ignoreDefend = false, cannotFell
     // exactly why it went unnoticed.
     // `round(-global.maxhp[global.char[0]] / 2)` — the LIVE max HP, not the
     // literal. -80 for Kris at 160, and it tracks him if his max HP moves.
-    hp[target] = target === 0 ? Math.round(-partyMaxhp(state, 0) / 2) : -999;
+    //
+    // `state.permanentFell` REMOVES THE KRIS FORK, and it is a plain optional
+    // state field (undefined everywhere in vanilla, so this is a property read
+    // that finds nothing). The kaizo mod DELETED the `if (target == 0)` arm
+    // from both damage scripts — scr_damage.gml:224-232 and
+    // scr_damage_maxhp.gml:225-231 — with no side gate on the deletion, so
+    // every target takes doomtype 12 and -999 and a fall there is permanent.
+    // The field exists rather than a whole damage-script override because the
+    // override brings the mod's roster stat layer with it, and a version with
+    // no roster installed then reports every character unequipped and drops
+    // the party's DF to 0 — measured: a 100 hit landed 100 instead of 85.
+    hp[target] = (target === 0 && !state.permanentFell)
+      ? Math.round(-partyMaxhp(state, 0) / 2) : -999;
     scrDead(state, target);
   }
   heroHurt(state, target);
   spawnDmgNumber(state, PARTY_POS[target].x, PARTY_POS[target].y, t,
-    hp[target] > 0 ? TYPE_PARTY : (target === 0 ? TYPE_DEAD : TYPE_SWOON), 2);
+    hp[target] > 0 ? TYPE_PARTY
+      : ((target === 0 && !state.permanentFell) ? TYPE_DEAD : TYPE_SWOON), 2);
   state.invTimer = state.invc * 30;
   return t;
 }

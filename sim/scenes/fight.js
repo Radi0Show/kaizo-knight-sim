@@ -29,6 +29,7 @@ import { SOUL_START, PARTY } from '../actors.js';
 import { boxsplitterAttack } from '../attacks/boxsplitter-attack.js';
 import { pointingCone } from '../attacks/pointing-cone.js';
 import { starsController } from '../attacks/stars-controller.js';
+import { nbcOn } from '../attacks/nbc.js';
 import { spawnRotatingSlash } from '../attacks/rotating-slash.js';
 import { swordTunnelManager } from '../attacks/sword-tunnel.js';
 import { swordVortexManager } from '../attacks/sword-vortex.js';
@@ -579,7 +580,30 @@ export function launchAttack(state, entry) {
       // and the cone's two drag draws come AFTER. This used to spawn the
       // cone first, which put those two drags BEFORE the size roll — the
       // final two-draw offset the anchored diff kept showing.
-      const endtimer = difficulty >= 2 ? 210 : 120;
+      // NO BULLET COOLDOWNS — site D/M on the type-98 init. The whole block
+      // is the dump's, in its order:
+      //
+      //     endtimer = 120;                 ->  endtimer = 150;
+      //     if (difficulty >= 2) { endtimer += 30;
+      //                            global.turntimer += 60;
+      //                            endtimer += 60; }
+      //     bulletmaker.endtimer = endtimer;
+      //
+      // so the pair is 120 / 210 vanilla and 150 / 240 modded, and the `+30`
+      // / `+60` are the SAME lines in both dumps — only the base moved. This
+      // line used to be `difficulty >= 2 ? 210 : 120`, a constant with no
+      // toggle read, and it ran AFTER `starsController.create()` had set the
+      // modded value — so `stars-controller.js`'s own `nbcOn(state) ? 150 :
+      // 120` was overwritten on the launch frame and never reached a fight.
+      // Measured with the toggle on: 75 stars a turn at d0 where the mod
+      // fires 56, 63 at d2 where the mod fires 37, because the mod's star
+      // leaves EVERY frame and the surplus window is surplus stars one for
+      // one.
+      //
+      // `state.turntimer += 60` for d2 is NOT paid here — stars-controller.js
+      // step() pays it on the controller's first Step, where the oracle put
+      // it (see the receipt there). Only the endtimer arithmetic is local.
+      const endtimer = (nbcOn(state) ? 150 : 120) + (difficulty >= 2 ? 90 : 0);
       const dc = spawn(state, starsController, { ...CONE_POS });
       dc.difficulty = difficulty;
       dc.endtimer = endtimer;
@@ -661,11 +685,14 @@ export function launchAttack(state, entry) {
       // the real variant 3 (rate 20 decaying to 13) — a visibly slower wave.
       mg.variant = ac === 14 ? 3 : 0;
       // `dc.damage = 206` — EVERY tracking-swords dispatch overrides the
-      // controller's 200 (ac 11 line 465, ac 14 line 500, ac 15 line 505,
-      // ac 16 line 518, ac 17 line 527). ac 11 and 15 already carried it;
-      // this branch was left on CONTROLLER_DAMAGE. CLAUDE.md's table said
-      // the wiki's 206 was wrong and there was "no override" — the override
-      // is there, and the wiki was right.
+      // controller's 200. The vanilla dump's six `dc.damage = 206` lines in
+      // obj_knight_enemy's Step are 465 (ac 11), 491 (ac 14), 500 (the ac-15
+      // VORTEX), 505 (the ac-15 chained tracking), 518 (ac 16) and 527
+      // (ac 17) — this list used to say ac 14 was 500, which is the vortex,
+      // and skip 491 entirely. ac 11 already carried the literal; this branch
+      // was left on CONTROLLER_DAMAGE, and so were both of ac 15's until
+      // 2026-09-17. CLAUDE.md's table said the wiki's 206 was wrong and there
+      // was "no override" — the override is there, and the wiki was right.
       mg.damage = 206;
       trackingSwordsManager.init(mg, state);
       return mg;
@@ -802,7 +829,22 @@ export function launchAttack(state, entry) {
       // there. Its own y is otherwise inert (swords orbit
       // swordcirclecentery).
       const mg = spawn(state, swordVortexManager, { x: arena.x, y: state.view.y });
-      mg.damage = CONTROLLER_DAMAGE;
+      // `dc.damage = 206` — BOTH of ac 15's spawners carry the override, and
+      // both of these lines used to be `CONTROLLER_DAMAGE` (monsterat * 5 =
+      // 200). ac 15 was the only dispatch in the file left on the inherited
+      // value: 11 and 14 (:693), 16 (:778) and 17 (:791) all carry the
+      // literal, and the vanilla dump has it at obj_knight_enemy Step :500
+      // and :505 for this branch too. ac 16's FIRST spawner (type 104) is
+      // genuinely override-free and stays on CONTROLLER_DAMAGE — that is the
+      // discriminating case, not a symmetry to copy.
+      //
+      // 6 HP a sword, on a turn that lands dozens. The toggle's own path was
+      // never affected (both lanes overwrite to 103 under the mod), so this
+      // is the VANILLA branch having drifted off the dump while the modded
+      // one was correct. `tools/verify-nbc.mjs` could not see it: it
+      // hardcoded `e.damage = 206` with the comment "what fight.js assigns,
+      // at every one of the five sites" — a premise this site made false.
+      mg.damage = 206;
       // The SECOND scr_bulletspawner call of the ac-15 branch (type 151).
       reanchorRng(state);
       // Every scr_bulletspawner's dc rolls its dead `basedir = irandom(360)`
@@ -813,7 +855,9 @@ export function launchAttack(state, entry) {
       if (state.gmlRng) gmlIrandom(state.gmlRng, 360);
       const tr = spawn(state, trackingSwordsManager, { x: arena.x, y: state.view.y });
       tr.variant = 0;
-      tr.damage = CONTROLLER_DAMAGE;
+      // The chained tracking spawner's own `dc.damage = 206` — see the note
+      // on the vortex above.
+      tr.damage = 206;
       // The vortex sibling (type 154) retunes the tracking cadence — see
       // the chainedType note in trackingSwordsManager.init.
       trackingSwordsManager.init(tr, state, 154);

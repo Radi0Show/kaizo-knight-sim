@@ -49,6 +49,7 @@ import {
 } from '../gml.js';
 import { collidebulletOther15, regularbulletStep, regularbulletCreate } from '../bullets/regularbullet.js';
 import { starOther15 } from './pointing-star.js';
+import { knightCatch } from '../knight.js';
 import { STARCHILD_MASK, STARCHILD_TRAIL_MASK, scrPreciseHit, enginePairHit } from '../masks.js';
 
 /** scr_rotatetowards — step `from` toward `to` by at most `delta`. */
@@ -389,10 +390,7 @@ export const pointingStarchild = {
    */
   collides(e, heart, state) {
     if (e.active !== 1 && e.active !== true) return false;
-    const roaring = state.entities.some(
-      (x) => x.alive && x.type.name === 'obj_knight_roaring2',
-    );
-    const n = roaring ? 2 : 5;
+    const n = roaringAlive(state) ? 2 : 5;
     const mask =
       e.sprite_index === 'spr_knight_starchild_trail'
         ? STARCHILD_TRAIL_MASK
@@ -404,14 +402,75 @@ export const pointingStarchild = {
     return scrPreciseHit(heart, e, mask, n);
   },
 
-  // The SAME 75-damage party-wide hit as its parent — obj_knight_pointing_
-  // starchild's Other_15 is `target = 3; damage = 75; scr_damage_all()`.
-  // The children were doing 1 to one character.
-  //
-  // NBC SITE D4 — obj_knight_pointing_starchild_Other_15.gml:37 gets the same
-  // `75` -> `100` tronic560 gives the parent at site D3, and it needs no code
-  // of its own HERE precisely because the two share one handler. If that ever
-  // stops being true, D4 has to be written out separately; the two numbers
-  // being equal in the mod is a fact about the mod, not a guarantee.
-  other15: starOther15,
+  /**
+   * THE SHARD'S HIT IS TWO EVENTS, AND WHICH ONE RUNS IS THE ROAR.
+   *
+   * This used to be `other15: starOther15` — the PARENT's handler, reused
+   * because both objects deal the same number. The numbers match; the
+   * CONDITIONS do not, and that is what the sharing lost.
+   * obj_knight_pointing_star's Other_15 is one unconditional block:
+   *
+   *     target = 3; damage = 75; scr_damage_all();
+   *
+   * obj_knight_pointing_starchild's Other_15 is a top-level branch on
+   * `i_ex(obj_knight_roaring2)`, and only its ELSE arm looks like the
+   * parent's:
+   *
+   *     if (i_ex(obj_knight_roaring2)) {  ...  with (obj_knight_enemy)
+   *                                            event_user(2);  ... }
+   *     else                           { target = 3; damage = 75; ...
+   *                                      scr_damage_all(); ... }
+   *
+   * `event_user(2)` is obj_knight_enemy's Other_12 — the Knight's CATCH, the
+   * same one `sim/attacks/roaring-star.js` already routes to. It is not a
+   * softer version of the hit: it is a different mechanism, with
+   * `truedamage`, a `global.inv < 0` gate, and the `hp > 1 && hp < 41 ->
+   * hp - 1` floor that exists so the finale cannot fell anybody.
+   *
+   * AND THE ROAR IS WHERE THESE SHARDS LIVE.
+   * obj_knight_roaring_star_Step_0.gml:89 bursts every released roaring star
+   * into six of them (`scr_childbullet(x, y,
+   * obj_knight_pointing_starchild)`), so during ROARING the catch branch is
+   * not a corner — it is the dominant contact path. With the shared handler
+   * every one of those contacts ran the AOE arm instead: measured on a
+   * 190/190/190 party with the toggle on, one shard took it to 167/111/114
+   * where the catch takes it to 175/175/175.
+   *
+   * The file already modelled the split on the HITBOX side — `collides`
+   * above picks probe 2 while roaring and 5 otherwise — so the hit
+   * registered correctly and then took the wrong arm.
+   *
+   * NBC SITES D4 AND D7 BOTH LAND HERE, on opposite arms:
+   *   * D4 is `damage = 75` -> `100`, inside the ELSE. It reaches the player
+   *     through Stars, not through the roar, and `starOther15` carries it.
+   *   * D7 is `damage = 40` -> `15` in Other_12, inside the CATCH, carried by
+   *     `knightCatch`. It was unreachable from this object entirely.
+   */
+  other15(e, state) {
+    if (e.active !== 1 && e.active !== true) return;
+    if (roaringAlive(state)) {
+      knightCatch(state);
+      // Both arms close with the same line. `destroy` takes THE ENTITY — see
+      // the note in pointing-star's other15 for what passing `state` cost.
+      if (e.destroyonhit === 1) destroy(e);
+      return;
+    }
+    // The else arm IS the parent's event, character for character, so it
+    // stays one function rather than a second copy of the AOE bookkeeping.
+    starOther15(e, state);
+  },
 };
+
+/**
+ * `i_ex(obj_knight_roaring2)` — a LIVE scan, not `state.roaringActive`.
+ *
+ * The flag is recomputed once per frame in `sim/index.js`, before the
+ * collision phase; the shard's `collides` has always scanned the list
+ * directly. Two readers of the same GML test inside one object must not
+ * disagree about when they read it, so both go through here.
+ */
+function roaringAlive(state) {
+  return state.entities.some(
+    (x) => x.alive && x.type.name === 'obj_knight_roaring2',
+  );
+}

@@ -21,8 +21,9 @@ import {
 import { scrKaizoTarget, kaizoKnightTarget, kaizoDamageHooks } from '../party/damage.js';
 import { kaizoAdvanceBalloon } from '../party/freeze.js';
 import { createKaizoHeroes } from '../party/heroes.js';
+import { NOELLE_SPELLS, NOELLE_SPELL_SNOWGRAVE } from '../party/noelle.js';
 import { installKaizoMenu, installKaizoActPages } from '../party/spells.js';
-import { VC_TABLE, VD_TABLE, VC_KNIGHT } from '../versions/vc-script.js';
+import { VC_TABLE, VD_TABLE, VC_KNIGHT, VC_GATE_FRACTION } from '../versions/vc-script.js';
 import { tensionbarDraw } from '../party/tensionbar.js';
 import { ensureEnding, FLAG_WEIRD_ROUTE } from './kaizo-ending.js';
 import { spawn } from '../../sim/entity.js';
@@ -772,6 +773,29 @@ export function buildKaizoScene(state, { version = 'A', mode, gear } = {}) {
     // `if (v.party)`. kaizo/party/spells.js has the provenance.
     installKaizoMenu(state);
 
+    // SNOWGRAVE IS A SAVE-FILE SPELL, NOT A scr_gamestart ONE.
+    //
+    // `scr_gamestart` gives Noelle [2, 8, 9] (noelle.js:371) and NEVER 10;
+    // `scr_load_chapter2.gml:170` is what puts SnowGrave in her book, so in
+    // the real mod it is there only on a save that took the Weird Route —
+    // which is exactly the save this side is recreating. Without this the
+    // spell was fully built (scr_spellinfo case 10, scr_spell case 10, the
+    // whole k_sgscene) and had NO WAY IN from the menu.
+    //
+    // `spellmenuActs` is the other half of the same menu: the mod's spell
+    // list for a non-Kris caster opens with that character's ACT rows
+    // (scr_spellmenu_setup builds the slot's ACT rows first, marker -1, then
+    // the spells) — the N-Action / S-Action / R-Action rows, which were built
+    // and asserted by direct call and unreachable through the shipped menu.
+    //
+    // BOTH ARE sideb-GATED, and that is deliberate: `fullfight/` is Normal
+    // Route on both tracked pairs (CLAUDE.md, 'The one number'), so a seam
+    // behind this gate is structurally invisible to the byte gate.
+    if (kaizoSidebFor(version)) {
+      state.kaizo.spells = { [CHAR_NOELLE]: [...NOELLE_SPELLS, NOELLE_SPELL_SNOWGRAVE] };
+      state.spellmenuActs = true;
+    }
+
     // THE GAME KEEPS THREE SLOTS AND LEAVES THE SPARE EMPTY.
     //
     // `global.char` is a THREE-entry array however many characters are in the
@@ -907,6 +931,51 @@ export function buildKaizoScene(state, { version = 'A', mode, gear } = {}) {
   // The mod's stat block (scr_monstersetup): HP 10000. The knight entity was
   // just created by the build with the vanilla 7300.
   if (v.knight && state.knight) state.knight.hp = v.knight.maxhp;
+  // A FALL IS PERMANENT ON BOTH SIDES OF THE MOD, not just the Weird Route.
+  //
+  // The v105-vs-kaizo diff shows BOTH damage scripts lose vanilla's Kris-only
+  // mercy, and neither deletion is gated on `k_sideb`:
+  //
+  //   MOD  (scr_damage.gml:224-232): doomtype = 12; hpdiff = round(hp + 999);
+  //        global.hp[chartarget] = -999; scr_dead(target) — for EVERY target.
+  //   v105: `if (target == 0) { ... global.hp[chartarget] =
+  //        round(-global.maxhp[chartarget] / 2); doomtype = 4; } else { ... }`
+  //
+  // Same deletion in scr_damage_maxhp.gml:225-231. MEASURED before this line
+  // existed: V-C, one 206 hit on slot 0, left Kris at -80 with the DOWN
+  // graphic — down and liftable by a single heal, which is not the mod.
+  //
+  // WHY THE FLAG AND NOT THE MOD'S WHOLE scr_damage. Installing
+  // kaizoDamageHooks() on V-C was tried and REVERTED: the mod's scripts read
+  // their stats through the roster accessors, and a version with no roster
+  // reports every character unequipped, so the party's DF collapses to 0 —
+  // measured, a 100 hit landed 100 where it should land 85. The flag carries
+  // the one A-Side delta without dragging the roster stat layer behind it.
+  //
+  // `sim/damage.js` reads it at both fell sites and at both doomtype sites;
+  // `tools/verify-permanentfell.mjs` in ../knight-sim holds it, ON and OFF.
+  // THE BYTE GATE: the recordings pin party HP, so no fell branch is ever
+  // reached in them — re-proven byte-exact after this landed.
+  if (v.knight) state.permanentFell = true;
+  // ...AND THE HUD HAS TO BE TOLD. Both readouts of the Knight's HP divide by
+  // a maximum, and both were still dividing by vanilla's 7300 while he stood
+  // at 10000:
+  //   * render/menu.js's enemy bar — (hp / 7300) * 80 overflows its own 80px
+  //     track, so the bar read FULL for the first 2700 damage;
+  //   * render/background.js's `battleprog`, obj_bgfountaintest's running
+  //     readout of a '???' enemy, which reached 0 about 2700 HP late and sat
+  //     at a NEGATIVE alpha from frame 0.
+  // The mod also retunes battleprog itself: `obj_bgfountaintest_Draw_0.gml`
+  // line 14 is the file's ENTIRE diff against v105 — `* 0.8` becomes `* 0.6`
+  // and `* 5` becomes `* 2.5`, so it ramps from the 60% gate at half the
+  // slope. 0.6 is VC_GATE_FRACTION, the same number phase 4 opens on.
+  // Plain optional state fields, the sanctioned seam (HANDOFF §7): render/
+  // imports nothing from kaizo/.
+  if (v.knight) {
+    state.knightMaxhp = v.knight.maxhp;
+    state.knightProgPivot = VC_GATE_FRACTION;
+    state.knightProgSlope = 2.5;
+  }
 
   // obj_knight_enemy Create_0:88-109 — G-6. HERE because the knight record
   // does not exist until buildKaizoTurnLoop has run, and it must exist

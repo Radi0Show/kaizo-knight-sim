@@ -122,7 +122,10 @@ const SUITES = [
 ['verify-nbc.mjs', 'NO BULLET COOLDOWNS (tronic560) — OFF is a no-op, ON fires'],
 ['verify-nbc-knighthunks.mjs', 'NBC — the red arena, and the three Knight hunks NOT taken'],
 ['verify-nbc-tunnel.mjs', 'the sword tunnel under NBC — denser, not shorter, and why it measured backwards'],
+['verify-nbc-fidelity.mjs', 'NBC — eight sites the running game had stopped reaching'],
+['verify-holdbreath.mjs', 'SINGLE HOLDBREATH — the switch reaches the soul, in every drill'],
 ['verify-dials.mjs', 'the practice bars — clamp, stay silent, reach the spawn path, default to nothing'],
+['verify-permanentfell.mjs', "the fell fork — Kris's mercy, and the seam that removes it"],
 ];
 
 // EVERY suite file must be in the table. A suite that exists and is never run

@@ -72,7 +72,7 @@ function fresh() {
 }
 const nameAt = (i) => {
   const n = BUTTONS[i].name;
-  return typeof n === 'function' ? n(0) : n;
+  return typeof n === 'function' ? n({}, 0) : n;
 };
 const indexOfButton = (want) => BUTTONS.findIndex((_, i) => nameAt(i) === want);
 /** Walk the button row to `want` with right-presses, then confirm. */
